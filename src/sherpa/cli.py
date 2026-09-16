@@ -1,12 +1,12 @@
-"""sherpa — CLI-Einstieg.
+"""sherpa — CLI entry point.
 
-Drei Stufen, drei Artefakte (siehe docs/plan.md):
-  scan   -> .sherpa/codebase-model.json   (deterministisch, kein LLM)
-  plan   -> harness-plan                  (Wissensarchitekt; Vorschläge mit Evidenz)
-  apply  -> Harness-Dateien + State       (deterministisch, idempotent)
-  status -> Drift zwischen State und Dateisystem
+Three stages, three artefacts (see docs/plan.md):
+  scan   -> .sherpa/codebase-model.json   (deterministic, no LLM)
+  plan   -> .sherpa/harness-plan.yaml     (rules over the model; proposals and reasoned no's with evidence)
+  apply  -> harness files + state         (deterministic, idempotent)
+  status -> drift between state and file system
 
-Exit-Codes: 0 ok · 1 Fehler (Git, Konfig) · 2 Kommando noch nicht implementiert.
+Exit codes: 0 ok · 1 error (git, config, plan file) · 2 command not implemented yet.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from sherpa.gitinfo import GitError
 
 EXIT_OK, EXIT_ERROR, EXIT_NOT_IMPLEMENTED = 0, 1, 2
 MODEL_OUT = Path(".sherpa") / "codebase-model.json"
+PLAN_OUT = Path(".sherpa") / "harness-plan.yaml"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,18 +28,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"sherpa {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    s = sub.add_parser("scan", help="Codebase deterministisch erfassen -> .sherpa/codebase-model.json")
-    s.add_argument("repo", nargs="?", default=".", help="Repo-Wurzel (Default: .)")
-    s.add_argument("--trunk", help="Trunk-Branch erzwingen, z. B. dev (sonst ADR-0003 / sherpa.toml)")
-    s.add_argument("--no-fetch", action="store_true", help="kein 'git fetch origin' vor dem Scan")
-    s.add_argument("--as-of", help="Fensterende (YYYY-MM-DD oder ISO-8601); Default: Committer-Datum des Trunk-Revs")
-    s.add_argument("--top", type=int, help="Anzahl Hotspots (Default 20 oder sherpa.toml)")
-    s.add_argument("--out", help=f"Zieldatei; '-' = stdout (Default: <repo>/{MODEL_OUT})")
+    s = sub.add_parser("scan", help="capture the codebase deterministically -> .sherpa/codebase-model.json")
+    s.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
+    s.add_argument("--trunk", help="force the trunk branch, e.g. dev (otherwise ADR-0003 / sherpa.toml)")
+    s.add_argument("--no-fetch", action="store_true", help="skip 'git fetch origin' before scanning")
+    s.add_argument("--as-of", help="window end (YYYY-MM-DD or ISO-8601); default: committer date of the trunk rev")
+    s.add_argument("--top", type=int, help="number of hotspots (default 20 or sherpa.toml)")
+    s.add_argument("--out", help=f"output file; '-' = stdout (default: <repo>/{MODEL_OUT})")
+
+    pl = sub.add_parser("plan", help="harness proposals from the model -> .sherpa/harness-plan.yaml")
+    pl.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
+    pl.add_argument("--rescan", action="store_true", help="rebuild the model even if it exists")
+    pl.add_argument("--no-fetch", action="store_true", help="skip 'git fetch origin' when (re)scanning")
+    pl.add_argument("--out", help=f"output file; '-' = YAML to stdout (default: <repo>/{PLAN_OUT})")
 
     for name, help_ in (
-        ("plan", "Harness-Vorschläge aus dem Modell"),
-        ("apply", "Freigegebenen Plan anlegen (idempotent, State-Datei)"),
-        ("status", "State vs. Dateisystem vergleichen"),
+        ("apply", "create the approved plan (idempotent, state file)"),
+        ("status", "compare state with the file system"),
     ):
         sp = sub.add_parser(name, help=help_)
         sp.add_argument("repo", nargs="?", default=".")
@@ -68,22 +74,68 @@ def cmd_scan(args: argparse.Namespace) -> int:
     model.write(out)
     print(
         f"sherpa scan: {model.repo} @ {g.trunk.ref} {g.trunk.rev[:10]} ({g.trunk.source}) — "
-        f"{len(g.files)} Dateien, {g.commits_90d} Commits/90d, {g.commits_30d}/30d, "
-        f"{len(g.hotspots)} Hotspots, {len(model.modules)} Module → {out}",
+        f"{len(g.files)} files, {g.commits_90d} commits/90d, {g.commits_30d}/30d, "
+        f"{len(g.hotspots)} hotspots, {len(model.modules)} modules → {out}",
         file=sys.stderr,
     )
     return EXIT_OK
 
 
+def cmd_plan(args: argparse.Namespace) -> int:
+    """Load the model (or scan), apply the rules, keep decisions from the previous plan, write."""
+    from sherpa import config
+    from sherpa import model as model_mod
+    from sherpa.plan import build_plan, render_console, yamlio
+    from sherpa.scan import scan
+
+    repo = Path(args.repo).resolve()
+    model_path = repo / MODEL_OUT
+    model = None
+    if model_path.exists() and not args.rescan:
+        try:
+            model = model_mod.load(model_path)
+        except (ValueError, KeyError, TypeError) as e:
+            print(f"sherpa plan: rebuilding the model ({e})", file=sys.stderr)
+    if model is None:
+        model = scan(repo, fetch=not args.no_fetch)
+        model.write(model_path)
+        print(f"sherpa plan: model scanned → {model_path}", file=sys.stderr)
+
+    plan = build_plan(model, config.load(repo).plan)
+    out = None if args.out == "-" else (Path(args.out) if args.out else repo / PLAN_OUT)
+    previous = yamlio.load(out) if out and out.exists() else None
+    plan, kept = yamlio.merge_decisions(plan, previous)
+
+    if out is None:
+        sys.stdout.write(yamlio.dumps(plan))
+        sys.stderr.write(render_console(plan, "harness-plan.yaml"))
+        return EXIT_OK
+    yamlio.write(plan, out)
+    sys.stdout.write(render_console(plan, out.name))
+    tail = f" ({kept} decisions kept)" if kept else ""
+    print(f"→ {out}{tail}", file=sys.stdout)
+    return EXIT_OK
+
+
+def _console_utf8() -> None:
+    """Windows consoles and pipes are often cp1252: ✓/✗ must never crash the command."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower().replace("-", "") != "utf8":
+            stream.reconfigure(errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    _console_utf8()
     try:
         if args.cmd == "scan":
             return cmd_scan(args)
+        if args.cmd == "plan":
+            return cmd_plan(args)
     except (GitError, ValueError, OSError) as e:
         print(f"sherpa {args.cmd}: {e}", file=sys.stderr)
         return EXIT_ERROR
-    print(f"sherpa {args.cmd}: noch nicht implementiert (siehe docs/plan.md, Meilenstein-Tabelle)", file=sys.stderr)
+    print(f"sherpa {args.cmd}: not implemented yet (see docs/plan.md, milestone table)", file=sys.stderr)
     return EXIT_NOT_IMPLEMENTED
 
 

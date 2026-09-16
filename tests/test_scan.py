@@ -1,4 +1,4 @@
-"""Ende-zu-Ende: scan(), Determinismus, Konfig, Schema, CLI."""
+"""End to end: scan(), determinism, config, schema, CLI."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def test_scan_validates_against_schema(clone: Path):
 
 def test_scan_model_header(clone: Path):
     m = scan(clone, fetch=False)
-    assert (m.sherpa, m.schema_version, m.repo) == (__version__, 2, "clone")
+    assert (m.sherpa, m.schema_version, m.repo) == (__version__, 3, "clone")
     assert m.origin.endswith("origin.git")
     assert m.git.trunk.ref == "origin/main"
 
@@ -111,15 +111,15 @@ def test_cli_scan_custom_out(clone: Path, tmp_path: Path):
 
 def test_cli_scan_errors_exit_1(tmp_path: Path, capsys):
     assert main(["scan", str(tmp_path), "--no-fetch"]) == EXIT_ERROR
-    assert "kein Git-Repo" in capsys.readouterr().err
+    assert "is not a git repository" in capsys.readouterr().err
     assert main(["scan", str(tmp_path), "--no-fetch", "--as-of", "gestern"]) == EXIT_ERROR
 
 
 def test_cli_scan_bad_trunk_exit_1(clone: Path, capsys):
     assert main(["scan", str(clone), "--no-fetch", "--trunk", "release"]) == EXIT_ERROR
-    assert "existiert nicht" in capsys.readouterr().err
+    assert "does not exist" in capsys.readouterr().err
 
 
-def test_cli_other_commands_unimplemented():
-    for cmd in ("plan", "apply", "status"):
-        assert main([cmd]) == EXIT_NOT_IMPLEMENTED
+def test_cli_other_commands_unimplemented(tmp_path: Path):
+    for cmd in ("apply", "status"):
+        assert main([cmd, str(tmp_path)]) == EXIT_NOT_IMPLEMENTED  # never run inside the sherpa repo itself

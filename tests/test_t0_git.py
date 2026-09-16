@@ -1,10 +1,10 @@
-"""T0-Scanner auf einem Fixture mit kontrollierten Daten.
+"""T0 scanner on a fixture with controlled data.
 
-Zeitachse (as_of = Committer-Datum des Trunk-Revs = 2026-03-01):
-  2025-11-01  ausserhalb 90d   src/a/old.py, README.md
-  2026-01-15  in 90d, nicht 30d  src/a/hot.py (Autor A), src/b/b.py
-  2026-02-20  in 30d            src/a/hot.py (Autor B), bin.dat (binär)
-  2026-03-01  in 30d            src/a/hot.py (Autor A)   ← Trunk-Rev
+Timeline (as_of = committer date of the trunk rev = 2026-03-01):
+  2025-11-01  outside 90d        src/a/old.py, README.md
+  2026-01-15  in 90d, not 30d    src/a/hot.py (author A), src/b/b.py
+  2026-02-20  in 30d             src/a/hot.py (author B), bin.dat (binary)
+  2026-03-01  in 30d             src/a/hot.py (author A)   ← trunk rev
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def fixture_repo(tmp_path: Path) -> Path:
     commit(work, "c0", {"src/a/old.py": "x = 1\n", "README.md": "# r\n"}, date=D0, author="A")
     commit(work, "c1", {"src/a/hot.py": "a\nb\nc\n", "src/b/b.py": "b\n"}, date=D1, author="A")
     commit(work, "c2", {"src/a/hot.py": "a\nb\nc\nd\n", "bin.dat": b"\x00\x01\x02"}, date=D2, author="B")
-    commit(work, "c3", {"src/a/hot.py": "a\nb\nc\nd\ne"}, date=D3, author="A")  # ohne \n am Ende → 5 LOC
+    commit(work, "c3", {"src/a/hot.py": "a\nb\nc\nd\ne"}, date=D3, author="A")  # no trailing \n → 5 LOC
     origin = tmp_path / "origin.git"
     git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
     clone = tmp_path / "clone"
@@ -91,7 +91,7 @@ def test_scan_git_dir_aggregates(fixture_repo: Path):
     assert (by[""].files, by[""].loc, by[""].commits_90d, by[""].commits_30d) == (5, 8, 3, 2)
     assert (by["src/a"].files, by["src/a"].loc, by["src/a"].commits_90d, by["src/a"].commits_30d) == (2, 6, 3, 2)
     assert (by["src/b"].files, by["src/b"].commits_90d, by["src/b"].commits_30d) == (1, 1, 0)
-    assert by["src"].commits_90d == 3  # ein Commit zählt je Verzeichnis nur einmal
+    assert by["src"].commits_90d == 3  # a commit counts once per directory
 
 
 def test_scan_git_hotspots_ordered_and_text_only(fixture_repo: Path):
@@ -127,8 +127,8 @@ def test_scan_git_generated_flag_excludes_from_hotspots(fixture_repo: Path):
     g = scan_git(fixture_repo, resolve_trunk(fixture_repo), generated=("src/a/hot.py",))
     by = {f.path: f for f in g.files}
     assert by["src/a/hot.py"].generated is True and by["src/b/b.py"].generated is False
-    assert by["src/a/hot.py"].commits_90d == 3  # Zählung bleibt
-    assert [h.path for h in g.hotspots] == ["src/b/b.py"]  # nur aus Hotspots raus
+    assert by["src/a/hot.py"].commits_90d == 3  # the count stays
+    assert [h.path for h in g.hotspots] == ["src/b/b.py"]  # only removed from the hotspots
 
 
 def test_scan_git_top_limits_hotspots(fixture_repo: Path):
@@ -137,7 +137,7 @@ def test_scan_git_top_limits_hotspots(fixture_repo: Path):
 
 
 def test_scan_git_as_of_override_moves_windows(fixture_repo: Path):
-    as_of = datetime(2026, 2, 1, tzinfo=UTC)  # c2/c3 liegen danach → nicht gezählt
+    as_of = datetime(2026, 2, 1, tzinfo=UTC)  # c2/c3 are later → not counted
     g = scan_git(fixture_repo, resolve_trunk(fixture_repo), as_of=as_of)
     assert (g.commits_90d, g.commits_30d) == (1, 1)
     assert g.windows.as_of == "2026-02-01T00:00:00Z"
@@ -153,9 +153,9 @@ def test_scan_git_ignores_merge_commits_in_windows(fixture_repo: Path, tmp_path:
     git(other, "push", "-q", "origin", "main")
     git(fixture_repo, "fetch", "-q", "origin")
     g = scan_git(fixture_repo, resolve_trunk(fixture_repo))
-    assert g.commits_total == 6  # inkl. Merge
-    assert g.commits_90d == 4  # ohne Merge
-    assert g.windows.as_of == "2026-03-03T12:00:00Z"  # Merge-Commit ist der Trunk-Rev
+    assert g.commits_total == 6  # merge included
+    assert g.commits_90d == 4  # without the merge
+    assert g.windows.as_of == "2026-03-03T12:00:00Z"  # the merge commit is the trunk rev
     assert {f.path for f in g.files} >= {"src/b/new.py"}
 
 

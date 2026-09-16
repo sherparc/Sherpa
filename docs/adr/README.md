@@ -1,18 +1,20 @@
 # ADRs — Architecture Decision Records
 
-Eine Datei je Entscheidung: Kontext → Entscheidung → Begründung → Konsequenzen. Nie editiert, nur durch ein
-neues ADR abgelöst (`Status: ersetzt durch ADR-xxxx`). Nach **jeder Iteration** werden die getroffenen
-Entscheidungen hier festgehalten — was kein ADR hat, ist nicht entschieden.
+One file per decision: context → decision → reasoning → consequences. Never edited, only superseded by a new ADR
+(`Status: superseded by ADR-xxxx`). After **every** iteration the decisions taken are recorded here — what has
+no ADR is not decided.
 
-| ADR | Entscheidung | Status |
+| ADR | Decision | Status |
 |---|---|---|
-| [0001](0001-sprache-python.md) | Python, stdlib-first; Rust nur bei Kippkriterium | akzeptiert |
-| [0002](0002-generisch-vs-spezifisch.md) | Trennung generisch (Template) / Adapter / projekt-only | vorgeschlagen |
-| [0003](0003-trunk-erkennung.md) | Scan immer gegen `origin/<trunk>`; Erkennungsreihenfolge | akzeptiert |
-| [0004](0004-modell-provider.md) | eigene dünne Provider-Schicht; kein LangChain/LangGraph | akzeptiert |
-| [0005](0005-plan-format-und-einchecken.md) | Plan als YAML; Plan + State eingecheckt, Modell nicht | akzeptiert |
-| [0006](0006-schwellen-relativ-mit-boden.md) | Schwellen relativ (Perzentil) mit absolutem Boden | akzeptiert |
-| [0007](0007-adopt-statt-ueberschreiben.md) | `sherpa adopt` übernimmt bestehende Harnesse, nie überschreiben | akzeptiert |
-| [0008](0008-dry-run-default-und-outcome-minimum.md) | `apply`: Dry-Run zuerst; Outcome-Minimum in jedem `apply` | akzeptiert |
-| [0009](0009-namensraeume-und-branch-schutz.md) | Produkt/CLI `sherpa`, Paket `sherpa-harness`, Org `sherparc`; `main` nur per PR, Pre-Push-Hook statt Ruleset | akzeptiert |
-| [0010](0010-lizenz-zweistufig.md) | Lizenz zweistufig: proprietär jetzt, PolyForm Small Business beim Release; Output gehört dem Nutzer | akzeptiert |
+| [0001](0001-language-python.md) | Python, stdlib-first; Rust only on a flip criterion | accepted |
+| [0002](0002-generic-vs-specific.md) | Separation generic (template) / adapter / project-only | proposed |
+| [0003](0003-trunk-detection.md) | Scan always against `origin/<trunk>`; detection order | accepted |
+| [0004](0004-model-providers.md) | Own thin provider layer; no LangChain/LangGraph | accepted |
+| [0005](0005-plan-format-and-check-in.md) | Plan as YAML; plan + state checked in, model not | accepted |
+| [0006](0006-relative-thresholds-with-floor.md) | Thresholds relative (percentile) with an absolute floor | accepted |
+| [0007](0007-adopt-not-overwrite.md) | `sherpa adopt` takes over existing harnesses, never overwrites | accepted |
+| [0008](0008-dry-run-default-and-outcome-minimum.md) | `apply`: dry run first; outcome minimum in every `apply` | accepted |
+| [0009](0009-namespaces-and-branch-protection.md) | Product/CLI `sherpa`, package `sherpa-harness`, org `sherparc`; `main` only via PR, pre-push hook instead of rulesets | accepted |
+| [0010](0010-two-stage-licensing.md) | Two-stage licensing: proprietary now, PolyForm Small Business at release; output belongs to the user | accepted |
+| [0011](0011-generated-code-is-regenerated-not-explained.md) | Generated code is regenerated, not explained: generator families in the scanner, skill instead of agent | accepted |
+| [0012](0012-plan-units-visibility-decisions.md) | Plan units (modules + directories), dormant = visible no, author floor, no's only within reach, `decision` survives re-plan | accepted |

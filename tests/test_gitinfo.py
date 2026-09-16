@@ -8,19 +8,19 @@ from tests.conftest import commit, git
 
 
 def test_not_a_repo(tmp_path: Path):
-    with pytest.raises(GitError, match="kein Git-Repo"):
+    with pytest.raises(GitError, match="is not a git repository"):
         resolve_trunk(tmp_path)
 
 
 def test_repo_without_origin(tmp_path: Path):
     git(tmp_path, "init", "-q", "-b", "main")
     commit(tmp_path, "x")
-    with pytest.raises(GitError, match="kein Remote 'origin'"):
+    with pytest.raises(GitError, match="has no remote 'origin'"):
         resolve_trunk(tmp_path)
 
 
 def test_origin_head_wins(make_origin, make_clone):
-    origin, shas = make_origin(("dev", "main"))  # origin/HEAD zeigt auf dev (erster Branch)
+    origin, shas = make_origin(("dev", "main"))  # origin/HEAD points to dev (first branch)
     clone = make_clone(origin)
     t = resolve_trunk(clone)
     assert t == Trunk("origin/dev", "origin/HEAD", shas["dev"])
@@ -30,7 +30,7 @@ def test_candidate_order_when_no_origin_head(make_origin, make_clone):
     origin, shas = make_origin(("dev", "master"))
     clone = make_clone(origin, set_head=False)
     t = resolve_trunk(clone)
-    assert t.ref == "origin/master"  # master vor dev laut TRUNK_CANDIDATES
+    assert t.ref == "origin/master"  # master before dev per TRUNK_CANDIDATES
     assert t.source == "candidate"
     assert t.rev == shas["master"]
 
@@ -44,7 +44,7 @@ def test_candidate_dev_only(make_origin, make_clone):
 def test_no_trunk_found(make_origin, make_clone):
     origin, _ = make_origin(("feature-x",))
     clone = make_clone(origin, set_head=False)
-    with pytest.raises(GitError, match="kein Trunk gefunden"):
+    with pytest.raises(GitError, match="no trunk found"):
         resolve_trunk(clone)
 
 
@@ -59,12 +59,12 @@ def test_override_with_and_without_prefix(make_origin, make_clone, override):
 def test_override_missing_branch(make_origin, make_clone):
     origin, _ = make_origin(("main",))
     clone = make_clone(origin)
-    with pytest.raises(GitError, match="existiert nicht"):
+    with pytest.raises(GitError, match="does not exist"):
         resolve_trunk(clone, override="release")
 
 
 def test_local_head_is_ignored(make_origin, make_clone):
-    """Trunk-Disziplin: lokaler Task-Branch mit neuem Commit ändert das Ergebnis nicht."""
+    """Trunk discipline: a local task branch with a new commit does not change the result."""
     origin, shas = make_origin(("main",))
     clone = make_clone(origin)
     git(clone, "checkout", "-q", "-b", "task/123")
@@ -77,7 +77,7 @@ def test_local_head_is_ignored(make_origin, make_clone):
 def test_trunk_follows_origin_after_fetch(make_origin, make_clone, tmp_path: Path):
     origin, _ = make_origin(("main",))
     clone = make_clone(origin)
-    # zweiter Klon pusht auf origin/main
+    # a second clone pushes to origin/main
     other = tmp_path / "other"
     git(tmp_path, "clone", "-q", str(origin), str(other))
     new = commit(other, "upstream change")

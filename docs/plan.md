@@ -1,238 +1,261 @@
 # Sherpa — Plan
 
-> **Erstellt:** 2026-09-16 · **Revidiert:** 2026-09-16 (Revision 2 nach M1a: adopt, relative Schwellen, dry-run, Outcome in M3, doctor) · **Autor:** Claude (Opus 5) mit Andrei
-> **Stand:** v0.2.0 — M0, M1, M1a fertig; nächster Schritt M2
-> **Vorlage:** ein produktives Claude-Code-Harness (.NET-Monorepo, ~120 Harness-Commits, 17 Agents, 5 Librarians,
-> deterministischer Checker) und dessen Bewertung vom 2026-09-16 (Innovation 8/10, Stabilität 6/10). Sherpa nennt
-> dieses Projekt nicht beim Namen: Sherpa ist ein generisches Produkt, das Referenz-Harness nur ein Datenpunkt.
+> **Created:** 2026-09-16 · **Revised:** 2026-09-16 (revision 3 after M2: generator families, units, reach, decision keeping — ADR-0011/0012) · **Author:** Claude (Opus 5) with Andrei
+> **Status:** v0.3.0 — M0, M1, M1a, M2 done; next step M2b or M3 (Andrei's call, §6)
+> **Origin of the patterns:** production Claude Code harnesses built and analysed in practice (owner docs, agents with
+> knowledge manifests, librarians, deterministic checkers) plus the industry patterns in §2. Sherpa is a generic
+> product; no customer project is named anywhere in this repo.
 
-## 0. Ziel in einem Satz
+## 0. Goal in one sentence
 
-Sherpa steht **über** einem oder mehreren Repos, ingestiert die Codebase deterministisch, schlägt eine
-Harness-Infrastruktur (Owner-Docs, Agents, Skills, Commands, Librarians, Evals, Outcome-Kanal) **mit
-Evidenz und Kosten** vor und legt nach Freigabe genau das an — idempotent, mit State, ohne
-Handarbeit zu überschreiben.
+Sherpa stands **above** one or more repos, ingests the codebase deterministically, proposes a harness
+infrastructure (owner docs, agents, skills, commands, librarians, evals, outcome channel) **with evidence and
+cost**, and after approval creates exactly that — idempotently, with state, without overwriting manual work.
 
-## 1. Nicht-Ziele (bewusst)
+## 1. Non-goals (deliberate)
 
-| Nicht-Ziel | Warum |
+| Non-goal | Why |
 |---|---|
-| Alles am Tag 1 anlegen | Bloat ist die gemessene Schwäche des Referenz-Harness (5 Fat-Agents, 4/17 ohne Manifest). Default ist `skip`. |
-| LLM-Prosa als Owner-Doc | Plausibel-falsche Docs = Drift ab Tag 0. Owner-Doc = Skelett + Scanner-Fakten; Prosa bleibt `unverified`, bis Eval oder Mensch bestätigt. |
-| Eigenes Agent-Framework | Sherpa erzeugt Artefakte für eine Agent-Runtime, es führt keine Agents aus. Ziel-Runtime v1: Claude Code (`.claude/`). Andere Runtimes = Kippkriterium, sobald ein Korpus-Repo eine braucht. |
-| Web-App zuerst | CLI ist testbar, CI-fähig und von Claude Code selbst aufrufbar. Web = späterer Viewer. |
-| Referenz-Harness als Testfall | Es ist das Template. Der Beweis muss auf **fremden** Repos gelingen. |
-| Sprach-Parser als Pflicht | T0+T1 (Git + Manifeste) reichen für Owner, Churn, Evals. Sprach-Adapter (T2) sind Plugins. |
+| Create everything on day 1 | Bloat is the measured weakness of grown harnesses (fat agents, agents without manifests, dormant docs). The default is `skip`. |
+| LLM prose as owner doc | Plausible-but-wrong docs = drift from day 0. Owner doc = skeleton + scanner facts; prose stays `unverified` until an eval or a human confirms it. |
+| An agent framework of its own | Sherpa produces artefacts for an agent runtime, it does not run agents. Target runtime v1: Claude Code (`.claude/`). Other runtimes = flip criterion as soon as a corpus repo needs one. |
+| Web app first | The CLI is testable, CI-capable and callable by Claude Code itself. Web = a later viewer. |
+| The template harness as the test case | It is the template. The proof must succeed on **foreign** repos. |
+| Language parsers as a requirement | T0+T1 (git + manifests) suffice for owners, churn, evals. Language adapters (T2) are plugins. |
 
-## 2. Architektur — sechs Kommandos, drei Artefakte
+## 2. Architecture — six commands, three artefacts
 
 ```
-sherpa doctor ──► ✓/✗ je Voraussetzung (git, origin, Trunk, Python, Runtime) mit Abhilfe   — erster Kontakt
-sherpa scan   ──► .sherpa/codebase-model.json   deterministisch, 0 LLM     (T0 Git · T1 Manifeste · T2 Adapter optional)
-sherpa adopt  ──► .sherpa/state.json            bestehendes .claude/ in den State übernehmen, nichts verändern (§2.6)
-sherpa plan   ──► .sherpa/harness-plan.yaml     Regeln deterministisch, LLM-Anreicherung optional (M6)
-sherpa apply  ──► .claude/** + .sherpa/state.json   Dry-Run zuerst, dann deterministisch, idempotent, Marker
-sherpa status ──► Diff State ↔ Dateisystem, Eval-Regression, Outcome-Labels je Harness-Version
+sherpa doctor ──► ✓/✗ per prerequisite (git, origin, trunk, Python, runtime) with a fix   — first contact
+sherpa scan   ──► .sherpa/codebase-model.json   deterministic, 0 LLM     (T0 git · T1 manifests · generator families · T2 adapters optional)
+sherpa adopt  ──► .sherpa/state.json            take an existing .claude/ into the state, change nothing (§2.6)
+sherpa plan   ──► .sherpa/harness-plan.yaml     deterministic rules, LLM enrichment optional (M6)
+sherpa apply  ──► .claude/** + .sherpa/state.json   dry run first, then deterministic, idempotent, markers
+sherpa status ──► diff state ↔ file system, eval regression, outcome labels per harness version
 ```
 
-`.sherpa/` ist Sherpas Arbeitsverzeichnis im Zielrepo. Konfiguration liegt daneben in `sherpa.toml`
-(TOML, weil stdlib `tomllib`; Felder in `src/sherpa/config.py`). `harness-plan.yaml` und `state.json` werden im
-Zielrepo eingecheckt, `codebase-model.json` nicht (ADR-0005).
+`.sherpa/` is Sherpa's working directory in the target repo. Configuration lives next to it in `sherpa.toml`
+(TOML because of stdlib `tomllib`; fields in `src/sherpa/config.py`). `harness-plan.yaml` and `state.json` are
+checked into the target repo, `codebase-model.json` is not (ADR-0005).
 
-Vorbilder aus der Industrie, die nachweislich funktionieren:
+Industry patterns that demonstrably work:
 
-| Vorbild | Was Sherpa übernimmt |
+| Pattern | What Sherpa takes from it |
 |---|---|
-| Terraform `plan`/`apply` + State | Vorschlag vor Wirkung; Re-Run = Diff, nie Überschreiben; State kennt jede erzeugte Datei |
-| Backstage Catalog + Scaffolder | Owner pro Komponente; Templates mit Parametern |
-| Tornhill Hotspots (Churn × Grösse) | Drift-Proxy am Tag 0 aus `git log`, ohne Sync-Historie |
-| Manifest-/Dependency-Graph | Modulgrenzen = Owner-Kandidaten; `tested_by` gratis |
-| `<auto-generated>`-Marker | generiert vs. handbearbeitet unterscheidbar; handbearbeitet wird nie überschrieben |
-| Renovate/Dependabot | Librarian = kleiner, scoped Bot, der Änderungen vorschlägt statt direkt editiert |
+| Terraform `plan`/`apply` + state | proposal before effect; re-run = diff, never overwrite; the state knows every generated file |
+| Backstage catalog + scaffolder | an owner per component; templates with parameters |
+| Tornhill hotspots (churn × size) | drift proxy on day 0 from `git log`, without sync history |
+| Manifest/dependency graph | module boundaries = owner candidates; `tested_by` for free |
+| `<auto-generated>` markers | generated vs. hand-edited distinguishable; hand-edited is never overwritten |
+| Renovate/Dependabot | librarian = a small, scoped bot that proposes changes instead of editing directly |
 
-### 2.1 Scanner → `codebase-model.json` — Details in `docs/scan.md`
+### 2.1 Scanner → `codebase-model.json` — details in `docs/scan.md`
 
-Deterministisch, testbar mit Fixture-Repos, **sprachunabhängig**. Drei Schichten, jede liefert ohne die nächste ein gültiges Modell:
+Deterministic, testable with fixture repos, **language-agnostic**. Three layers; each yields a valid model
+without the next one:
 
-| Schicht | Quelle | Gilt für | Liefert |
+| Layer | Source | Applies to | Yields |
 |---|---|---|---|
-| **T0 Git** ✅ M1 | `git log`, `git ls-tree` gegen `origin/<trunk>` (ADR-0003) | jedes Repo | Churn, Hotspots, Autoren, Dateibaum, LOC, generierte Dateien |
-| **T1 Struktur** ✅ M1a | Manifeste (`*.csproj`, `pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`, `pom.xml`, `build.gradle`) | jedes Repo mit Manifesten | Module, repo-interne Deps, `tested_by`, Churn je Modul, Sprachen/CI/Container |
-| **T2 Sprache** (M3b) | Adapter (`sherpa/adapters/<lang>/`), optional tree-sitter | pro Sprache, erste: `dotnet`, `python` | Symbole als Code-Anker, Muster für Skill-Vorschläge |
+| **T0 git** ✅ M1 | `git log`, `git ls-tree` against `origin/<trunk>` (ADR-0003) | every repo | churn, hotspots, authors, file tree, LOC, generated files |
+| **T1 structure** ✅ M1a | manifests (`*.csproj`, `pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`, `pom.xml`, `build.gradle`) | every repo with manifests | modules, in-repo deps, `tested_by`, churn per module, languages/CI/containers |
+| **Generators** ✅ M2 | path patterns per family (migrations, protobuf, OpenAPI, codegen, snapshots, bundles, lockfiles, `custom`) | every repo | `generators[]` with `home`, sources, config, command; `generated_files` per module/directory (ADR-0011) |
+| **T2 language** (M3b) | adapters (`sherpa/adapters/<lang>/`), optionally tree-sitter | per language, first: `dotnet`, `python` | symbols as code anchors, patterns for skill proposals |
 
-Ein Repo ohne Adapter bekommt T0+T1 und damit Owner-Docs, Hotspots, Churn-Schwellen und Evals aus dem Graph —
-nur Code-Anker und Skill-Evidenz fehlen.
+A repo without an adapter gets T0+T1 and with that owner docs, hotspots, churn thresholds and evals from the
+graph — only code anchors and skill evidence from code patterns are missing.
 
 ```json
 {
-  "sherpa": "0.2.0", "schema_version": 2, "repo": "…", "origin": "…",
+  "sherpa": "0.3.0", "schema_version": 3, "repo": "…", "origin": "…",
   "git": {"trunk": {"ref": "origin/main", "source": "origin/HEAD", "rev": "…"}, "windows": {…},
           "commits_90d": 1018, "files": […], "dirs": […], "hotspots": […]},          ← T0 (M1)
   "modules": [                                                                         ← T1 (M1a)
     {"id": "Shop.Pricing", "path": "src/Shop.Pricing", "kind": "dotnet", "manifest": "…csproj",
      "is_test": false, "files": 212, "loc": 18400, "test_files": 0,
      "deps": ["Shop.Core"], "dependents": ["Shop.Api"], "tested_by": ["Shop.Pricing.Tests"],
-     "commits_90d": 143, "commits_30d": 51, "authors_90d": 3,
+     "commits_90d": 143, "commits_30d": 51, "authors_90d": 3, "generated_files": 0,
      "hotspots": ["src/Shop.Pricing/Services/PriceEngine.cs"]}
   ],
+  "generators": [                                                                      ← M2 (ADR-0011)
+    {"family": "ef-migrations", "module": "Shop.Migrations", "home": "src/Shop.Migrations", "generated_files": 399,
+     "sources": ["src/Shop.Migrations/Context/ShopDbContext.cs"], "configs": [], "command": "dotnet ef migrations add <Name> --project <home>", "skill": true}
+  ],
   "conventions": {"languages": {"csharp": 5953126, "typescript": 480000}, "ci": […], "containers": […]},
-  "anchors": […]                                                                       ← T2 (M3b), geplant
+  "anchors": […]                                                                       ← T2 (M3b), planned
 }
 ```
 
-### 2.2 Planer → `harness-plan` — zwei Stufen
+### 2.2 Planner → `harness-plan` — two stages
 
-**Stufe 1 (M2, deterministisch):** Schwellwert-Regeln über dem Modell. Jeder Eintrag hat `evidence` (nur
-Modell-Felder), `cost`, `default` und bei `skip` eine `reason` mit Kippkriterium.
+**Stage 1 (M2 ✅, deterministic):** rules over the model; the owner of the details is
+[`docs/harness-plan.md`](harness-plan.md). Every entry has `evidence` (model fields only), `checks` (each
+criterion with ✓/✗), `cost`, `default` and, for `skip`, a `reason` with a flip criterion. Thresholds are
+**relative with an absolute floor** (ADR-0006); values in `sherpa.toml [plan]`.
 
-Schwellen sind **relativ mit absolutem Boden** (ADR-0006; CodeScene-Praxis: Hotspots sind Perzentile der eigenen Codebasis,
-nie absolute Zahlen — sonst bekommt ein kleines Team nie einen Agent und ein grosses überall einen). Perzentile
-werden über alle Nicht-Test-Module berechnet; der Boden verhindert Vorschläge in ruhigen Repos. Werte in
-`sherpa.toml [plan]`, Startwerte:
-
-| Baustein | Bereich | `propose` wenn | sonst |
+| Building block | Scope | `propose` when | otherwise |
 |---|---|---|---|
-| Outcome-Kanal | Repo | immer, **zuerst** — Minimum kommt mit `apply` (M3), Auswertung in M5 (§2.5) | — |
-| Owner-Doc | je Modul (T1), sonst je `dirs[]`-Eintrag Tiefe 1 mit `files ≥ 10` | immer | — |
-| Agent | je Modul | oberstes Quartil nach `commits_90d` **und** Boden `commits_90d ≥ 20`, `files ≥ 30` | `skip` (Owner-Doc reicht) |
-| Librarian | je Modul oder Tiefe-1-Verzeichnis ohne Modul | Top **2** nach `commits_30d`, Boden `commits_30d ≥ 30` **oder** `commits_90d ≥ 80` | `skip` mit Kippkriterium (Boden + Rang) |
-| Test-Infra-Bereich | `dirs[]` unter `tests/`, `test/` | Churn ≥ dem grössten Fachmodul | — (Analyse-Praxis: blinder Fleck Nr. 1) |
-| Eval | je Agent | automatisch aus dem Graph (§2.4) | — |
-| Skill | je Muster | braucht T2 (M3b): Muster ≥ 2× im Code belegt | bis dahin keine Skill-Vorschläge |
+| Outcome channel | repo | always, **first** — the minimum comes with `apply` (M3), evaluation in M5 (§2.5) | — |
+| Owner doc | per unit (module or depth-1 directory without a module, ADR-0012) | not dormant: ≥ 1 commit/90d or ≥ 1 dependent | visible `skip` ("dormant"), count line in `notes` |
+| Agent | per business unit | top quartile by `commits_90d` **and** floors `commits_90d ≥ 20`, `files ≥ 30`, `authors_90d ≥ 2` | `skip` listed when within reach (rank or commit floor met) |
+| Librarian | per business unit | top **2** by `commits_30d`, floor `commits_30d ≥ 30` **or** `commits_90d ≥ 80` | `skip` listed when within reach |
+| Generator-dominated | unit with ≥ 50 % generator output | no agent/librarian, no rank; **skill** `regenerate-<family>` at the `home` (ADR-0011) | skill below the floor (5 files) as a count line |
+| Test infra | most active test unit | commits/90d ≥ most active business unit (analysis practice: blind spot number one) | `skip` listed |
+| Eval | per agent | automatically from the graph (§2.4, M4) | — |
+| Skill from code patterns | per pattern | needs T2 (M3b): pattern found ≥ 2× in code | until then generator skills only |
 
-Jede `reason` nennt beides — Rang **und** Boden — damit der Leser sieht, was fehlt: „Rang 7/48 nach commits_90d
-(Quartil = Rang ≤ 12 ✓), aber files = 18 < 30 ✗. Kippkriterium: files ≥ 30."
+Calibrated on a large monorepo (~50 modules, ~15k files): about 60 proposals, ~16 no's within reach, ~60 units
+counted as out of reach; runtime with an existing model 0.16 s. Human decisions (`decision: accept | reject`)
+survive another `plan` run (ADR-0012).
 
-**Stufe 2 (M6, optional, LLM):** Anreicherung der Stufe-1-Einträge — Beschreibungstexte, Zusammenlegung
-verwandter Module, Skill-Kandidaten aus T2-Mustern. Der LLM darf Einträge **kommentieren und ergänzen**, nie
-Stufe-1-Einträge entfernen oder Schwellen umgehen. Output wird gegen das Plan-Schema validiert (ADR-0004);
-Plan-Header trägt `model`, `prompt_hash`. Ohne Stufe 2 ist der Plan vollständig nutzbar.
+**Stage 2 (M6, optional, LLM):** enrichment of stage-1 entries — descriptions, merging related modules, skill
+candidates from T2 patterns. The LLM may **comment on and add to** entries, never remove stage-1 entries or bypass
+thresholds. Output is validated against the plan schema (ADR-0004); the plan header carries `model`,
+`prompt_hash`. Without stage 2 the plan is fully usable.
 
 ```yaml
-- kind: librarian
-  module: Shop.Pricing
-  evidence: {commits_90d: 143, commits_30d: 51, authors_90d: 3, hotspots: ["src/Shop.Pricing/Services/PriceEngine.cs"]}
-  cost: "1 Scheduled Task, 1 SKILL-Datei, Anker-Pflege"
-  default: propose
 - kind: agent
-  module: Shop.Reporting
-  evidence: {commits_90d: 12, files: 18}
+  target: pay
+  scope: svc/pay
+  default: propose
+  decision: null
+  evidence: {path: svc/pay, files: 40, generated_files: 6, commits_90d: 24, commits_30d: 24, authors_90d: 2, dependents: 1, rank_commits_90d: 1/4}
+  checks: [rank 1/4 churn · rank ≤ 1 by commits/90d ✓, 24 commits/90d · commits/90d ≥ 20 ✓, 40 files · files ≥ 30 ✓, 2 authors · authors/90d ≥ 2 ✓]
+  cost: 1 agent with knowledge manifest, 1 eval catalogue from the graph
+- kind: librarian
+  target: pay
+  scope: svc/pay
   default: skip
-  reason: "Rang 31/48 nach commits_90d (Quartil = Rang ≤ 12 ✗), files 18 < 30 ✗; Owner-Doc reicht. Kippkriterium: Rang ≤ 12 und files ≥ 30"
+  decision: null
+  evidence: {…, rank_commits_30d: 1/4}
+  checks: [rank 1/4 momentum · top 2 by commits/30d ✓, '24 commits/30d, 24/90d · commits/30d ≥ 30 or commits/90d ≥ 80 ✗']
+  cost: 1 scheduled task, 1 SKILL file, anchor upkeep per run
+  reason: '24 commits/30d, 24/90d. Flips when: commits/30d ≥ 30 or commits/90d ≥ 80'
 ```
 
-Freigabe: interaktiv (`sherpa apply` fragt je Eintrag), als Datei-Edit (`default:` → `accept`/`reject`) oder in
-Claude Code über `/sherpa-plan` (M7). Format: YAML (ADR-0005).
+Approval: by editing the file (`decision:`), interactively (`sherpa apply` asks per entry without a decision,
+M3) or in Claude Code via `/sherpa-plan` (M7). Format: YAML (ADR-0005).
 
 ### 2.3 Harnessing → `.claude/**` + `.sherpa/state.json`
 
-- Templates aus dem Referenz-Harness, **generischer Teil** (ADR-0002): Owner-Doc, Agent mit
-  `knowledge:`-Manifest, SKILL, Command, Librarian-SKILL, Eval-Katalog, Hook-Set, Checker.
-- **Dry-Run ist der Default** (ADR-0008). `sherpa apply` zeigt zuerst jede Datei mit `+ neu`, `~ aktualisiert`,
-  `= unverändert`, `! hand-edited (übersprungen)` und Hash (Vorbild `terraform plan`), dann Rückfrage; `--yes` nur
-  für CI. `--dry-run` endet nach der Liste.
-- Jede erzeugte Datei trägt Marker `<!-- sherpa:generated <version> hash=… -->`. Hash im State.
-  Datei geändert (Hash ≠ State) → `apply` fasst sie nicht an, `status` meldet `hand-edited`.
-- **Outcome-Minimum gehört zu `apply`** (M3, ADR-0008): Hook-Set, Label-Datei, `harness_rev` = Hash von Plan + Sherpa-Version.
-  Ein Harness ohne Signal wird nicht angelegt — das war der teuerste Fehler des Referenz-Harness.
-- Checker (generischer Nachfolger des Referenz-Checkers, §6 Frage 2) wird mit installiert; `apply` endet mit
-  `0 FAIL`, sonst Rollback.
-- Multi-Repo (M7): ein Workspace-`sherpa.toml`, ein State je Repo, Templates geteilt.
-- **Determinismus-Garantie:** `apply` ist eine reine Funktion `(plan, templates, state) → Dateien`. Kein LLM, kein
-  Netz, keine Uhrzeit im Dateiinhalt (Zeitstempel nur im State), sortierte Ausgabe, stabile Hashes. Test: zwei
-  Läufe auf gleichem Input → byte-identischer Baum. Gleiches gilt für `scan` (bei gleichem `origin/<trunk>`-Rev,
-  belegt durch `test_scan_is_deterministic`), `plan` Stufe 1 und `status`. Nur Stufe 2 darf streuen.
+- Templates: the **generic part** of proven harnesses (ADR-0002): owner doc, agent with `knowledge:` manifest,
+  SKILL, command, librarian SKILL, eval catalogue, hook set, checker.
+- **Dry run is the default** (ADR-0008). `sherpa apply` first shows every file with `+ new`, `~ updated`,
+  `= unchanged`, `! hand-edited (skipped)` and hash (model: `terraform plan`), then asks; `--yes` only for CI.
+  `--dry-run` stops after the list.
+- Every generated file carries the marker `<!-- sherpa:generated <version> hash=… -->`. Hash in the state.
+  File changed (hash ≠ state) → `apply` leaves it alone, `status` reports `hand-edited`.
+- **The outcome minimum belongs to `apply`** (M3, ADR-0008): hook set, label file, `harness_rev` = hash of plan +
+  Sherpa version. A harness without a signal is not created — adding the signal after the features is the most
+  expensive mistake a harness can make.
+- The checker (generic core + adapter rules, §6 question 2) is installed as well; `apply` ends with `0 FAIL`,
+  otherwise rollback.
+- Multi-repo (M7): one workspace `sherpa.toml`, one state per repo, shared templates.
+- **Determinism guarantee:** `apply` is a pure function `(plan, templates, state) → files`. No LLM, no network,
+  no clock in file contents (timestamps only in the state), sorted output, stable hashes. Test: two runs on the
+  same input → byte-identical tree. The same holds for `scan` (for the same `origin/<trunk>` rev, proven by
+  `test_scan_is_deterministic`), `plan` stage 1 and `status`. Only stage 2 may vary.
 
-### 2.4 Auto-Evals aus dem Graph (der Teil, den es am Markt nicht gibt)
+### 2.4 Auto-evals from the graph (the part the market does not have)
 
-Golden-Fragen mit Ground-Truth aus `codebase-model.json`, keine LLM-Erfindung — jede Frage ist ein Modell-Feld:
+Golden questions with ground truth from `codebase-model.json`, no LLM invention — every question is a model field:
 
-- „Welche Module hängen von `Shop.Core` ab?" → `modules[Shop.Core].dependents`
-- „Welches Test-Projekt deckt `Shop.Pricing` ab?" → `modules[Shop.Pricing].tested_by`
-- „Welche Datei ist der Hotspot in `Shop.Pricing`?" → `modules[Shop.Pricing].hotspots[0]`
-- „Wovon hängt `Shop.Api` ab?" → `modules[Shop.Api].deps`
+- "Which modules depend on `Shop.Core`?" → `modules[Shop.Core].dependents`
+- "Which test project covers `Shop.Pricing`?" → `modules[Shop.Pricing].tested_by`
+- "Which file is the hotspot in `Shop.Pricing`?" → `modules[Shop.Pricing].hotspots[0]`
+- "What does `Shop.Api` depend on?" → `modules[Shop.Api].deps`
 
-Jeder generierte Agent hat damit am Tag 0 ein verifizierbares Eval. Baseline wird im State gespeichert;
-`status` meldet Regression. Fragen, deren Antwort sich mit dem nächsten Scan ändert (Hotspots), werden beim
-Re-Scan neu erzeugt — sie messen Aktualität, nicht Auswendiglernen.
+Every generated agent thus has a verifiable eval on day 0. The baseline is stored in the state; `status` reports
+regressions. Questions whose answer changes with the next scan (hotspots) are regenerated on re-scan — they
+measure currency, not memorisation.
 
-### 2.5 Outcome-Kanal und Lernen
+### 2.5 Outcome channel and learning
 
-Minimum (Hook, Label-Datei, `harness_rev`) kommt mit dem ersten `apply` (M3); Auswertung (`sherpa status`:
-Labels je Harness-Version, Trend) in M5. Befund im Referenz-Harness: 15/15 Ausführungen `unknown`, weil das Signal
-nach den Features kam. Playbooks/Instincts (ECC-Muster) erst, wenn ≥ 30 gelabelte Ausführungen vorliegen.
-Lernen ohne Signal ist ein Versprechen, keine Funktion.
+The minimum (hook, label file, `harness_rev`) comes with the first `apply` (M3); evaluation (`sherpa status`:
+labels per harness version, trend) in M5. Observed in practice: when the signal arrives after the features, every
+execution stays `unknown` and nothing can be measured. Playbooks/instincts only once ≥ 30 labelled executions
+exist. Learning without a signal is a promise, not a feature.
 
-### 2.6 Adopt — bestehende Harnesse übernehmen, nicht überschreiben (ADR-0007)
+### 2.6 Adopt — take over existing harnesses, do not overwrite (ADR-0007)
 
-Viele Zielrepos haben schon ein `.claude/` (das Referenz-Repo: 17 Agents, 5 Librarians). Vorbild ist
-`terraform import`: eine existierende Ressource wird in den State geholt, ohne sie zu verändern.
+Many target repos already have a `.claude/` — a mature one holds a dozen agents and several librarians. The
+model is `terraform import`: an existing resource is brought into the state without being changed.
 
 `sherpa adopt`:
-1. liest `.claude/**`, klassifiziert jede Datei (Agent, Skill, Command, Doc, Hook, Eval, unbekannt) über Pfad
-   und Frontmatter;
-2. schreibt sie als `origin: adopted`, `hand-edited: true` in den State — `apply` fasst sie nie an;
-3. verknüpft sie mit Modulen des Modells (Agent nennt Pfad `src/Shop.Pricing` → Modul `Shop.Pricing`);
-4. meldet Lücken als Plan-Einträge: Agent ohne Eval, Modul mit Churn ohne Owner-Doc, Owner-Doc ohne Modul
-   (Kandidat für `MOVED:`), Agent > 250 Zeilen ohne Manifest (Fat-Agent, Rotationskandidat).
+1. reads `.claude/**`, classifies every file (agent, skill, command, doc, hook, eval, unknown) by path and front
+   matter;
+2. writes them as `origin: adopted`, `hand-edited: true` into the state — `apply` never touches them;
+3. links them to modules of the model (an agent naming path `src/Shop.Pricing` → module `Shop.Pricing`);
+4. reports gaps as plan entries: agent without eval, module with churn without owner doc, owner doc without a
+   module (candidate for `MOVED:`), agent > 250 lines without a manifest (fat agent, rotation candidate).
 
-Damit ist Sherpa auf dem Referenz-Repo vom ersten Tag an lauffähig und liefert dort dieselbe Analyse, die heute
-von Hand gemacht wird — der Regressionsfall aus §3 wird ausführbar.
+With that Sherpa runs on repos with an existing harness from day one and delivers the analysis there that is done
+by hand today — the regression case in §3 becomes executable.
 
-## 3. Meilensteine (vertikaler Schnitt, fremde Repos)
+## 3. Milestones (vertical slices, foreign repos)
 
-| M | Was | Abnahme |
+| M | What | Acceptance |
 |---|---|---|
-| M0 ✅ | Skelett, ADRs, Plan (dieses Doc) | `sherpa --version`, Tests grün |
-| M1 ✅ | Scanner T0 (jede Sprache): Trunk, Churn, Hotspots, Dateibaum, generierte Dateien, JSON-Schema | Fixture-Repo → identisches JSON bei zwei Läufen; 58 Tests, 98 % Coverage; Referenz-Repo 15k Dateien in 2,5 s |
-| M1a ✅ | Scanner T1: Module aus Manifesten (6 Ökosysteme), repo-interne Deps, `tested_by`, Churn je Modul, Konventionen | Polyglott-Fixture (`tests/test_t1_modules.py`); 105 Tests, 99 %; Referenz-Repo 48 Module in 2,6 s |
-| **M2** | `plan` Stufe 1: relative Schwellen mit Boden, Nein-Begründungen mit Rang + Boden, Plan-Schema, `[plan]`-Konfig | Plan auf Polyglott-Fixture als Snapshot-Golden; jeder Eintrag hat `evidence` nur aus Modell-Feldern; Referenz-Repo: ≤ 2 Librarians, Test-Infra erkannt; kleines Fixture (5 Module) bekommt trotzdem ≥ 1 Agent |
-| M2b | Distribution + Onboarding: `sherpa doctor`, `release.yml` (Tag → Wheel → GitHub Release), `sherpa self-update`, täglicher Update-Hinweis (abschaltbar), Paket-Index (privat, später PyPI) | `doctor` meldet jede fehlende Voraussetzung mit Abhilfe; Kunde installiert mit `uv tool install`, `self-update` holt die nächste Version; Hinweis nie blockierend |
-| M3 | `apply` mit Dry-Run-Default, Owner-Docs + Checker + State + Marker, **Outcome-Minimum**, `sherpa adopt` (§2.6) | zweiter Lauf = no-op; Hand-Edit wird nicht überschrieben; Checker 0 FAIL; Rollback bei FAIL getestet; `adopt` auf Referenz-Repo: 17 Agents übernommen, 0 Dateien verändert, Lücken als Plan-Einträge |
-| M3b | Adapter `dotnet` + `python` (T2: Anker, Muster) | Scan des Referenz-Repos liefert die Anker, die dessen Checker heute prüft; Owner-Docs bekommen Anker |
-| M4 | Auto-Evals aus dem Graph, `status` mit Baseline | Eval-Run auf Fixture ≥ 90 %; Regression wird gemeldet |
-| M5 | Outcome-Auswertung: `status` zeigt Labels je `harness_rev`, Trend, Anteil `unknown` | erste 10 Ausführungen auf einem Korpus-Repo mit Label ≠ `unknown`; Regression zwischen zwei Harness-Versionen sichtbar |
-| M6 | `plan` Stufe 2: LLM-Anreicherung, Provider-Schicht (vLLM lokal + Anthropic) | Plan-Diff Stufe 1 vs. 2 dokumentiert; gleicher Schema-Pass mit beiden Providern; Stufe-1-Einträge unverändert |
-| M7 | Librarians, Multi-Repo, `/sherpa-plan`-Command | zweites Repo im Workspace |
+| M0 ✅ | skeleton, ADRs, plan (this doc) | `sherpa --version`, tests green |
+| M1 ✅ | scanner T0 (every language): trunk, churn, hotspots, file tree, generated files, JSON schema | fixture repo → identical JSON on two runs; 58 tests, 98 % coverage; a 15k-file monorepo in 2.5 s |
+| M1a ✅ | scanner T1: modules from manifests (6 ecosystems), in-repo deps, `tested_by`, churn per module, conventions | polyglot fixture (`tests/test_t1_modules.py`); 105 tests, 99 %; ~50 modules of a 15k-file monorepo in 2.6 s |
+| M2 ✅ | `plan` stage 1: units, rank + floor, generator families → skills, visible no's within reach, `decision` keeping, plan schema, `[plan]` config | goldens on the polyglot and the active fixture (`tests/goldens/`); evidence = model fields only (tested); large monorepo: 2 librarians, test infra detected, migrations project → skill; 5-module fixture: 1 agent; 173 tests, 99 % |
+| M2b | distribution + onboarding: `sherpa doctor`, `release.yml` (tag → wheel → GitHub release), `sherpa self-update`, daily update hint (can be disabled), package index (private, later PyPI) | `doctor` reports every missing prerequisite with a fix; a customer installs with `uv tool install`, `self-update` fetches the next version; the hint never blocks |
+| M3 | `apply` with dry-run default, owner docs + checker + state + markers, **outcome minimum**, `sherpa adopt` (§2.6) | second run = no-op; hand edits are not overwritten; checker 0 FAIL; rollback on FAIL tested; `adopt` on a repo with an existing harness: every agent taken over, 0 files changed, gaps as plan entries |
+| M3b | adapters `dotnet` + `python` (T2: anchors, patterns) | a scan yields the anchors a harness checker verifies today; owner docs get anchors |
+| M4 | auto-evals from the graph, `status` with baseline | eval run on the fixture ≥ 90 %; regression is reported |
+| M5 | outcome evaluation: `status` shows labels per `harness_rev`, trend, share of `unknown` | first 10 executions on a corpus repo with a label ≠ `unknown`; regression between two harness versions visible |
+| M6 | `plan` stage 2: LLM enrichment, provider layer (local vLLM + Anthropic) | plan diff stage 1 vs. 2 documented; the same schema pass with both providers; stage-1 entries unchanged |
+| M7 | librarians, multi-repo, `/sherpa-plan` command | a second repo in the workspace |
 
-Jeder Meilenstein endet mit: CI grün (`.github/workflows/ci.yml`: pytest auf Linux, Windows, macOS, Coverage ≥ 90 %,
-ruff), Docs aktualisiert (`plan.md`, `scan.md` bzw. neues Owner-Doc), Andrei sieht den Diff vor dem Commit.
+Every milestone ends with: CI green (`.github/workflows/ci.yml`: pytest on Linux and Windows, coverage ≥ 90 %,
+ruff), docs updated (`plan.md`, `scan.md`, `harness-plan.md` or a new owner doc), Andrei sees the diff before the
+commit.
 
-Test-Korpus: mehrere fremde Git-Repos (verschiedene Sprachen, gecloned unter `tests/corpus/`, nicht eingecheckt) plus
-das Referenz-Repo (.NET). Es bleibt Template **und** Regressionsfall: Sherpa-Scan muss die dortigen Owner wiederfinden.
+Test corpus: several foreign git repos (different languages, cloned under `tests/corpus/`, not checked in). Repos
+with an existing harness are regression cases: a Sherpa scan must find the owners defined there.
 
-## 4. Bewusst NICHT vorgeschlagen
+## 4. Deliberately NOT proposed
 
-- **Rust-Kern** — siehe ADR-0001; Kippkriterium dort.
-- **Vektor-/Semantik-Suche im Scanner** — Graph + Churn reichen für Owner-Kandidaten; Semantik später, wenn M2 zeigt, dass Modulgrenzen falsch geraten werden.
-- **Obsidian-Projektion** — spezifisch für das Referenz-Harness, Adapter-Kandidat nach M7.
-- **GEPA/DSPy-Optimierung der Prompts** — erst wenn Evals (M4) und Outcome (M5) stabil laufen.
-- **LangChain / LangGraph** — siehe ADR-0004: ein LLM-Aufruf mit Schema-Validierung braucht keine Graph-Runtime;
-  Kippkriterium dort.
-- **Skill-Vorschläge ohne Code-Evidenz** — kein Skill „auf Vorrat"; erst mit T2-Mustern (M3b).
-- **Externe Pakete im Dependency-Graph** — für Owner-Grenzen zählt nur, was im Repo lebt (`docs/scan.md`).
+- **Rust core** — see ADR-0001; flip criterion there.
+- **Vector/semantic search in the scanner** — graph + churn suffice for owner candidates; semantics later, if M2
+  shows that module boundaries are guessed wrongly.
+- **Knowledge-base projections** (Obsidian and the like) — project-specific, adapter candidate after M7.
+- **GEPA/DSPy prompt optimisation** — only once evals (M4) and outcome (M5) run stably.
+- **LangChain / LangGraph** — see ADR-0004: one LLM call with schema validation needs no graph runtime; flip
+  criterion there.
+- **Skill proposals without code evidence** — no skill "in stock"; only with T2 patterns (M3b) or generator
+  evidence (M2).
+- **External packages in the dependency graph** — for owner boundaries only what lives in the repo counts
+  (`docs/scan.md`).
 
-## 5. Teststrategie
+## 5. Test strategy
 
-Viele Tests, kleine Einheiten, alles reproduzierbar:
+Many tests, small units, everything reproducible:
 
-| Ebene | Was | Wie |
+| Level | What | How |
 |---|---|---|
-| Unit | jede Funktion in `src/sherpa/` | `pytest`, Fixture-Repos werden **programmatisch** gebaut (`tests/conftest.py`), feste Git-Daten/Autoren → gleiche SHAs |
-| Determinismus | `scan`, `plan` Stufe 1, `apply`, `status` | zwei Läufe, Byte-Vergleich (scan ✅) bzw. Baum-Hash (apply) |
-| Snapshot | `harness-plan.yaml` je Fixture | ab M2 eingecheckte Golden-Dateien, Diff bei Abweichung |
-| Selftest | Checker (Muster: Selftest des Referenz-Checkers) | je Regel ein positiver und ein negativer Fall |
-| Korpus | echte Repos unter `tests/corpus/` (ignored) | Smoke: Scan läuft durch, Schema valide, Laufzeit < 60 s; Referenz-Repo lokal, nicht in CI |
-| Schema | `codebase-model`, `harness-plan`, `state` | JSON-Schema unter `src/sherpa/schemas/`; Validierung in Tests immer, zur Laufzeit wenn `jsonschema` installiert (dev-Extra) |
+| Unit | every function in `src/sherpa/` | `pytest`; fixture repos are built **programmatically** (`tests/conftest.py`), fixed git dates/authors → same SHAs |
+| Determinism | `scan`, `plan` stage 1, `apply`, `status` | two runs, byte comparison (scan ✅, plan ✅) or tree hash (apply) |
+| Snapshot | `harness-plan.yaml` and console view per fixture | `tests/goldens/` (checked in), `SHERPA_UPDATE_GOLDENS=1` refreshes after an intended rule change; version and rev are normalised |
+| Self-test | checker (pattern: self-test of the generated checker) | one positive and one negative case per rule |
+| Corpus | real repos under `tests/corpus/` (ignored) | smoke: scan runs through, schema valid, runtime < 60 s; never in CI |
+| Schema | `codebase-model`, `harness-plan`, `state` | JSON Schema under `src/sherpa/schemas/`; validation in tests always, at runtime when `jsonschema` is installed (dev extra) |
 
-Gate: Coverage ≥ 90 % für `src/sherpa/`, `pytest -q` grün vor jedem Meilenstein. Stand M1a: 105 Tests, 99 %.
+Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M2: 173 tests, 99 %.
 
-## 6. Offene Fragen (Entscheid: Andrei)
+## 6. Open questions (decision: Andrei)
 
-1. Welche fremden Repos bilden den ersten Korpus (Ziel: ≥ 3 Sprachen)?
-2. Wie viel des Referenz-Checkers (11 Regeln) ist generisch? Erwartung: Struktur-/Owner-Regeln ja, Code-Anker adapter-abhängig, Rest prüfen. Blockiert M3.
-3. Structured Output: welche Provider liefern JSON-Schema-Zwang nativ (vLLM: `guided_json`; Anthropic: Tool-Use)? Relevant ab M6.
-4. Zwei Manifeste im selben Verzeichnis: heute gewinnt das alphabetisch erste — reicht das im Korpus?
-5. Paket-Index für M2b: privater Index (Cloudsmith/Gemfury Free-Tier) oder statischer Simple-Index hinter Token?
+1. Which foreign repos form the first corpus (target: ≥ 3 languages)?
+2. How much of a production harness checker (≈ 11 rules) is generic? Expectation: structural/owner rules yes,
+   code anchors adapter-dependent, the rest to be checked. Blocks M3.
+3. Structured output: which providers enforce JSON Schema natively (vLLM: `guided_json`; Anthropic: tool use)?
+   Relevant from M6.
+4. Two manifests in the same directory: today the alphabetically first wins — is that enough in the corpus?
+5. Package index for M2b: a private index (Cloudsmith/Gemfury free tier) or a static simple index behind a token?
+6. Owner-doc floor by files (e.g. `files ≥ 5`)? Large monorepos yield an owner doc for two-file tools. Only
+   visible with `apply` (ADR-0012).
+7. Order: M2b (distribution, `doctor`) before M3 (`apply`)? Customer tests need the installation first; the
+   product truth ("creates") needs `apply`.
 
-Entschieden (2026-09-16): Plan-Format YAML und Einchecken von Plan/State → ADR-0005.
+Decided (2026-09-16): plan format YAML and check-in of plan/state → ADR-0005; generator principle → ADR-0011;
+units, visibility, decision keeping → ADR-0012.

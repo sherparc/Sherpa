@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sherpa.local/schemas/harness-plan.schema.json",
+  "title": "harness-plan",
+  "description": "Output of `sherpa plan` (stage 1, deterministic). Every entry: evidence from model fields only, checks with ✓/✗, cost, and for skip a reason with a flip criterion. `decision` is set by a human.",
+  "type": "object",
+  "required": [
+    "sherpa",
+    "schema_version",
+    "repo",
+    "model",
+    "thresholds",
+    "ranking",
+    "notes",
+    "entries"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "sherpa": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "repo": {
+      "type": "string"
+    },
+    "model": {
+      "type": "object",
+      "required": [
+        "trunk",
+        "rev",
+        "as_of",
+        "sherpa"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "trunk": {
+          "type": "string"
+        },
+        "rev": {
+          "type": "string"
+        },
+        "as_of": {
+          "type": "string"
+        },
+        "sherpa": {
+          "type": "string",
+          "description": "Version that produced the model."
+        }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "description": "Effective values of sherpa.toml [plan] (config.PlanConfig).",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "ranking": {
+      "type": "object",
+      "required": [
+        "commits_90d",
+        "commits_30d"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "commits_90d": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Ranking of business units (modules and directories without a module, generator-dominated ones excluded), descending."
+        },
+        "commits_30d": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Notes for the reader: dormant units, units out of reach, generator traces below the floor."
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "target",
+          "scope",
+          "default",
+          "decision",
+          "evidence",
+          "checks",
+          "cost"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "outcome",
+              "owner-doc",
+              "agent",
+              "librarian",
+              "test-infra",
+              "skill"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "description": "Module id, directory, repo name (outcome) or skill name regenerate-<family>."
+          },
+          "scope": {
+            "type": "string",
+            "description": "Path in the repo; \"\" = root."
+          },
+          "default": {
+            "type": "string",
+            "enum": [
+              "propose",
+              "skip"
+            ]
+          },
+          "decision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "accept",
+              "reject",
+              null
+            ],
+            "description": "Set by a human; survives a re-plan."
+          },
+          "evidence": {
+            "type": "object",
+            "description": "Model fields only (plus rank)."
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "\"<measurement> · <criterion> ✓|✗\""
+          },
+          "cost": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Skip only: what is missing, then \"Flips when: …\"."
+          }
+        }
+      }
+    }
+  }
+}
