@@ -49,32 +49,43 @@ Then `sherpa apply` — dry run first, like `terraform plan` (golden [active-app
 
 ```console
 $ sherpa apply .
-sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 10 files
+targets: claude, agents-md · home: .agents
+sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 18 files
+  + .agents/docs/modules/core.md                          owner-doc core                new
+  + .agents/docs/modules/pay.md                           owner-doc pay                 new
+  + .agents/docs/modules/suite.md                         test-infra suite              new
+  + .agents/scripts/sherpa-check.py                       harness                       new
+  + .agents/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .claude/agents/pay.md                                 agent pay                     new
-  + .claude/docs/modules/core.md                          owner-doc core                new
-  + .claude/docs/modules/pay.md                           owner-doc pay                 new
-  + .claude/docs/modules/suite.md                         test-infra suite              new
   + .claude/hooks/sherpa-outcome.py                       harness                       new
-  + .claude/scripts/sherpa-check.py                       harness                       new
   + .claude/settings.json                                 harness                       new
   + .claude/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .sherpa/telemetry/.gitignore                          harness                       new
+  + AGENTS.md                                             harness                       new
   + CLAUDE.md                                             harness                       new
-10 to add, 0 to change, 0 unchanged, 0 skipped.
+  + svc/core/AGENTS.md                                    owner-doc core                new
+  + svc/core/CLAUDE.md                                    owner-doc core                new
+  + svc/pay/AGENTS.md                                     owner-doc pay                 new
+  + svc/pay/CLAUDE.md                                     owner-doc pay                 new
+  + tests/suite/AGENTS.md                                 test-infra suite              new
+  + tests/suite/CLAUDE.md                                 test-infra suite              new
+18 to add, 0 to change, 0 unchanged, 0 skipped.
 apply? [y/N] y
 check: 0 FAIL, 0 WARN
-10 files written · harness_rev f5c1cf090666 → .sherpa/state.json
+18 files written · harness_rev c38498363846 → .sherpa/state.json
 ```
 
-The owner doc gets a facts block from the scanner (path, LOC, commits, authors, dependencies, dependents, tests,
-hotspots — [golden](tests/goldens/active-owner-doc-pay.md)); the agent gets a knowledge manifest that points at it
-([golden](tests/goldens/active-agent-pay.md)); the migrations directory gets its skill; the outcome hook labels
-every Claude Code execution with the harness version from day one. Run it again: ten `=`, `nothing to do.`
+The owner doc under `.agents/` gets a facts block from the scanner (path, LOC, commits, authors, dependencies,
+dependents, tests, hotspots — [golden](tests/goldens/active-owner-doc-pay.md)); every module gets a nested
+`AGENTS.md` with its facts ([golden](tests/goldens/active-agents-md-pay.md)) — the file Codex, Cursor, Gemini CLI
+and Copilot load when they work there — and a `CLAUDE.md` that imports it; the Claude agent gets a knowledge
+manifest that points at the owner doc ([golden](tests/goldens/active-agent-pay.md)); the migrations directory
+gets its skill; the outcome hook labels every Claude Code execution with the harness version from day one. Run it again: eighteen `=`, `nothing to do.`
 Sherpa owns only the marked blocks — write anything else into those files, it stays.
 
 - `sherpa scan` 🟢 **Live** — deterministic codebase model (git churn, hotspots, modules, dependencies, generators)
 - `sherpa plan` 🟢 **Live** — proposals and reasoned no's with evidence as YAML; decisions survive a re-plan
-- `sherpa apply` 🟢 **Live** — dry run first, managed blocks, state file, outcome hook, checker with rollback
+- `sherpa apply` 🟢 **Live** — dry run first, managed blocks, state file, outcome hook, checker with rollback; targets `claude` and `agents-md` from one neutral core
 - `sherpa status` · `sherpa check` 🟢 **Live** — drift per file and block, structural rules, outcome labels per harness version
 - `sherpa adopt` 🟡 **In progress (M3c)** — take over existing harnesses without changing a file
 - `sherpa doctor` ⚪ **Planned (M2b)** — check the environment, update hint
@@ -142,7 +153,7 @@ Why not just write a few `.md` files for Claude or Copilot?
 
 - **No more guessing.** Sherpa builds on hard data — commits, authors, LOC, churn — not on gut feeling. Every proposal carries its evidence, every no its reason.
 - **Infrastructure as code for knowledge.** `plan` → approval → `apply`, like Terraform. You see every file before it exists; Sherpa owns only marked blocks inside the files, the rest is yours and stays yours.
-- **Does not wreck your repo.** Deterministic against `origin/trunk`, local branches invisible, idempotent with a state file, a checker that rolls back a bad write, existing files never touched (adopted instead).
+- **Does not wreck your repo.** Sherpa never overwrites what exists — it creates, appends and merges, and rewrites only its own unchanged bytes. Deterministic against `origin/trunk`, local branches invisible, idempotent with a state file, a checker that rolls back a bad write.
 - **Measures itself.** Every `apply` installs the outcome hook first: each Claude Code execution gets a label (`success`, `failed`, `unknown`) stamped with the harness version. A harness change has a number to answer to.
 - **Grows with you.** Librarians keep owner docs current, evals come from the dependency graph, and the outcome shows which harness parts really help — nothing on the market does that.
 
@@ -153,6 +164,7 @@ Where the patterns come from:
 | Terraform `plan` / `apply` / `import` / state | proposal before change, approval, idempotency, `adopt` for existing harnesses |
 | CodeScene / Tornhill hotspots | churn × complexity instead of gut feeling; relative thresholds with an absolute floor |
 | Backstage catalog / scaffolder | modules as a catalogue, templates seeded once |
+| `AGENTS.md` / Agent Skills (Codex, Cursor, Gemini CLI, Copilot, …) | proximity loading — the closest file wins — filled with measured facts and kept current instead of hand-written |
 | Ansible `blockinfile` | managed blocks inside co-authored files instead of all-or-nothing ownership |
 | Renovate | librarians as bots with scope and cadence |
 | `brew doctor` | `sherpa doctor` for onboarding |
@@ -166,7 +178,7 @@ flowchart LR
     M --> P[sherpa plan]
     P --> Y[harness-plan.yaml<br/>proposals + reasoned no's]
     Y -->|approval| A[sherpa apply]
-    A --> H[.claude/** · owner docs · agents · skills · hooks]
+    A --> H[.agents/** owner docs · skills<br/>.claude/** agents · hooks<br/>AGENTS.md · CLAUDE.md per module]
     A --> ST[.sherpa/state.json · harness_rev]
     H -->|outcome hook| O[.sherpa/telemetry/outcomes.ndjson]
     ST --> Q[sherpa status]
@@ -186,6 +198,7 @@ flowchart LR
 | M0–M1a | plan, ADRs, scanner T0+T1, programmatic fixture repos | ✅ |
 | M2 | `plan` stage 1: units, rank + floor, generator families → skills, reasoned no's, decision keeping | ✅ |
 | M3a | `apply`: dry run, managed blocks, state, outcome hook, checker with rollback; `status`, `check` | ✅ |
+| M3t | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files | ✅ |
 | M3c / M2b | `adopt`; distribution: release wheels, `self-update`, `doctor` | 🚧 |
 | M3b | language adapters (anchors, patterns) | ⏳ |
 | M4–M7 | auto-evals, outcome evaluation, LLM stage, librarians & multi-repo | ⏳ |
@@ -199,7 +212,7 @@ Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generat
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 213 tests, ~98 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 222 tests, ~98 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 

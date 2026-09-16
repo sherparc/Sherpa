@@ -22,6 +22,10 @@ dir_min_files = 10            # a directory without a module counts as a unit fr
 generated_share = 0.5         # from this share of generator output: no agent/librarian, a skill instead
 skill_min_generated_files = 5 # skill proposal from this many generated files
 owner_doc_min_files = 5       # owner doc from this many files — a dependent overrides the floor
+
+[apply]
+home = ".agents"              # where owner docs, skills and the checker copy live: ".agents" (cross-tool) or ".claude"
+targets = ["claude", "agents-md"]   # runtimes to project into; default: detected from the repo
 ```
 
 ## `[scan]`
@@ -57,11 +61,26 @@ the config file. The owner-doc activity rule (≥ 1 commit/90d or ≥ 1 dependen
 test unit vs. most active business unit) and the "within reach" listing rule are not configurable — they define
 what a plan is (ADR-0012).
 
+## `[apply]`
+
+The target layer (ADR-0015): one runtime-neutral core, one adapter per runtime. Both keys are optional; what
+`apply` resolved is printed as its first line (`targets: claude, agents-md · home: .agents`) and remembered in
+`.sherpa/state.json`, so the decision is taken once.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `home` | `".agents"` \| `".claude"` | exactly one of `.claude/`, `.agents/` present → that one; **both → `apply` asks** (refuses without a terminal); **neither → `apply` asks, `.agents` is the default** (Enter, `--yes`, `--dry-run`, no terminal) | where owner docs (`<home>/docs/modules/`), skills (`<home>/skills/`) and the checker copy (`<home>/scripts/sherpa-check.py`) live. `.agents/` is read by Codex and the AGENTS.md family; `.claude/` keeps everything in one directory for Claude-only teams. |
+| `targets` | list of `"claude"`, `"agents-md"` | detected: `.claude/` or `CLAUDE.md` → `claude`; `AGENTS.md` or `.agents/` → `agents-md`; nothing → both | `claude`: subagents, the outcome hook, root and nested `CLAUDE.md`, skill stubs when `home` is not `.claude`. `agents-md`: root `AGENTS.md` with the index, a nested `AGENTS.md` per unit with its facts. Without `claude` no outcome labels are collected — `apply` says so. |
+
+Precedence: `sherpa.toml` beats the state beats detection. Changing `home` after the first apply moves every
+core file — `status` lists the old ones as orphans.
+
 ## Errors
 
 | Message | Cause |
 |---|---|
 | `sherpa.toml [plan]: unknown keys ['agent_top_n']; allowed: ['agent_min_authors_90d', …]` | a key that does not exist — check the spelling |
+| `sherpa.toml [apply]: home 'docs' — allowed: ['.agents', '.claude']` / `targets ['cursor'] — allowed: ['claude', 'agents-md'], at least one` | value outside the target layer |
 | `trunk override 'x' does not exist as origin/x` | `[scan].trunk` names a branch that is not on `origin` (fetch first?) |
 | TOML parse error | invalid TOML; the message names the line |
 

@@ -40,7 +40,8 @@ parts (agents' front matter, hooks, `CLAUDE.md`) stay isolated in `apply/render.
 2. **Trunk discipline**: measurements against `origin/<trunk>`, never the working tree (ADR-0003).
 3. **One owner per fact**: plan.md, ADRs, concept docs, code — no duplicates in README or comments.
 4. **Evidence or nothing**: a plan entry cites model fields; a no names its flip criterion (ADR-0006/0012).
-5. **Dry run first, blocks not files** (ADR-0008/0013): nothing written unseen; sherpa owns marked blocks.
+5. **Dry run first, blocks not files, never overwrite** (ADR-0008/0013/0016): nothing written unseen; in the
+   user's repo sherpa creates, appends and merges — it rewrites only its own unchanged bytes.
 6. **Generated code is regenerated, not explained** (ADR-0011).
 7. **Product, not project**: no customer names, no numbers from customer repos, English everywhere pushed.
 8. **README is marketing and truth**: examples are goldens, badges only for what runs.

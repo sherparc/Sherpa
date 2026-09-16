@@ -15,8 +15,10 @@ files `sherpa apply .` generates (owner doc, hook, checker, the block at the end
 - Owner principle: every fact has exactly one place. `docs/plan.md` owns architecture and milestones, ADRs own
   decisions, code owns behaviour. No duplicates in README or comments.
 - Scanner and applier stay deterministic (no LLM, no network dependency). LLM only in `plan` (stage 2).
-- Sherpa owns only what is between `sherpa:begin`/`sherpa:end` markers (or whole files it deployed); hand-edited
-  blocks and files are never overwritten (ADR-0013). `src/sherpa/check.py` stays a single stdlib-only file — it is
+- **In the user's repository Sherpa never overwrites what exists — it only adds** (ADR-0016): create, append,
+  merge; rewrite only its own bytes that nobody changed since (hash in the state). Sherpa owns only what is
+  between `sherpa:begin`/`sherpa:end` markers or whole files it deployed (ADR-0013). The core is runtime-neutral (`home`); runtime-specific files
+  live in one adapter each in `apply/render.py` (ADR-0015) — a new runtime is a new adapter, never a change to the core. `src/sherpa/check.py` stays a single stdlib-only file — it is
   deployed as a copy into target repos.
 - Tests: `.venv/bin/pytest -q` from the repo root; lint `.venv/bin/ruff check . && .venv/bin/ruff format --check .` —
   both must be green before every commit (CI runs Linux and Windows; macOS is commented out in the matrix and is only

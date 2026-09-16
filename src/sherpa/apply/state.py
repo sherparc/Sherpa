@@ -43,12 +43,16 @@ class State:
     files: dict[str, FileRecord] = field(default_factory=dict)  # repo-relative "/" paths, sorted on write
     sherpa: str = __version__
     schema_version: int = STATE_SCHEMA_VERSION
+    home: str = ""  # ".agents" or ".claude" — where the neutral core lives (ADR-0015); "" = not decided yet
+    targets: tuple[str, ...] = ()  # runtimes projected into; () = not decided yet
 
     def to_dict(self) -> dict:
         return {
             "schema_version": self.schema_version,
             "sherpa": self.sherpa,
             "harness_rev": self.harness_rev,
+            "home": self.home,
+            "targets": list(self.targets),
             "plan": dict(self.plan),
             "applied_at": self.applied_at,
             "files": {k: _record_dict(v) for k, v in sorted(self.files.items())},
@@ -66,7 +70,16 @@ class State:
         if d.get("schema_version") != STATE_SCHEMA_VERSION:
             raise ValueError(f"state has schema_version {d.get('schema_version')}, expected {STATE_SCHEMA_VERSION}")
         files = {k: FileRecord(**v) for k, v in d.get("files", {}).items()}
-        return cls(d.get("harness_rev", ""), dict(d.get("plan", {})), d.get("applied_at", ""), files, d["sherpa"], 1)
+        return cls(
+            d.get("harness_rev", ""),
+            dict(d.get("plan", {})),
+            d.get("applied_at", ""),
+            files,
+            d["sherpa"],
+            1,
+            d.get("home", ""),
+            tuple(d.get("targets", ())),
+        )
 
 
 def _record_dict(r: FileRecord) -> dict:

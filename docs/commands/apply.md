@@ -1,8 +1,9 @@
 # `sherpa apply`
 
-Create the approved part of the plan under `.claude/` and record it in `.sherpa/state.json`. Dry run first:
-every file is listed with what would happen to it before anything is written. Idempotent: the second run in a row
-does nothing. Sherpa owns marked blocks inside the files, not the files — your text stays.
+Create the approved part of the plan and record it in `.sherpa/state.json`. Dry run first: every file is listed
+with what would happen to it before anything is written. Idempotent: the second run in a row does nothing.
+**Sherpa never overwrites what exists in your repository** (ADR-0016): it creates files, appends its blocks to
+existing ones, merges hook entries, and rewrites only bytes it wrote itself that nobody changed since.
 
 ## Synopsis
 
@@ -14,6 +15,12 @@ sherpa apply [REPO] [--yes | -y] [--dry-run] [--no-check]
 
 1. Loads `REPO/.sherpa/harness-plan.yaml` and `REPO/.sherpa/codebase-model.json`; refuses when `origin/<trunk>`
    has moved since the plan was made (a saved plan is stale — run [`sherpa plan`](plan.md) again).
+1. Resolves the layout (ADR-0015): `home` — where owner docs, skills and the checker copy live (`.agents`, the
+   cross-tool default, or `.claude`) — and the `targets` to project into (`claude`, `agents-md`). Both come
+   from `sherpa.toml [apply]`, else from the state, else from the repository: exactly one of `.claude/` and
+   `.agents/` present → that one; **both present → `apply` asks** (and refuses without a terminal); **neither →
+   `apply` asks, `.agents` is the default** (Enter, `--yes`, `--dry-run` or no terminal take it). The first
+   output line says what was resolved: `targets: claude, agents-md · home: .agents`.
 2. Selects the entries: every `default: propose` without `decision: reject`, every `default: skip` with
    `decision: accept`. A rejected `outcome` entry is an error.
 3. Renders the target files from the plan and the model (pure, no clock) and compares them with the files on disk
@@ -35,20 +42,29 @@ Ownership modes, file contents and the reasoning: [concepts/harness-apply.md](..
 | `--dry-run` | ask | list only; never asks, never writes |
 | `--no-check` | check | skip the checker after writing — no rollback. For repositories whose hand-written harness has FAILs you want to fix later; the FAILs are still reported by `sherpa status`. |
 
+`home` and `targets` have no flags: set them in `sherpa.toml [apply]` ([configuration](../reference/configuration.md#apply)) — a layout is a decision, not a per-run option.
+
 Without a terminal on stdin and without `--yes`, `apply` prints the list and
 `dry run only — pass --yes to write (no terminal to ask).` — dry run is the default everywhere (ADR-0008).
 
 ## What is created
 
-| Plan entry | File(s) | Sherpa's part (regenerated on every apply) |
-|---|---|---|
-| always | `CLAUDE.md` | block `harness` — six lines on where facts, agents and skills live; appended to an existing file; a new file imports an existing `AGENTS.md` (`@AGENTS.md`) |
-| always | `.claude/scripts/sherpa-check.py` | whole file — the checker, runs without sherpa installed |
-| `outcome` | `.claude/hooks/sherpa-outcome.py`, hook entries in `.claude/settings.json`, `.sherpa/telemetry/.gitignore` | the script; sherpa's four hook entries (everything else in `settings.json` is kept) |
-| `owner-doc`, `test-infra` | `.claude/docs/modules/<slug>.md` | block `facts`: path, kind, files/LOC, commits, authors, dependencies, dependents, tests, hotspots, generators |
-| `agent` | `.claude/agents/<slug>.md` | block `knowledge` (front matter manifest) and block `manifest` |
-| `librarian` | `.claude/skills/<slug>-sync/SKILL.md` | block `scope`: pathspec, commits/30d, cadence, owner doc |
-| `skill` | `.claude/skills/regenerate-<family>/SKILL.md` | block `facts`: family, home, generated files, sources, configs, command |
+The neutral core (under `home`), then one adapter per target. Sherpa's part of every file is regenerated on each
+apply; everything else is seeded once and yours.
+
+| Plan entry | Core (`<home>/…`) | Target `claude` | Target `agents-md` |
+|---|---|---|---|
+| always | `scripts/sherpa-check.py` (the checker copy), `.sherpa/telemetry/.gitignore` | `CLAUDE.md` block `harness` (appended to an existing file; a new file imports `@AGENTS.md` when that exists or is generated) | `AGENTS.md` block `harness`: overview and the index of nested files; the facts of a root module |
+| `outcome` | — | `.claude/hooks/sherpa-outcome.py`, four hook entries merged into `.claude/settings.json` | — (no hooks in this family; `apply` says so when `claude` is off) |
+| `owner-doc`, `test-infra` | `docs/modules/<slug>.md` block `facts`: path, kind, files/LOC, commits, authors, dependencies, dependents, tests, hotspots, generators | `<unit>/CLAUDE.md` block `harness`: `@AGENTS.md` when both targets are on, else the facts inline | `<unit>/AGENTS.md` block `facts`: dependencies, dependents, tests, hotspots, generated code → skill, link to the owner doc |
+| `agent` | — | `.claude/agents/<slug>.md` blocks `knowledge` (front matter manifest pointing at the owner doc and skills) and `manifest` | — |
+| `librarian` | `skills/<slug>-sync/SKILL.md` block `scope` | stub `.claude/skills/<slug>-sync/SKILL.md` when `home` is `.agents` | — |
+| `skill` | `skills/regenerate-<family>/SKILL.md` block `facts` | stub `.claude/skills/regenerate-<family>/SKILL.md` when `home` is `.agents` | — |
+
+Nested `AGENTS.md`/`CLAUDE.md` are **proximity files**: a runtime working in `svc/pay/` loads them without any
+manifest (the closest file wins). Their blocks are projections of the same model as the owner doc's facts block;
+the owner doc stays the place for detail and human text. A stub is a managed file with the skill's front matter
+and a link — Claude Code lists the skill, the procedure has one owner.
 
 Slugs are lower-case `[a-z0-9-]` from the unit id (`Shop.Pricing` → `shop-pricing`); two units with the same
 slug get the scope appended. Everything outside a block — the agent's `description`, the owner doc's
@@ -62,25 +78,34 @@ Dry run on the five-module example repository (golden
 
 ```console
 $ sherpa apply .
-sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 10 files
+targets: claude, agents-md · home: .agents
+sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 18 files
+  + .agents/docs/modules/core.md                          owner-doc core                new
+  + .agents/docs/modules/pay.md                           owner-doc pay                 new
+  + .agents/docs/modules/suite.md                         test-infra suite              new
+  + .agents/scripts/sherpa-check.py                       harness                       new
+  + .agents/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .claude/agents/pay.md                                 agent pay                     new
-  + .claude/docs/modules/core.md                          owner-doc core                new
-  + .claude/docs/modules/pay.md                           owner-doc pay                 new
-  + .claude/docs/modules/suite.md                         test-infra suite              new
   + .claude/hooks/sherpa-outcome.py                       harness                       new
-  + .claude/scripts/sherpa-check.py                       harness                       new
   + .claude/settings.json                                 harness                       new
   + .claude/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .sherpa/telemetry/.gitignore                          harness                       new
+  + AGENTS.md                                             harness                       new
   + CLAUDE.md                                             harness                       new
-10 to add, 0 to change, 0 unchanged, 0 skipped.
+  + svc/core/AGENTS.md                                    owner-doc core                new
+  + svc/core/CLAUDE.md                                    owner-doc core                new
+  + svc/pay/AGENTS.md                                     owner-doc pay                 new
+  + svc/pay/CLAUDE.md                                     owner-doc pay                 new
+  + tests/suite/AGENTS.md                                 test-infra suite              new
+  + tests/suite/CLAUDE.md                                 test-infra suite              new
+18 to add, 0 to change, 0 unchanged, 0 skipped.
 apply? [y/N] y
 check: 0 FAIL, 0 WARN
-10 files written · harness_rev f5c1cf090666 → .sherpa/state.json
+18 files written · harness_rev c38498363846 → .sherpa/state.json
 ```
 
-Columns: action, path, the plan entry (`kind target`, or `harness` for the always-part), detail. The detail
-lines and what each means:
+The first line is the resolved layout; columns: action, path, the plan entry (`kind target`, or `harness` for
+the always-part), detail. The detail lines and what each means:
 
 | Detail | Meaning |
 |---|---|
@@ -96,6 +121,8 @@ lines and what each means:
 | `block facts removed by hand (skipped)` | you deleted the markers; sherpa does not put them back |
 | `markers broken: block facts is never closed (skipped)` | fix the markers by hand (`sherpa check` C5 names the line) |
 | `exists, not managed by sherpa — sherpa adopt takes it over` | a file at that path without a state record — an existing harness; nothing is touched |
+| `exists with sherpa markers but no state record — sherpa adopt` | markers but no record (deleted state, copied file): treated as yours (ADR-0016) |
+| `block facts not written by sherpa (skipped)` | a block with Sherpa's name that Sherpa never wrote — yours |
 
 After the write: the checker summary, then `N files written · harness_rev <12 hex> → .sherpa/state.json`. On
 a rollback: `check: 1 new FAIL — rolled back, nothing written` followed by the findings.
@@ -149,6 +176,8 @@ Proven by `test_apply_is_idempotent_and_deterministic`: the second run is all `=
 | Symptom | Cause | Fix |
 |---|---|---|
 | Everything is `! exists, not managed by sherpa` | the repo already has a `.claude/` — those files have no state record | wait for `sherpa adopt` (M3c); until then rename or accept that they stay untouched |
+| `both .agents/ and .claude/ exist — where should owner docs and skills live?` | two homes, nothing decided, no terminal | set `[apply] home` in `sherpa.toml`, or run `apply` interactively once — the answer is remembered |
+| No `CLAUDE.md`, no hook after apply | the repo had `AGENTS.md` and no `.claude/`, so only `agents-md` was detected | add `targets = ["claude", "agents-md"]` to `[apply]` |
 | `status` shows `~ block facts updated` right after `apply` | `apply` was run with an older model than the plan | run `sherpa plan` then `sherpa apply` |
 | CLAUDE.md got a block at the very end, below my own sections | intended — sherpa appends, never reorders | move the block; its markers are what matters, not its position |
 | The hook writes nothing | `settings.json` entries missing (someone removed them) or no `python3`/`python` on the PATH | `sherpa apply` merges the entries back; `sherpa check` C6 verifies the wiring |

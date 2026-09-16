@@ -1,7 +1,7 @@
 # Sherpa — Plan
 
 > **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 4 after M3a: managed blocks, single-source checker, outcome hook — ADR-0013) · **Author:** Claude (Opus 5) with Andrei
-> **Status:** v0.4.0 — M0, M1, M1a, M2, M3a done; next: M3c `adopt`, then M2b distribution
+> **Status:** v0.4.0 — M0, M1, M1a, M2, M3a, M3t done; next: M3c `adopt`, then M2b distribution
 > **Origin of the patterns:** production Claude Code harnesses built and analysed in practice (owner docs, agents with
 > knowledge manifests, librarians, deterministic checkers) plus the industry patterns in §2. Sherpa is a generic
 > product; no customer project is named anywhere in this repo.
@@ -147,6 +147,15 @@ M3) or in Claude Code via `/sherpa-plan` (M7). Format: YAML (ADR-0005).
 - Templates: the **generic part** of proven harnesses (ADR-0002): owner doc, agent with `knowledge:` manifest,
   librarian SKILL, generator skill, `CLAUDE.md` block, hook set, checker. Facts have one owner (the owner doc);
   agents carry role and manifest and say so; generated code points to its skill (ADR-0011).
+- **Target layer (ADR-0015, M3t ✅):** one runtime-neutral core under `home` (`.agents/docs/modules`,
+  `.agents/skills`, the checker copy; `.claude` for Claude-only repos; the CLI asks when both exist) and one
+  adapter per target — `claude` (subagents, hook, root and nested `CLAUDE.md`, skill stubs) and `agents-md`
+  (root `AGENTS.md` with index, a nested `AGENTS.md` per unit with its facts). Proximity loading — the closest
+  file wins, which Codex, Cursor, Gemini CLI and Copilot all do — filled with measured facts and kept current.
+  Detection from the repo, remembered in the state, overridable in `sherpa.toml [apply]`. Further adapters
+  (Cursor rules, Copilot instructions) are new target values.
+- **Never overwrite, only add** (ADR-0016): in the user's repo `apply` creates, appends and merges; it rewrites only
+  its own unchanged bytes (hash in the state) and deletes nothing.
 - **Dry run is the default** (ADR-0008). `sherpa apply` shows every file with `+ new`, `~ updated`, `= unchanged`,
   `! skipped` and the reason, then asks once; `--yes` for CI, `--dry-run` never asks. Selection: every `propose`
   unless rejected, every `skip` that was accepted (Terraform model, ADR-0013).
@@ -196,7 +205,8 @@ model is `terraform import`: an existing resource is brought into the state with
 `sherpa adopt`:
 1. reads `.claude/**`, classifies every file (agent, skill, command, doc, hook, eval, unknown) by path and front
    matter;
-2. writes them as `origin: adopted`, `hand-edited: true` into the state — `apply` never touches them;
+2. writes them as `origin: adopted`, `hand-edited: true` into the state — `apply` never touches them; nested
+   `AGENTS.md` files and `.agents/` are read the same way (ADR-0015);
 3. links them to modules of the model (an agent naming path `src/Shop.Pricing` → module `Shop.Pricing`);
 4. reports gaps as plan entries: agent without eval, module with churn without owner doc, owner doc without a
    module (candidate for `MOVED:`), agent > 250 lines without a manifest (fat agent, rotation candidate).
@@ -214,7 +224,8 @@ by hand today — the regression case in §3 becomes executable.
 | M2 ✅ | `plan` stage 1: units, rank + floor, generator families → skills, visible no's within reach, `decision` keeping, plan schema, `[plan]` config | goldens on the polyglot and the active fixture (`tests/goldens/`); evidence = model fields only (tested); large monorepo: 2 librarians, test infra detected, migrations project → skill; 5-module fixture: 1 agent; 173 tests, 99 % |
 | M2b | distribution + onboarding: `sherpa doctor`, `release.yml` (tag → wheel → GitHub release), `sherpa self-update`, daily update hint (can be disabled), package index (private, later PyPI) | `doctor` reports every missing prerequisite with a fix; a customer installs with `uv tool install`, `self-update` fetches the next version; the hint never blocks |
 | M3a ✅ | `apply` with dry-run default, managed blocks, state, **outcome minimum** (hook, labels, `harness_rev`), checker with rollback, `status`, `check` | second run = all `=`, state and tree hash unchanged; hand-edited blocks skipped, other blocks still regenerated; rollback on a new FAIL tested; 213 tests, 98 %; 61 files for a 15k-file monorepo plan in 0.15 s |
-| M3c | `sherpa adopt` (§2.6) | on a repo with an existing harness: every agent taken over as `origin: adopted`, 0 files changed, gaps as plan entries |
+| M3t ✅ | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files, `[apply]` config, ask when both homes exist | five-module fixture with both targets: 18 files, second run all `=`; existing root and nested `AGENTS.md` get the block appended; a 122-module corpus repo: 243 files in 0.2 s; 222 tests |
+| M3c | `sherpa adopt` (§2.6) — reads `.claude/`, `.agents/` and AGENTS.md hierarchies | on a repo with an existing harness: every agent taken over as `origin: adopted`, 0 files changed, gaps as plan entries |
 | M3b | adapters `dotnet` + `python` (T2: anchors, patterns) | a scan yields the anchors a harness checker verifies today; owner docs get anchors |
 | M4 | auto-evals from the graph, `status` with baseline | eval run on the fixture ≥ 90 %; regression is reported |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev`, trend, share of `unknown` | first 10 executions on a corpus repo with a label ≠ `unknown`; regression between two harness versions visible |
@@ -274,12 +285,13 @@ Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milest
    the floor; small units are listed as no's and counted in a note so the reader sees them.
 7. ~~Order: M2b before M3?~~ Decided 2026-09-17: M3 first (the product truth "creates" needs `apply`); M2b after
    `adopt`.
-8. Provider-neutral output (`AGENTS.md`, Cursor rules, Copilot instructions) — the owner docs and skills are not
-   Claude-specific; only agents, hooks and `CLAUDE.md` are. Worth a `[apply] targets` switch once a corpus repo
-   asks for it (non-goal table §1: flip criterion).
+8. ~~Provider-neutral output?~~ Decided 2026-09-17 (ADR-0015): neutral core + targets `claude`, `agents-md`;
+   Cursor (`.cursor/rules/*.mdc`, `globs`) and Copilot (`.github/instructions/*.instructions.md`, `applyTo`)
+   are the next adapters once a corpus repo uses them.
 9. Interactive per-entry approval in the CLI was rejected for M3a (ADR-0013); `/sherpa-plan` in Claude Code (M7)
    is the better place. Reopen if the YAML editing turns out to be the friction point in customer tests.
 
 Decided (2026-09-16): plan format YAML and check-in of plan/state → ADR-0005; generator principle → ADR-0011;
 units, visibility, decision keeping → ADR-0012. Decided (2026-09-17): block ownership, single-source checker,
-Terraform-style selection → ADR-0013; owner-doc floor by files → ADR-0014.
+Terraform-style selection → ADR-0013; owner-doc floor by files → ADR-0014; target layer → ADR-0015; never
+overwrite, only add → ADR-0016.

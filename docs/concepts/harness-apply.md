@@ -29,44 +29,58 @@ Real output on the five-module test repo (`active_repo` in `tests/test_plan.py`,
 
 ```console
 $ sherpa apply . --dry-run
-sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 10 files
+targets: claude, agents-md · home: .agents
+sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 18 files
+  + .agents/docs/modules/core.md                          owner-doc core                new
+  + .agents/docs/modules/pay.md                           owner-doc pay                 new
+  + .agents/docs/modules/suite.md                         test-infra suite              new
+  + .agents/scripts/sherpa-check.py                       harness                       new
+  + .agents/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .claude/agents/pay.md                                 agent pay                     new
-  + .claude/docs/modules/core.md                          owner-doc core                new
-  + .claude/docs/modules/pay.md                           owner-doc pay                 new
-  + .claude/docs/modules/suite.md                         test-infra suite              new
   + .claude/hooks/sherpa-outcome.py                       harness                       new
-  + .claude/scripts/sherpa-check.py                       harness                       new
   + .claude/settings.json                                 harness                       new
   + .claude/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .sherpa/telemetry/.gitignore                          harness                       new
+  + AGENTS.md                                             harness                       new
   + CLAUDE.md                                             harness                       new
-10 to add, 0 to change, 0 unchanged, 0 skipped.
+  + svc/core/AGENTS.md                                    owner-doc core                new
+  + svc/core/CLAUDE.md                                    owner-doc core                new
+  + svc/pay/AGENTS.md                                     owner-doc pay                 new
+  + svc/pay/CLAUDE.md                                     owner-doc pay                 new
+  + tests/suite/AGENTS.md                                 test-infra suite              new
+  + tests/suite/CLAUDE.md                                 test-infra suite              new
+18 to add, 0 to change, 0 unchanged, 0 skipped.
 ```
 
-After `--yes`: `check: 0 FAIL, 0 WARN` · `10 files written · harness_rev f5c1cf090666 → .sherpa/state.json`.
-The second run lists ten `=` and ends with `nothing to do.` — that is the determinism guarantee made visible.
+After `--yes`: `check: 0 FAIL, 0 WARN` · `18 files written · harness_rev c38498363846 → .sherpa/state.json`.
+The second run lists eighteen `=` and ends with `nothing to do.` — that is the determinism guarantee made visible.
 
-## What each entry becomes
+## What each entry becomes (ADR-0015: neutral core + adapters)
 
-| Plan entry | File | Sherpa owns (blocks) | Humans own |
+`home` (`.agents` by default, `.claude` for Claude-only teams; asked when both exist) holds the runtime-neutral
+core; each target in `targets` adds its projection. Sherpa owns the blocks named below; humans own the rest.
+
+| Plan entry | Core `<home>/…` | `claude` | `agents-md` |
 |---|---|---|---|
-| `outcome` (+ always) | `.claude/hooks/sherpa-outcome.py`, hook entries in `.claude/settings.json`, `.sherpa/telemetry/.gitignore` | whole file / the hook entries | everything else in `settings.json` |
-| always | `.claude/scripts/sherpa-check.py` | whole file | — |
-| always | `CLAUDE.md` | block `harness` (six lines: where facts, agents, skills live; how to check) | the rest; an existing file gets the block appended; a new file in a repo with `AGENTS.md` starts with `@AGENTS.md` so the cross-tool file stays the source |
-| `owner-doc`, `test-infra` | `.claude/docs/modules/<slug>.md` | block `facts`: path, kind, files/LOC, commits, authors, deps, dependents, tested by, hotspots, generators → skill | `structure`, `rules`, `key services`, `references` |
-| `agent` | `.claude/agents/<slug>.md` | block `knowledge` (front matter manifest: `always` = owner doc, `on_demand` = generator skills), block `manifest` | `name`, `description` (the router catalogue), how to work, handoff contract |
-| `librarian` | `.claude/skills/<slug>-sync/SKILL.md` | block `scope`: pathspec, commits/30d, cadence, owner doc | procedure, done-when |
-| `skill` | `.claude/skills/regenerate-<family>/SKILL.md` | block `facts`: family, home, generated files, sources, configs, command | procedure, don'ts |
+| always | `scripts/sherpa-check.py`, `.sherpa/telemetry/.gitignore` | `CLAUDE.md` block `harness` (six lines; `@AGENTS.md` import in a new file when AGENTS.md exists or is generated) | `AGENTS.md` block `harness`: overview, index of nested files, root-module facts |
+| `outcome` | — | `.claude/hooks/sherpa-outcome.py`, hook entries in `.claude/settings.json` | — |
+| `owner-doc`, `test-infra` | `docs/modules/<slug>.md` block `facts` | `<unit>/CLAUDE.md` block `harness` (`@AGENTS.md`, or the facts when `agents-md` is off) | `<unit>/AGENTS.md` block `facts` + link to the owner doc |
+| `agent` | — | `.claude/agents/<slug>.md` blocks `knowledge` (manifest: `always` = owner doc, `on_demand` = generator skills) and `manifest` | — |
+| `librarian` | `skills/<slug>-sync/SKILL.md` block `scope` | stub under `.claude/skills/` when `home` ≠ `.claude` | — |
+| `skill` | `skills/regenerate-<family>/SKILL.md` block `facts` | stub under `.claude/skills/` when `home` ≠ `.claude` | — |
 
-Slugs are lower-case `[a-z0-9-]`; two units with the same slug get the scope appended
-(`shop-core--src-shop-core.md`). Every file follows the owner principle from harness practice: facts have exactly
-one owner (the owner doc); agents carry a role and a manifest and say so in their first paragraph; generated code
-is regenerated, not explained (ADR-0011). Dates in blocks come from the model (`as of`), never from a clock, and
+Nested files are the market's proximity loading (the closest `AGENTS.md`/`CLAUDE.md` wins) filled with measured
+facts and kept current; the owner doc stays the single place for detail. Slugs are lower-case `[a-z0-9-]`; two
+units with the same slug get the scope appended (`shop-core--src-shop-core.md`). Every file follows the owner
+principle: facts have exactly one owner; agents carry a role and a manifest and say so; generated code is
+regenerated, not explained (ADR-0011). Dates in blocks come from the model (`as of`), never from a clock, and
 the sherpa version is not in the blocks — an upgrade must not rewrite every doc.
 
-## Ownership: managed, blocks, json-hooks (ADR-0013)
+## Ownership: managed, blocks, json-hooks (ADR-0013) — never overwrite, only add (ADR-0016)
 
-The dry run shows exactly what a file's line means:
+In the user's repository Sherpa creates, appends and merges; it rewrites only bytes it wrote itself and that
+nobody changed since (hash in the state). Everything else is skipped with a reason. The dry run shows exactly
+what a file's line means:
 
 | Line | Meaning |
 |---|---|
@@ -81,6 +95,8 @@ The dry run shows exactly what a file's line means:
 | `! block facts removed by hand (skipped)` | markers deleted; sherpa does not re-insert them |
 | `! markers broken: … (skipped)` | begin without end, duplicate names — fix by hand, `sherpa check` C5 says where |
 | `! exists, not managed by sherpa — sherpa adopt takes it over` | a file with that path but no state record and no markers |
+| `! exists with sherpa markers but no state record — sherpa adopt` | markers present, no record (a deleted state, a copied file) — somebody's content until adopt says otherwise |
+| `! block facts not written by sherpa (skipped)` | a block with one of Sherpa's names that has no hash in the record — not Sherpa's, never touched |
 
 Hashes ignore line endings (`\r\n` = `\n`): a CRLF checkout is not a hand edit.
 
@@ -90,12 +106,16 @@ Hashes ignore line endings (`\r\n` = `\n`): a CRLF checkout is not a hand edit.
 {
   "schema_version": 1,
   "sherpa": "0.4.0",
-  "harness_rev": "f5c1cf090666",
+  "harness_rev": "c38498363846",
+  "home": ".agents",
+  "targets": ["claude", "agents-md"],
   "plan": {"trunk": "origin/main", "rev": "5db69c4d…", "as_of": "2026-03-01T00:00:00Z"},
   "applied_at": "2026-09-16T22:07:12Z",
   "files": {
     ".claude/agents/pay.md": {"mode": "blocks", "origin": "generated", "entry": "agent:pay:svc/pay",
-                              "blocks": {"knowledge": "372bee88d9df5d39", "manifest": "a69a440b2d11169f"}},
+                              "blocks": {"knowledge": "…", "manifest": "…"}},
+    "svc/pay/AGENTS.md": {"mode": "blocks", "origin": "generated", "entry": "owner-doc:pay:svc/pay",
+                          "blocks": {"facts": "…"}},
     ".claude/hooks/sherpa-outcome.py": {"mode": "managed", "origin": "generated", "hash": "9c1e…"}
   }
 }
@@ -113,7 +133,7 @@ something changed. Plan and state are checked in (ADR-0005), the model is not.
 `.sherpa/telemetry/outcomes.ndjson`:
 
 ```json
-{"kind": "outcome", "id": "<session>:3", "harness_rev": "f5c1cf090666", "label": "success",
+{"kind": "outcome", "id": "<session>:3", "harness_rev": "c38498363846", "label": "success",
  "signals": {"bash": 4, "bash_errors": 0, "edits": 2, "tests_run": 1, "tests_failed": 0, "last_test": "green",
              "pushed": false, "pr_created": false}, "prompt": "add a test for …"}
 ```
@@ -134,16 +154,16 @@ the counts per `harness_rev`.
 | Rule | Level | What |
 |---|---|---|
 | C1 | FAIL | every `.claude/agents/*.md` has front matter with `name` and `description` (Claude Code needs both) |
-| C2 | FAIL | every `.claude/skills/*/SKILL.md` has front matter with `name` and `description` |
+| C2 | FAIL | every `SKILL.md` under `.claude/skills/` or `.agents/skills/` has front matter with `name` and `description` |
 | C3 | FAIL | every path under `knowledge.always` / `knowledge.on_demand` exists (relative to `.claude/`) |
-| C4 | FAIL | relative file links in `.claude/**/*.md` and `CLAUDE.md` resolve (links without an extension are wiki pages, `archive/` is history — both skipped) |
+| C4 | FAIL | relative file links in `.claude/**`, `.agents/**` and every `CLAUDE.md`/`AGENTS.md` resolve (links without an extension are wiki pages, `archive/` is history — both skipped) |
 | C5 | FAIL | `sherpa:begin/end` markers are balanced, named and unique per file |
 | C6 | FAIL | `.claude/settings.json` is valid JSON; every hook command under `$CLAUDE_PROJECT_DIR` points to an existing file |
 | C7 | WARN | agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate |
 | C8 | WARN | with a state: managed files or blocks whose hash differs, or that are missing |
 
-`src/sherpa/check.py` is one stdlib-only file. `apply` deploys it as `.claude/scripts/sherpa-check.py` with the
-version stamped in; run standalone (`python3 .claude/scripts/sherpa-check.py`) it applies the same rules, and when
+`src/sherpa/check.py` is one stdlib-only file. `apply` deploys it as `<home>/scripts/sherpa-check.py` with the
+version stamped in; run standalone (`python3 .agents/scripts/sherpa-check.py`) it applies the same rules, and when
 an installed `sherpa` is importable it delegates to that — installed rules are never older than the copy.
 `SHERPA_CHECK_STANDALONE=1` forces the copy. `status` notes when the copy is older than the installed sherpa.
 
@@ -156,15 +176,15 @@ Example (lines exactly as `status` renders them; see `test_status_reports_drift_
 
 ```console
 $ sherpa status .
-sherpa status — harness_rev f5c1cf090666, applied 2026-09-16T22:07:12Z
+sherpa status — harness_rev c38498363846, applied 2026-09-16T22:07:12Z
 drift: 3 files
   ! .claude/agents/pay.md            block manifest hand-edited (skipped)
-  ~ .claude/docs/modules/pay.md      block facts updated
+  ~ .agents/docs/modules/pay.md      block facts updated
   ? .claude/agents/old.md            in the state, no longer in the plan
 check: 0 FAIL, 1 WARN
   WARN C7 .claude/agents/pay.md: 162 lines > budget 150 (agent)
 outcomes: 12 executions labelled, 1 corrections
-  f5c1cf090666 (current): 7 success, 2 failed, 3 unknown
+  c38498363846 (current): 7 success, 2 failed, 3 unknown
 ```
 
 Drift is what `apply` would do now (`+ ~ !`), plus `-` files in the state that vanished (apply recreates them)

@@ -4,10 +4,13 @@ Two phases, tested separately: ``plan_files()`` is pure — (targets, current fi
 file with ``+ new``, ``~ updated``, ``= unchanged`` or ``! skipped`` and the exact bytes to write; ``write()``
 writes them, runs the checker and rolls back when the write introduced a FAIL. Dry run is the default.
 
-Ownership (ADR-0013): a *managed* file is sherpa's as a whole — a hash mismatch means a hand edit and the file is
-skipped. A *blocks* file is seeded once; afterwards only the marked blocks are sherpa's, each with its own hash,
-and a hand-edited block is skipped on its own. ``.claude/settings.json`` gets sherpa's hook entries merged in;
-everything else in it stays. A file that exists without a state record is never touched (``sherpa adopt``).
+Ownership (ADR-0013) under one rule (ADR-0016): **sherpa never overwrites what exists in the user's repo — it
+only adds**, and rewrites nothing but bytes it wrote itself and that nobody changed since (hash in the state).
+A *managed* file is sherpa's as a whole — a hash mismatch means a hand edit and the file is skipped. A *blocks*
+file is seeded once; afterwards only the marked blocks are sherpa's, each with its own hash, and a hand-edited
+block is skipped on its own. ``.claude/settings.json`` gets sherpa's hook entries merged in; everything else in
+it stays. A file that exists without a state record is never touched (``sherpa adopt``), except that root and
+nested ``CLAUDE.md``/``AGENTS.md`` get sherpa's block appended.
 
 Determinism: same plan, model and files → same actions, same bytes; the second run is all ``=``.
 """
@@ -23,6 +26,7 @@ from sherpa.apply import state as state_mod
 from sherpa.apply.render import HOOK_COMMAND, Renderer, Target
 from sherpa.apply.state import BLOCKS, JSON_HOOKS, MANAGED, FileRecord, State
 from sherpa.check import Finding, block_contents, content_hash
+from sherpa.config import TARGETS
 from sherpa.model import Model
 from sherpa.plan import Plan
 
@@ -62,7 +66,14 @@ class StalePlan(ValueError):
 # ---------------------------------------------------------------- phase 1: pure
 
 
-def targets_for(plan: Plan, model: Model, version: str = __version__) -> list[Target]:
+def targets_for(
+    plan: Plan,
+    model: Model,
+    version: str = __version__,
+    *,
+    home: str = ".agents",
+    targets: tuple[str, ...] = TARGETS,
+) -> list[Target]:
     if plan.model.get("rev") != model.git.trunk.rev:
         raise StalePlan(
             f"harness-plan.yaml was made from {plan.model.get('rev', '?')[:10]}, the model is at "
@@ -70,7 +81,7 @@ def targets_for(plan: Plan, model: Model, version: str = __version__) -> list[Ta
         )
     if any(e.kind == "outcome" and e.decision == "reject" for e in plan.entries):
         raise ValueError("the outcome entry is rejected — a harness without a signal is not created (ADR-0008)")
-    return Renderer(plan, model, version).targets()
+    return Renderer(plan, model, version, home=home, targets=targets).targets()
 
 
 def plan_files(targets: list[Target], repo: Path, state: State) -> list[Action]:
@@ -112,7 +123,12 @@ def _plan_blocks(t: Target, current: str | None, rec: FileRecord | None) -> Acti
         have = block_contents(current)
     except ValueError as e:
         return Action(t, SKIPPED, f"markers broken: {e} (skipped)", None, current, None)
-    if rec is None and not have:
+    if rec is None:
+        # Never overwrite what exists (ADR-0016): without a state record every block in the file is somebody's.
+        if have:
+            return Action(
+                t, SKIPPED, "exists with sherpa markers but no state record — `sherpa adopt`", None, current, None
+            )
         if not t.append:
             return Action(
                 t, SKIPPED, "exists, not managed by sherpa — `sherpa adopt` takes it over", None, current, None
@@ -127,15 +143,18 @@ def _plan_blocks(t: Target, current: str | None, rec: FileRecord | None) -> Acti
             current,
             FileRecord(BLOCKS, entry=t.entry, blocks=hashes),
         )
-    updated, skipped, kept = [], [], dict(rec.blocks if rec else {})
+    updated, skipped, kept = [], [], dict(rec.blocks)
     replace: dict[str, str] = {}
     for name, inner in t.blocks.items():
         if name not in have:
             skipped.append(f"block {name} removed by hand")
             kept.pop(name, None)
             continue
-        known = rec.blocks.get(name) if rec else None
-        if known is not None and content_hash(have[name]) != known:
+        known = rec.blocks.get(name)
+        if known is None:
+            skipped.append(f"block {name} not written by sherpa")  # same name, somebody else's block: add-only
+            continue
+        if content_hash(have[name]) != known:
             skipped.append(f"block {name} hand-edited")
             continue
         kept[name] = hashes[name]
@@ -223,7 +242,16 @@ def _has_sherpa_hook(group: dict) -> bool:
 # ---------------------------------------------------------------- phase 2: write, check, roll back
 
 
-def write(actions: list[Action], repo: Path, previous: State, plan: Plan, *, check: bool = True) -> Result:
+def write(
+    actions: list[Action],
+    repo: Path,
+    previous: State,
+    plan: Plan,
+    *,
+    check: bool = True,
+    home: str = "",
+    targets: tuple[str, ...] = (),
+) -> Result:
     from sherpa.check import FAIL
     from sherpa.check import check as run_check
 
@@ -256,12 +284,20 @@ def write(actions: list[Action], repo: Path, previous: State, plan: Plan, *, che
         if a.record is not None:
             files[a.path] = a.record
     rev = state_mod.harness_rev(files)
-    changed = written or rev != previous.harness_rev or files != previous.files
+    home, targets = home or previous.home, targets or previous.targets
+    changed = (
+        written
+        or rev != previous.harness_rev
+        or files != previous.files
+        or (home, targets) != (previous.home, previous.targets)
+    )
     result.state = State(
         harness_rev=rev,
         plan={k: str(v) for k, v in plan.model.items() if k in ("trunk", "rev", "as_of")},
         applied_at=state_mod.now_iso() if changed else previous.applied_at,
         files=files,
+        home=home,
+        targets=tuple(targets),
     )
     if changed:
         result.state.write(repo / state_mod.STATE_PATH)
@@ -273,7 +309,7 @@ def write(actions: list[Action], repo: Path, previous: State, plan: Plan, *, che
 
 def render_actions(actions: list[Action], plan: Plan) -> str:
     n = len(plan.entries)
-    sel = sum(a.target.entry is not None for a in actions)
+    sel = len({a.target.entry for a in actions if a.target.entry})
     head = f"plan {plan.model.get('trunk', '?')}@{plan.model.get('rev', '?')[:10]}"
     lines = [f"sherpa apply — {head}: {n} entries, {sel} selected → {len(actions)} files"]
     w_path = min(max((len(a.path) for a in actions), default=10), 56)

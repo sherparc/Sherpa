@@ -1,12 +1,21 @@
-sherpa apply — plan origin/main@REV: 10 entries, 5 selected → 10 files
+targets: claude, agents-md · home: .agents
+sherpa apply — plan origin/main@REV: 10 entries, 5 selected → 18 files
+  + .agents/docs/modules/core.md                          owner-doc core                new
+  + .agents/docs/modules/pay.md                           owner-doc pay                 new
+  + .agents/docs/modules/suite.md                         test-infra suite              new
+  + .agents/scripts/sherpa-check.py                       harness                       new
+  + .agents/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .claude/agents/pay.md                                 agent pay                     new
-  + .claude/docs/modules/core.md                          owner-doc core                new
-  + .claude/docs/modules/pay.md                           owner-doc pay                 new
-  + .claude/docs/modules/suite.md                         test-infra suite              new
   + .claude/hooks/sherpa-outcome.py                       harness                       new
-  + .claude/scripts/sherpa-check.py                       harness                       new
   + .claude/settings.json                                 harness                       new
   + .claude/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .sherpa/telemetry/.gitignore                          harness                       new
+  + AGENTS.md                                             harness                       new
   + CLAUDE.md                                             harness                       new
-10 to add, 0 to change, 0 unchanged, 0 skipped.
+  + svc/core/AGENTS.md                                    owner-doc core                new
+  + svc/core/CLAUDE.md                                    owner-doc core                new
+  + svc/pay/AGENTS.md                                     owner-doc pay                 new
+  + svc/pay/CLAUDE.md                                     owner-doc pay                 new
+  + tests/suite/AGENTS.md                                 test-infra suite              new
+  + tests/suite/CLAUDE.md                                 test-infra suite              new
+18 to add, 0 to change, 0 unchanged, 0 skipped.

@@ -8,7 +8,7 @@ seconds, no LLM — and it runs without sherpa installed, because `apply` deploy
 
 ```
 sherpa check [REPO] [--json]
-python3 .claude/scripts/sherpa-check.py [REPO] [--json]      # the deployed copy
+python3 .agents/scripts/sherpa-check.py [REPO] [--json]      # the deployed copy (<home>/scripts/)
 ```
 
 ## Rules
@@ -16,9 +16,9 @@ python3 .claude/scripts/sherpa-check.py [REPO] [--json]      # the deployed copy
 | Rule | Level | Checks | Typical message |
 |---|---|---|---|
 | C1 | FAIL | every `.claude/agents/*.md` has front matter with `name` and `description` — Claude Code ignores an agent without them | `front matter has no description` |
-| C2 | FAIL | every `.claude/skills/*/SKILL.md` has front matter with `name` and `description` | `no front matter (name, description required)` |
+| C2 | FAIL | every `SKILL.md` under `.claude/skills/` or `.agents/skills/` has front matter with `name` and `description` | `no front matter (name, description required)` |
 | C3 | FAIL | every path under `knowledge.always` and `knowledge.on_demand` in an agent's front matter exists, relative to `.claude/` | `knowledge path docs/modules/pay.md does not exist` |
-| C4 | FAIL | relative **file** links (`[x](../docs/modules/pay.md)`) in `.claude/**/*.md` and `CLAUDE.md` resolve. Skipped: URLs, `mailto:`, anchors, absolute paths, targets without a file extension (wiki pages), and anything under `archive/` (history may tell the old state) | `link target ../nope.md does not exist` |
+| C4 | FAIL | relative **file** links (`[x](../docs/modules/pay.md)`) in `.claude/**`, `.agents/**` and every `CLAUDE.md`/`AGENTS.md` (root and nested) resolve. Skipped: URLs, `mailto:`, anchors, absolute paths, targets without a file extension (wiki pages), and anything under `archive/` (history may tell the old state) | `link target ../nope.md does not exist` |
 | C5 | FAIL | `sherpa:begin <name>` / `sherpa:end <name>` markers are balanced, correctly nested (none) and unique per file | `managed block markers: line 12: end facts without matching begin` |
 | C6 | FAIL | `.claude/settings.json` parses as JSON; every hook command that references `$CLAUDE_PROJECT_DIR/<path>` points to an existing file | `Stop hook references missing file .claude/hooks/sherpa-outcome.py` |
 | C7 | WARN | size budgets: agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate (facts belong in the owner doc) | `162 lines > budget 150 (agent)` |
@@ -45,7 +45,7 @@ sherpa check /path/shop: 2 FAIL, 1 WARN
 
 ## The deployed copy
 
-`sherpa apply` writes `src/sherpa/check.py` — one stdlib-only file — as `.claude/scripts/sherpa-check.py` with
+`sherpa apply` writes `src/sherpa/check.py` — one stdlib-only file — as `<home>/scripts/sherpa-check.py` with
 the sherpa version stamped in, and records it as a managed file. Run directly, it:
 
 1. tries `import sherpa.check` and, when an installed sherpa is found, delegates to it — installed rules are never
@@ -66,7 +66,7 @@ There is exactly one implementation of the rules (ADR-0013).
 ## Use in CI
 
 ```yaml
-- run: python3 .claude/scripts/sherpa-check.py      # no sherpa install needed
+- run: python3 .agents/scripts/sherpa-check.py      # no sherpa install needed (.claude/scripts/ when home is .claude)
 ```
 
 or, with sherpa installed, `sherpa check`. Pair it with `sherpa status` when you also want drift in the log.
