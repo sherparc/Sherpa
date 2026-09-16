@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sherpa.local/schemas/codebase-model.schema.json",
   "title": "codebase-model",
-  "description": "Ausgabe von `sherpa scan`. Schicht T0 (git) und T1 (modules, conventions) sind immer vorhanden; T2 (Sprach-Adapter) kommt in einer späteren Schema-Version.",
+  "description": "Output of `sherpa scan`. Layer T0 (git), T1 (modules, conventions) and generators are always present; T2 (language adapters) arrives in a later schema version.",
   "type": "object",
   "required": [
     "sherpa",
@@ -11,29 +11,30 @@
     "origin",
     "git",
     "modules",
+    "generators",
     "conventions"
   ],
   "additionalProperties": false,
   "properties": {
     "sherpa": {
       "type": "string",
-      "description": "Sherpa-Version, die das Modell erzeugt hat."
+      "description": "Sherpa version that produced the model."
     },
     "schema_version": {
       "type": "integer",
-      "const": 2
+      "const": 3
     },
     "repo": {
       "type": "string",
-      "description": "Basename des Repo-Verzeichnisses."
+      "description": "Basename of the repo directory."
     },
     "origin": {
       "type": "string",
-      "description": "URL des Remotes origin."
+      "description": "URL of the remote origin."
     },
     "git": {
       "type": "object",
-      "description": "Schicht T0: alles aus Git, gemessen gegen origin/<trunk> (ADR-0003).",
+      "description": "Layer T0: everything from git, measured against origin/<trunk> (ADR-0003).",
       "required": [
         "trunk",
         "windows",
@@ -60,7 +61,7 @@
           "properties": {
             "ref": {
               "type": "string",
-              "description": "z. B. origin/main"
+              "description": "e.g. origin/main"
             },
             "source": {
               "type": "string",
@@ -69,7 +70,7 @@
                 "origin/HEAD",
                 "candidate"
               ],
-              "description": "Wie der Trunk bestimmt wurde (ADR-0003)."
+              "description": "How the trunk was determined (ADR-0003)."
             },
             "rev": {
               "type": "string",
@@ -85,7 +86,7 @@
             "since_30d"
           ],
           "additionalProperties": false,
-          "description": "Zeitfenster. as_of = Committer-Datum von trunk.rev (Default) oder --as-of; damit ist der Scan bei gleichem Rev reproduzierbar.",
+          "description": "Time windows. as_of = committer date of trunk.rev (default) or --as-of; this makes the scan reproducible for the same rev.",
           "properties": {
             "as_of": {
               "type": "string",
@@ -104,12 +105,12 @@
         "commits_total": {
           "type": "integer",
           "minimum": 0,
-          "description": "Alle Commits auf dem Trunk, inkl. Merges."
+          "description": "All commits on the trunk, merges included."
         },
         "commits_90d": {
           "type": "integer",
           "minimum": 0,
-          "description": "Nicht-Merge-Commits mit since_90d < Committer-Datum <= as_of."
+          "description": "Non-merge commits with since_90d < committer date <= as_of."
         },
         "commits_30d": {
           "type": "integer",
@@ -118,21 +119,21 @@
         "authors_90d": {
           "type": "integer",
           "minimum": 0,
-          "description": "Verschiedene Autorennamen im 90d-Fenster."
+          "description": "Distinct author names in the 90d window."
         },
         "first_commit": {
           "type": "string",
           "format": "date-time",
-          "description": "Committer-Datum des Wurzel-Commits."
+          "description": "Committer date of the root commit."
         },
         "last_commit": {
           "type": "string",
           "format": "date-time",
-          "description": "Committer-Datum von trunk.rev."
+          "description": "Committer date of trunk.rev."
         },
         "files": {
           "type": "array",
-          "description": "Jede Datei im Baum von trunk.rev (git ls-tree), sortiert nach path.",
+          "description": "Every file in the tree of trunk.rev (git ls-tree), sorted by path.",
           "items": {
             "type": "object",
             "required": [
@@ -155,11 +156,11 @@
                   "null"
                 ],
                 "minimum": 0,
-                "description": "Zeilen; null = binär (NUL-Byte im Blob)."
+                "description": "Lines; null = binary (NUL byte in the blob)."
               },
               "generated": {
                 "type": "boolean",
-                "description": "Pfad matcht einen Generated-Glob (Defaults in sherpa.config.GENERATED_DEFAULT, Ergänzung via sherpa.toml [scan].generated). Bleibt in files/dirs, ist nie Hotspot."
+                "description": "Path matches a generated glob (defaults in sherpa.config.GENERATED_DEFAULT, extended via sherpa.toml [scan].generated). Stays in files/dirs, is never a hotspot."
               },
               "commits_90d": {
                 "type": "integer",
@@ -178,22 +179,24 @@
                   "string",
                   "null"
                 ],
-                "description": "Committer-Datum des jüngsten Commits im 90d-Fenster; null wenn keiner."
+                "description": "Committer date of the latest commit in the 90d window; null if none."
               }
             }
           }
         },
         "dirs": {
           "type": "array",
-          "description": "Aggregate je Verzeichnis der Tiefe 1 und 2 (\"\" = Wurzel), sortiert nach path. commits_* zählt Commits, die mindestens eine Datei darunter berühren.",
+          "description": "Aggregates per directory of depth 1 and 2 (\"\" = root), sorted by path. commits_* counts commits touching at least one file below it.",
           "items": {
             "type": "object",
             "required": [
               "path",
               "files",
               "loc",
+              "generated_files",
               "commits_90d",
-              "commits_30d"
+              "commits_30d",
+              "authors_90d"
             ],
             "additionalProperties": false,
             "properties": {
@@ -207,7 +210,12 @@
               "loc": {
                 "type": "integer",
                 "minimum": 0,
-                "description": "Summe der Text-LOC darunter."
+                "description": "Sum of text LOC below it."
+              },
+              "generated_files": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Generator outputs below it (families in sherpa.scan.generators, sherpa.toml globs included); lockfiles and noise do not count."
               },
               "commits_90d": {
                 "type": "integer",
@@ -216,13 +224,18 @@
               "commits_30d": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "authors_90d": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Distinct authors of the commits in the 90d window touching a file below it."
               }
             }
           }
         },
         "hotspots": {
           "type": "array",
-          "description": "Top-N Textdateien nach score = commits_90d * loc, absteigend, Gleichstand nach path. Nur Dateien mit commits_90d >= 1 und generated = false.",
+          "description": "Top N text files by score = commits_90d * loc, descending, ties by path. Only files with commits_90d >= 1 and generated = false.",
           "items": {
             "type": "object",
             "required": [
@@ -255,7 +268,7 @@
     },
     "modules": {
       "type": "array",
-      "description": "Schicht T1: ein Modul je Manifest (csproj/fsproj/vbproj, pyproject.toml, setup.py, package.json, go.mod, Cargo.toml mit [package], pom.xml, build.gradle). Sortiert nach path, id. Manifeste unter node_modules/, vendor/, target/, bin/, obj/, dist/, build/ zählen nicht.",
+      "description": "Layer T1: one module per manifest (csproj/fsproj/vbproj, pyproject.toml, setup.py, package.json, go.mod, Cargo.toml with [package], pom.xml, build.gradle). Sorted by path, id. Manifests under node_modules/, vendor/, target/, bin/, obj/, dist/, build/ do not count.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -268,6 +281,7 @@
           "files",
           "loc",
           "test_files",
+          "generated_files",
           "deps",
           "dependents",
           "tested_by",
@@ -279,11 +293,11 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "Modulname aus dem Manifest (csproj-Stamm, project.name, package name, go module, crate name, artifactId)."
+            "description": "Module name from the manifest (csproj stem, project.name, package name, go module, crate name, artifactId)."
           },
           "path": {
             "type": "string",
-            "description": "Verzeichnis des Manifests; \"\" = Repo-Wurzel. Dateien gehören zum tiefsten Modul, dessen Verzeichnis sie enthält."
+            "description": "Directory of the manifest; \"\" = repo root. Files belong to the deepest module whose directory contains them."
           },
           "kind": {
             "type": "string",
@@ -301,7 +315,7 @@
           },
           "is_test": {
             "type": "boolean",
-            "description": "Eigenständiges Test-Modul (dotnet: IsTestProject, Test-Framework-Paket oder Name *Tests/*Test)."
+            "description": "A test module (dotnet: IsTestProject, test framework package or name *Tests/*Test; every language: a test directory in the module path)."
           },
           "files": {
             "type": "integer",
@@ -310,38 +324,43 @@
           "loc": {
             "type": "integer",
             "minimum": 0,
-            "description": "Summe Text-LOC der zugeordneten Dateien."
+            "description": "Sum of text LOC of the assigned files."
           },
           "test_files": {
             "type": "integer",
             "minimum": 0,
-            "description": "Zugeordnete Dateien unter tests/, test/, __tests__/, spec/ oder mit Test-Namensmuster (test_*.py, *_test.go, *.test.ts, *Test.java, *Tests.cs, …)."
+            "description": "Assigned files under tests/, test/, __tests__/, spec/ or with a test name pattern (test_*.py, *_test.go, *.test.ts, *Test.java, *Tests.cs, …)."
+          },
+          "generated_files": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Generator outputs in the module. Share of files >= plan.generated_share → no agent/librarian, a skill for the generator instead (ADR-0011)."
           },
           "deps": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Abhängigkeiten auf andere Module DIESES Repos (ProjectReference, path-deps, Namens-Treffer bei python/node/go/java). Externe Pakete fehlen absichtlich."
+            "description": "Dependencies on other modules of THIS repo (ProjectReference, path deps, name matches for python/node/go/java). External packages are deliberately absent."
           },
           "dependents": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Umkehrung von deps."
+            "description": "Inverse of deps."
           },
           "tested_by": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Test-Module (is_test), die dieses Modul in deps haben."
+            "description": "Test modules (is_test) that have this module in deps."
           },
           "commits_90d": {
             "type": "integer",
             "minimum": 0,
-            "description": "Nicht-Merge-Commits im 90d-Fenster, die mindestens eine Datei des Moduls berühren; je Commit einmal."
+            "description": "Non-merge commits in the 90d window touching at least one file of the module; once per commit."
           },
           "commits_30d": {
             "type": "integer",
@@ -356,7 +375,77 @@
             "items": {
               "type": "string"
             },
-            "description": "Bis zu 3 Pfade im Modul nach commits_90d×loc, nicht generiert, absteigend."
+            "description": "Up to 3 paths in the module by commits_90d×loc, not generated, descending."
+          }
+        }
+      }
+    },
+    "generators": {
+      "type": "array",
+      "description": "Detected generators: one entry per (family, owning module), sorted by family, module. Families and detection patterns: sherpa.scan.generators.FAMILIES; principle ADR-0011.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "family",
+          "title",
+          "module",
+          "home",
+          "generated_files",
+          "generated_loc",
+          "sources",
+          "configs",
+          "command",
+          "skill"
+        ],
+        "properties": {
+          "family": {
+            "type": "string",
+            "description": "Family id (ef-migrations, protobuf, …) or \"custom\" for sherpa.toml [scan].generated."
+          },
+          "title": {
+            "type": "string"
+          },
+          "module": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Module id owning the generated files; null = no module responsible."
+          },
+          "home": {
+            "type": "string",
+            "description": "Common directory of the outputs (without outputs: of the config); \"\" = root. The central place for a skill."
+          },
+          "generated_files": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "generated_loc": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Up to 5 source paths of the family (closest to home first)."
+          },
+          "configs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Up to 5 configuration files of the tool."
+          },
+          "command": {
+            "type": "string",
+            "description": "Regeneration command or hint."
+          },
+          "skill": {
+            "type": "boolean",
+            "description": "false = tool-managed (lockfiles), no skill proposal."
           }
         }
       }
@@ -369,7 +458,7 @@
         "ci",
         "containers"
       ],
-      "description": "Aus dem Dateibaum erkannte Konventionen.",
+      "description": "Conventions detected from the file tree.",
       "properties": {
         "languages": {
           "type": "object",
@@ -377,14 +466,14 @@
             "type": "integer",
             "minimum": 0
           },
-          "description": "Sprache (nach Dateiendung) → Summe LOC, absteigend sortiert."
+          "description": "Language (by file suffix) → sum of LOC, sorted descending."
         },
         "ci": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "CI-Definitionen (.github/workflows/*, .gitlab-ci.yml, azure-pipelines*.yml, Jenkinsfile, .circleci/config.yml, …)."
+          "description": "CI definitions (.github/workflows/*, .gitlab-ci.yml, azure-pipelines*.yml, Jenkinsfile, .circleci/config.yml, …)."
         },
         "containers": {
           "type": "array",

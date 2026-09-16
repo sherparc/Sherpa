@@ -1,7 +1,7 @@
-"""Git-Fakten eines Repos — deterministisch, ohne Netz (ausser fetch_origin).
+"""Git facts of a repository — deterministic, offline (except fetch_origin).
 
-Grundsatz (Trunk-Disziplin, ADR-0003): gemessen wird immer gegen ``origin/<trunk>``,
-nie gegen den lokalen ``HEAD`` — der steht oft auf einem Task-Branch.
+Principle (trunk discipline, ADR-0003): everything is measured against ``origin/<trunk>``,
+never against the local ``HEAD`` — that one is usually on a task branch.
 """
 
 from __future__ import annotations
@@ -11,19 +11,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REMOTE = "origin"
-# Reihenfolge = Priorität, wenn origin/HEAD nicht gesetzt ist.
+# Order = priority when origin/HEAD is not set.
 TRUNK_CANDIDATES = ("main", "master", "dev", "develop", "trunk")
 
 
 class GitError(RuntimeError):
-    """Kein Git-Repo, kein origin oder kein erkennbarer Trunk."""
+    """No git repo, no origin, or no recognisable trunk."""
 
 
 @dataclass(frozen=True)
 class Trunk:
-    ref: str  # z. B. "origin/main"
+    ref: str  # e.g. "origin/main"
     source: str  # "override" | "origin/HEAD" | "candidate"
-    rev: str  # voller SHA
+    rev: str  # full SHA
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -64,27 +64,27 @@ def origin_url(repo: Path) -> str:
 
 
 def fetch_origin(repo: Path) -> None:
-    """Einziger Netzzugriff. Wird von ``scan`` vor resolve_trunk aufgerufen (``--no-fetch`` überspringt)."""
+    """The only network access. Called by ``scan`` before resolve_trunk (``--no-fetch`` skips it)."""
     _git(repo, "fetch", "--quiet", REMOTE)
 
 
 def resolve_trunk(repo: Path, override: str | None = None) -> Trunk:
-    """Trunk bestimmen, immer als ``origin/<branch>``.
+    """Determine the trunk, always as ``origin/<branch>``.
 
-    Reihenfolge:
-      1. ``override`` aus sherpa.yaml (``trunk: dev`` oder ``trunk: origin/dev``)
-      2. ``refs/remotes/origin/HEAD`` (wird von ``git clone`` gesetzt, sonst ``git remote set-head origin -a``)
-      3. erster existierender Kandidat aus TRUNK_CANDIDATES
+    Order:
+      1. ``override`` from sherpa.toml (``trunk = "dev"`` or ``trunk = "origin/dev"``)
+      2. ``refs/remotes/origin/HEAD`` (set by ``git clone``, otherwise ``git remote set-head origin -a``)
+      3. first existing candidate from TRUNK_CANDIDATES
     """
     if not is_repo(repo):
-        raise GitError(f"{repo} ist kein Git-Repo")
+        raise GitError(f"{repo} is not a git repository")
     if not has_remote(repo):
-        raise GitError(f"{repo} hat kein Remote '{REMOTE}' — Sherpa scannt nur gegen origin")
+        raise GitError(f"{repo} has no remote '{REMOTE}' — sherpa only scans against origin")
 
     if override:
         ref = override if override.startswith(f"{REMOTE}/") else f"{REMOTE}/{override}"
         if not ref_exists(repo, ref):
-            raise GitError(f"Trunk-Override '{override}' existiert nicht als {ref}")
+            raise GitError(f"trunk override '{override}' does not exist as {ref}")
         return Trunk(ref, "override", rev(repo, ref))
 
     try:
@@ -101,6 +101,6 @@ def resolve_trunk(repo: Path, override: str | None = None) -> Trunk:
             return Trunk(ref, "candidate", rev(repo, ref))
 
     raise GitError(
-        f"kein Trunk gefunden: origin/HEAD nicht gesetzt und keiner von {TRUNK_CANDIDATES} auf {REMOTE}. "
-        f"Abhilfe: 'git remote set-head {REMOTE} -a' oder 'trunk:' in sherpa.yaml"
+        f"no trunk found: origin/HEAD is not set and none of {TRUNK_CANDIDATES} exists on {REMOTE}. "
+        f"Fix: 'git remote set-head {REMOTE} -a' or 'trunk' in sherpa.toml"
     )

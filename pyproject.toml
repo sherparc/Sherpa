@@ -3,13 +3,13 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sherpa-harness"  # PyPI-Name "sherpa" ist vergeben; Import-Paket und CLI bleiben "sherpa" (ADR-0009)
-version = "0.2.0"
+name = "sherpa-harness"  # the PyPI name "sherpa" is taken; import package and CLI stay "sherpa" (ADR-0009)
+version = "0.3.0"
 description = "Generischer Harness-Generator: Codebase ingestieren, Owner/Agents/Skills planen, nach Freigabe anlegen."
-license = "LicenseRef-Proprietary"  # ADR-0010: proprietär bis zum öffentlichen Release
+license = "LicenseRef-Proprietary"  # ADR-0010: proprietary until the public release
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["pyyaml>=6"]  # the only runtime dependency (ADR-0005)
 
 [project.scripts]
 sherpa = "sherpa.cli:main"
@@ -34,4 +34,4 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["E501"]   # Fixture-Literale (Manifest-Inhalte) sind absichtlich lang
+"tests/*" = ["E501"]   # fixture literals (manifest contents) are deliberately long

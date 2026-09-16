@@ -1,16 +1,18 @@
-"""Schicht T1: Module aus Manifest-Dateien — sprachunabhängig, deterministisch, ohne Sprach-Parser.
+"""Layer T1: modules from manifest files — language-agnostic, deterministic, no language parsers.
 
-Entscheidungen (Owner dieses Moduls):
-- Ein Modul = ein Manifest (``*.csproj``, ``pyproject.toml``, ``package.json``, ``go.mod``, ``Cargo.toml``,
-  ``pom.xml``, …). Manifest-Inhalte kommen aus dem Trunk-Rev (``git cat-file``), nie aus dem Working Tree.
-- Manifeste unter Werkzeug-Verzeichnissen (``node_modules/``, ``vendor/``, ``target/``, ``bin/``, ``obj/``, …)
-  sind keine Module.
-- Jede Datei gehört zum **tiefsten** Modul, dessen Verzeichnis sie enthält. Ein Wurzel-Manifest (Pfad ``""``)
-  fängt alles, was kein anderes Modul beansprucht.
-- ``deps`` enthält nur Abhängigkeiten **innerhalb des Repos** (aufgelöst über Manifest-Pfad oder Modulname);
-  externe Pakete sind für Owner-Grenzen irrelevant. ``dependents`` ist die Umkehrung.
-- Churn je Modul: ein Commit zählt je Modul einmal, wenn er mindestens eine Datei darin berührt.
-- Test-Erkennung: .NET über eigenes Test-Projekt (``tested_by``), sonst über Testdateien im Modul (``test_files``).
+Decisions (owned by this module):
+- One module = one manifest (``*.csproj``, ``pyproject.toml``, ``package.json``, ``go.mod``, ``Cargo.toml``,
+  ``pom.xml``, …). Manifest contents come from the trunk rev (``git cat-file``), never from the working tree.
+- Manifests under tool directories (``node_modules/``, ``vendor/``, ``target/``, ``bin/``, ``obj/``, …) are not
+  modules.
+- Every file belongs to the **deepest** module whose directory contains it. A root manifest (path ``""``) catches
+  everything no other module claims.
+- ``deps`` holds only dependencies **within the repo** (resolved via manifest path or module name); external
+  packages are irrelevant for owner boundaries. ``dependents`` is the inverse.
+- Churn per module: a commit counts once per module if it touches at least one file in it.
+- Test detection: .NET via project property/test package/name; every language via a test directory in the module
+  path (``tests/suite``); inside a module via test files (``test_files``). Test modules provide ``tested_by`` for
+  their dependencies.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ import re
 import tomllib
 import xml.etree.ElementTree as ET
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fnmatch import fnmatchcase
 from pathlib import Path
 
@@ -45,7 +47,7 @@ SKIP_DIRS = (
     "Release",
 )
 
-# Manifest-Dateiname → Art. Reihenfolge egal, Erkennung über Dateiname bzw. Endung.
+# Manifest file name → kind. Order is irrelevant; detection by file name or suffix.
 MANIFEST_KINDS: dict[str, str] = {
     "pyproject.toml": "python",
     "setup.py": "python",
@@ -127,15 +129,15 @@ _EXT_LANG = {
 @dataclass(frozen=True)
 class RawModule:
     id: str
-    path: str  # Verzeichnis, "" = Wurzel
+    path: str  # directory, "" = root
     kind: str
     manifest: str
-    deps_by_manifest: tuple[str, ...]  # referenzierte Manifest-Pfade (dotnet, rust path-deps)
-    deps_by_name: tuple[str, ...]  # referenzierte Modulnamen (python, node, go, java)
+    deps_by_manifest: tuple[str, ...]  # referenced manifest paths (dotnet, rust path deps)
+    deps_by_name: tuple[str, ...]  # referenced module names (python, node, go, java)
     is_test: bool
 
 
-# --------------------------------------------------------------------------- Manifest-Erkennung
+# --------------------------------------------------------------------------- manifest detection
 
 
 def manifest_kind(path: str) -> str | None:
@@ -221,7 +223,7 @@ def parse_go(path: str, content: bytes) -> RawModule:
     text = content.decode("utf-8", errors="replace")
     m = re.search(r"^module\s+(\S+)", text, re.M)
     name = m.group(1) if m else (posixpath.basename(d) if d else "root")
-    deps = set(re.findall(r"^\s*([\w.\-/]+\.[\w.\-/]+)\s+v[\w.\-+]+", text, re.M))  # require-Zeilen
+    deps = set(re.findall(r"^\s*([\w.\-/]+\.[\w.\-/]+)\s+v[\w.\-+]+", text, re.M))  # require lines
     deps.update(re.findall(r"^\s*replace\s+([\w.\-/]+)\s*=>", text, re.M))
     return RawModule(name, d, "go", path, (), tuple(sorted(deps)), False)
 
@@ -234,7 +236,7 @@ def parse_rust(path: str, content: bytes) -> RawModule | None:
         data = {}
     pkg = data.get("package")
     if not pkg:
-        return None  # reiner [workspace]-Root ist kein Modul
+        return None  # a pure [workspace] root is not a module
     by_manifest, by_name = [], []
     for key in ("dependencies", "dev-dependencies", "build-dependencies"):
         for dep_name, spec in (data.get(key) or {}).items():
@@ -299,18 +301,20 @@ def find_modules(paths: list[str], contents: dict[str, bytes | None]) -> list[Ra
         m = PARSERS[kind](p, contents[p] or b"")
         if m is not None:
             mods.append(m)
-    # Ein Verzeichnis, mehrere Manifeste (pyproject + package.json): erstes nach Pfad gewinnt.
+    # One directory, several manifests (pyproject + package.json): the first by path wins.
     seen: set[str] = set()
     out = []
     for m in sorted(mods, key=lambda m: (m.path, m.manifest)):
         if m.path in seen:
             continue
         seen.add(m.path)
+        if not m.is_test and any(part in TEST_DIR_NAMES for part in m.path.split("/")):
+            m = replace(m, is_test=True)  # a module under tests/ is a test module, in every language
         out.append(m)
     return out
 
 
-# --------------------------------------------------------------------------- Auflösung + Aggregation
+# --------------------------------------------------------------------------- resolution + aggregation
 
 
 def is_test_file(path: str) -> bool:
@@ -321,7 +325,7 @@ def is_test_file(path: str) -> bool:
 
 
 def assign_files(paths: list[str], modules: list[RawModule]) -> dict[str, str | None]:
-    """Datei → Modul-id (tiefstes Modul); None, wenn kein Modul zuständig."""
+    """File → module id (deepest module); None if no module is responsible."""
     by_depth = sorted(modules, key=lambda m: -len(m.path))
     out: dict[str, str | None] = {}
     for p in paths:
@@ -345,7 +349,7 @@ def resolve_deps(modules: list[RawModule]) -> dict[str, list[str]]:
         deps: set[str] = set()
         for ref in m.deps_by_manifest:
             hit = by_manifest.get(ref) or by_manifest_ci.get(ref.lower())
-            if hit is None:  # Fallback: Projektname = Dateistamm
+            if hit is None:  # fallback: project name = file stem
                 hit = by_name.get(posixpath.splitext(posixpath.basename(ref))[0])
             if hit and hit != m.id:
                 deps.add(hit)
@@ -358,13 +362,32 @@ def resolve_deps(modules: list[RawModule]) -> dict[str, list[str]]:
 
 
 def build_modules(
-    data: T0Data, files: list[FileStat], contents: dict[str, bytes | None], *, hotspots_per_module: int = 3
+    data: T0Data,
+    files: list[FileStat],
+    contents: dict[str, bytes | None],
+    *,
+    hotspots_per_module: int = 3,
+    outputs: frozenset[str] = frozenset(),
 ) -> list[ModuleStat]:
     paths = list(data.paths)
     raw = find_modules(paths, contents)
+    return build_modules_from(
+        data, files, raw, assign_files(paths, raw), hotspots_per_module=hotspots_per_module, outputs=outputs
+    )
+
+
+def build_modules_from(
+    data: T0Data,
+    files: list[FileStat],
+    raw: list[RawModule],
+    owner: dict[str, str | None],
+    *,
+    hotspots_per_module: int = 3,
+    outputs: frozenset[str] = frozenset(),
+) -> list[ModuleStat]:
+    """Like ``build_modules``, but with modules already detected and files assigned (shared with the generators)."""
     if not raw:
         return []
-    owner = assign_files(paths, raw)
     deps = resolve_deps(raw)
     dependents: dict[str, list[str]] = defaultdict(list)
     for mid, ds in deps.items():
@@ -380,6 +403,7 @@ def build_modules(
     nfiles: dict[str, int] = defaultdict(int)
     loc: dict[str, int] = defaultdict(int)
     tfiles: dict[str, int] = defaultdict(int)
+    gfiles: dict[str, int] = defaultdict(int)
     scored: dict[str, list[tuple[int, str]]] = defaultdict(list)
     for p, mid in owner.items():
         if mid is None:
@@ -389,6 +413,8 @@ def build_modules(
         loc[mid] += f.loc or 0
         if is_test_file(p):
             tfiles[mid] += 1
+        if p in outputs:
+            gfiles[mid] += 1
         if f.commits_90d >= 1 and f.loc is not None and not f.generated:
             scored[mid].append((-(f.commits_90d * f.loc), p))
 
@@ -413,6 +439,7 @@ def build_modules(
             files=nfiles[m.id],
             loc=loc[m.id],
             test_files=tfiles[m.id],
+            generated_files=gfiles[m.id],
             deps=deps[m.id],
             dependents=sorted(dependents[m.id]),
             tested_by=sorted(tested_by[m.id]),
@@ -426,7 +453,7 @@ def build_modules(
 
 
 def detect_conventions(paths: list[str], locs: dict[str, int | None]) -> tuple[dict[str, int], list[str], list[str]]:
-    """(Sprachen nach LOC, CI-Dateien, Container-Dateien) — alles aus dem Dateibaum."""
+    """(languages by LOC, CI files, container files) — all from the file tree."""
     langs: dict[str, int] = defaultdict(int)
     ci, containers = [], []
     for p in paths:

@@ -1,17 +1,17 @@
-"""T1 auf einem programmatischen Polyglott-Fixture: dotnet, python, node, go, rust, java in EINEM Repo.
+"""T1 on a programmatic polyglot fixture: dotnet, python, node, go, rust, java in ONE repo.
 
-Erwartete Modul-Landschaft (Pfad → id, Deps innerhalb des Repos):
+Expected module landscape (path → id, deps within the repo):
   src/Shop.Core/Shop.Core.csproj                 Shop.Core
   src/Shop.Pricing/Shop.Pricing.csproj           Shop.Pricing      → Shop.Core
   tests/Shop.Pricing.Tests/….csproj              Shop.Pricing.Tests → Shop.Pricing, Shop.Core (is_test)
   py/lib/pyproject.toml                          shop-lib
-  py/app/pyproject.toml                          shop-app          → shop-lib (PEP-503-Normalisierung "Shop_Lib")
+  py/app/pyproject.toml                          shop-app          → shop-lib (PEP 503 normalisation of "Shop_Lib")
   web/package.json                               @shop/web         → @shop/ui  (devDependency)
   web/ui/package.json                            @shop/ui
-  web/node_modules/left-pad/package.json         (ignoriert)
+  web/node_modules/left-pad/package.json         (ignored)
   go/svc/go.mod                                  example.com/shop/svc → example.com/shop/lib (require)
   go/lib/go.mod                                  example.com/shop/lib
-  rust/Cargo.toml                                [workspace] (kein Modul)
+  rust/Cargo.toml                                [workspace] (not a module)
   rust/core/Cargo.toml                           shop-core-rs
   rust/cli/Cargo.toml                            shop-cli          → shop-core-rs (path-dep)
   java/pom.xml                                   shop-parent
@@ -134,7 +134,7 @@ def poly_repo(tmp_path: Path) -> Path:
     return clone
 
 
-# ---------------------------------------------------------------- Erkennung
+# ---------------------------------------------------------------- detection
 
 
 @pytest.mark.parametrize(
@@ -243,12 +243,12 @@ def test_parse_rust_workspace_root_is_not_a_module():
 def test_parse_java():
     m = parse_java("java/api/pom.xml", FILES["java/api/pom.xml"].encode())
     assert m.id == "shop-api" and m.deps_by_name == ("junit", "shop-domain")
-    assert parse_java("java/pom.xml", FILES["java/pom.xml"].encode()).id == "shop-parent"  # Namespace-XML
+    assert parse_java("java/pom.xml", FILES["java/pom.xml"].encode()).id == "shop-parent"  # namespaced XML
     assert parse_java("g/build.gradle", b"").id == "g"
     assert parse_java("b/pom.xml", b"<bad").id == "b"
 
 
-# ---------------------------------------------------------------- Auflösung
+# ---------------------------------------------------------------- resolution
 
 
 def test_find_modules_one_per_dir_and_skips_tool_dirs():
@@ -259,7 +259,7 @@ def test_find_modules_one_per_dir_and_skips_tool_dirs():
     assert "left-pad" not in ids and "shop-parent" in ids
     assert len(mods) == 14
     two = {"x/pyproject.toml": b'[project]\nname="a"\n', "x/package.json": b'{"name":"b"}'}
-    assert [m.id for m in find_modules(sorted(two), two)] == ["b"]  # package.json < pyproject.toml alphabetisch
+    assert [m.id for m in find_modules(sorted(two), two)] == ["b"]  # package.json < pyproject.toml alphabetically
 
 
 def test_assign_files_deepest_module_wins_and_root_catches_rest():
@@ -294,7 +294,7 @@ def test_resolve_deps_manifest_fallback_by_stem():
     assert resolve_deps([a, b])["A"] == ["B"]
 
 
-# ---------------------------------------------------------------- Ende-zu-Ende
+# ---------------------------------------------------------------- end to end
 
 
 def test_build_modules_on_poly_repo(poly_repo: Path):
@@ -308,16 +308,16 @@ def test_build_modules_on_poly_repo(poly_repo: Path):
     assert pricing.deps == ["Shop.Core"] and pricing.dependents == ["Shop.Pricing.Tests"]
     assert pricing.tested_by == ["Shop.Pricing.Tests"]
     assert (pricing.commits_90d, pricing.commits_30d, pricing.authors_90d) == (3, 2, 2)
-    # Designer.cs ist generiert → kein Hotspot; csproj hat 1 Commit × 1 LOC → hinten
+    # Designer.cs is generated → no hotspot; csproj has 1 commit × 1 LOC → last
     assert pricing.hotspots == ["src/Shop.Pricing/PriceEngine.cs", "src/Shop.Pricing/Shop.Pricing.csproj"]
-    assert pricing.loc == 50 + 1 + 1  # LOC inkl. generierter Datei
+    assert pricing.loc == 50 + 1 + 1  # LOC including the generated file
 
     core = by["Shop.Core"]
     assert core.dependents == ["Shop.Pricing", "Shop.Pricing.Tests"] and core.tested_by == ["Shop.Pricing.Tests"]
     assert (core.commits_90d, core.commits_30d) == (2, 1)
 
     tests = by["Shop.Pricing.Tests"]
-    assert tests.is_test and tests.test_files == 2  # csproj + Tests.cs liegen unter tests/
+    assert tests.is_test and tests.test_files == 2  # csproj + Tests.cs live under tests/
 
     assert by["shop-app"].test_files == 1 and by["@shop/web"].test_files == 1
     assert by["example.com/shop/svc"].test_files == 1 and by["shop-api"].test_files == 1
@@ -329,7 +329,7 @@ def test_build_modules_on_poly_repo(poly_repo: Path):
 
 def test_files_outside_modules_are_not_counted(poly_repo: Path):
     m = scan(poly_repo, fetch=False)
-    assert sum(x.files for x in m.modules) < len(m.git.files)  # docs/, Dockerfile, .github/ gehören keinem Modul
+    assert sum(x.files for x in m.modules) < len(m.git.files)  # docs/, Dockerfile, .github/ belong to no module
 
 
 def test_no_manifests_gives_empty_modules(make_origin, make_clone):

@@ -1,12 +1,12 @@
-"""Schicht T0: Churn, Hotspots, Dateibaum — nur aus Git, nur gegen ``origin/<trunk>``.
+"""Layer T0: churn, hotspots, file tree — from git only, against ``origin/<trunk>`` only.
 
-Entscheidungen (Owner dieses Moduls):
-- Dateibaum und LOC kommen aus dem Trunk-Rev (``git ls-tree``/``cat-file``), nicht aus dem Working Tree.
-- Zeitfenster enden bei ``as_of`` = Committer-Datum des Trunk-Revs (Default). Gleicher Rev → gleiche Zahlen.
-- Fenster zählen Nicht-Merge-Commits (``--no-merges``); ``commits_total`` zählt alle.
-- Committer-Datum (``%cI``) überall, weil ``git --since`` ebenfalls danach filtert.
-- Hotspot-Score = commits_90d × loc (Tornhill, „Your Code as a Crime Scene": Churn × Komplexitäts-Proxy).
-- Generierte Dateien (Globs aus ``config``) tragen ``generated: true`` und sind nie Hotspot.
+Decisions (owned by this module):
+- File tree and LOC come from the trunk rev (``git ls-tree``/``cat-file``), not from the working tree.
+- Time windows end at ``as_of`` = committer date of the trunk rev (default). Same rev → same numbers.
+- Windows count non-merge commits (``--no-merges``); ``commits_total`` counts all.
+- Committer date (``%cI``) everywhere, because ``git --since`` filters by it as well.
+- Hotspot score = commits_90d × loc (Tornhill, "Your Code as a Crime Scene": churn × complexity proxy).
+- Generated files (globs from ``config``) carry ``generated: true`` and are never hotspots.
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ import subprocess
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from fnmatch import fnmatchcase
 from pathlib import Path
 
 from sherpa.gitinfo import GitError, Trunk
@@ -56,7 +55,7 @@ def list_files(repo: Path, ref: str) -> list[str]:
 
 
 def blob_contents(repo: Path, ref: str, paths: list[str]) -> dict[str, bytes | None]:
-    """Blob-Inhalte über EIN ``git cat-file --batch``. None = fehlt oder kein Blob (Submodule)."""
+    """Blob contents via ONE ``git cat-file --batch``. None = missing or not a blob (submodules)."""
     if not paths:
         return {}
     stdin = "".join(f"{ref}:{p}\n" for p in paths).encode("utf-8", errors="surrogateescape")
@@ -68,17 +67,17 @@ def blob_contents(repo: Path, ref: str, paths: list[str]) -> dict[str, bytes | N
         header = out[pos:nl].decode()
         pos = nl + 1
         parts = header.split()
-        if len(parts) < 3 or parts[1] != "blob":  # "missing" oder anderer Typ (Submodule = commit)
+        if len(parts) < 3 or parts[1] != "blob":  # "missing" or another type (submodule = commit)
             contents[p] = None
             continue
         size = int(parts[2])
         contents[p] = out[pos : pos + size]
-        pos += size + 1  # Inhalt + abschliessendes "\n"
+        pos += size + 1  # content + trailing "\n"
     return contents
 
 
 def loc_of(content: bytes | None) -> int | None:
-    """Zeilen; None = binär (NUL im Inhalt) oder kein Blob."""
+    """Lines; None = binary (NUL in content) or not a blob."""
     if content is None or b"\0" in content:
         return None
     return content.count(b"\n") + (1 if content and not content.endswith(b"\n") else 0)
@@ -102,7 +101,7 @@ def count_commits(repo: Path, ref: str) -> int:
 
 
 def log_since(repo: Path, ref: str, since: datetime) -> list[Commit]:
-    """Nicht-Merge-Commits seit ``since`` mit berührten Dateien. Ein Prozess, feste Trennzeichen."""
+    """Non-merge commits since ``since`` with touched files. One process, fixed separators."""
     out = _run(
         repo,
         "log",
@@ -129,20 +128,22 @@ def _dir_prefixes(path: str) -> list[str]:
 
 
 def is_generated(path: str, globs: tuple[str, ...]) -> bool:
-    name = path.rsplit("/", 1)[-1]
-    return any(fnmatchcase(path, g) or fnmatchcase(name, g) for g in globs)
+    """A glob without ``/`` applies to the file name, with ``/`` to the path — see ``generators.GlobSet``."""
+    from sherpa.scan.generators import matches
+
+    return matches(path, globs)
 
 
 @dataclass(frozen=True)
 class T0Data:
-    """Rohdaten eines Trunk-Revs — Grundlage für T0 (GitLayer) und T1 (Module)."""
+    """Raw data of a trunk rev — the basis for T0 (GitLayer) and T1 (modules)."""
 
     trunk: Trunk
     as_of: datetime
     since_90: datetime
     since_30: datetime
-    commits: tuple[Commit, ...]  # Nicht-Merge-Commits im 90d-Fenster, nur Dateien, die es noch gibt
-    paths: tuple[str, ...]  # sortierter Dateibaum
+    commits: tuple[Commit, ...]  # non-merge commits in the 90d window, only files that still exist
+    paths: tuple[str, ...]  # sorted file tree
     locs: dict[str, int | None]
 
 
@@ -165,7 +166,15 @@ def scan_git(
     return build_git_layer(repo, collect(repo, trunk, as_of=as_of), top=top, generated=generated)
 
 
-def build_git_layer(repo: Path, data: T0Data, *, top: int = 20, generated: tuple[str, ...] = ()) -> GitLayer:
+def build_git_layer(
+    repo: Path,
+    data: T0Data,
+    *,
+    top: int = 20,
+    generated: tuple[str, ...] = (),
+    outputs: frozenset[str] = frozenset(),
+) -> GitLayer:
+    """``generated``: globs for the hotspot exclusion; ``outputs``: generator outputs, counted per directory."""
     trunk, as_of, since_90, since_30 = data.trunk, data.as_of, data.since_90, data.since_30
     commits, paths, locs = data.commits, list(data.paths), data.locs
 
@@ -175,6 +184,7 @@ def build_git_layer(repo: Path, data: T0Data, *, top: int = 20, generated: tuple
     last: dict[str, datetime] = {}
     d90: dict[str, set[str]] = defaultdict(set)
     d30: dict[str, set[str]] = defaultdict(set)
+    dauth: dict[str, set[str]] = defaultdict(set)
     in30 = 0
     for c in commits:
         short = c.date > since_30
@@ -188,6 +198,7 @@ def build_git_layer(repo: Path, data: T0Data, *, top: int = 20, generated: tuple
                 c30[f] += 1
             for d in _dir_prefixes(f):
                 d90[d].add(c.sha)
+                dauth[d].add(c.author)
                 if short:
                     d30[d].add(c.sha)
 
@@ -206,11 +217,14 @@ def build_git_layer(repo: Path, data: T0Data, *, top: int = 20, generated: tuple
 
     dfiles: dict[str, int] = defaultdict(int)
     dloc: dict[str, int] = defaultdict(int)
+    dgen: dict[str, int] = defaultdict(int)
     for p in paths:
+        out = p in outputs
         for d in _dir_prefixes(p):
             dfiles[d] += 1
             dloc[d] += locs[p] or 0
-    dirs = [DirStat(d, dfiles[d], dloc[d], len(d90[d]), len(d30[d])) for d in sorted(dfiles)]
+            dgen[d] += out
+    dirs = [DirStat(d, dfiles[d], dloc[d], dgen[d], len(d90[d]), len(d30[d]), len(dauth[d])) for d in sorted(dfiles)]
 
     hot = [
         Hotspot(f.path, f.commits_90d, f.loc, f.commits_90d * f.loc)

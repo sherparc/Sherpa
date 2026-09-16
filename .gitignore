@@ -10,17 +10,17 @@ build/
 tests/corpus/
 .coverage
 
-# Test/Lint-Caches und Reports
+# test/lint caches and reports
 htmlcov/
 coverage.xml
 .mypy_cache/
 .ruff_cache/
-# lokale Claude-Code-Einstellungen (geteilte liegen in .claude/)
+# local Claude Code settings (shared ones live in .claude/)
 .claude/settings.local.json
-# Geheimnisse / Umgebung
+# secrets / environment
 .env
 .env.*
-# OS / Editoren
+# OS / editors
 .DS_Store
 Thumbs.db
 .vscode/

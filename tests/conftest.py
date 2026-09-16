@@ -1,4 +1,4 @@
-"""Fixture-Repos werden programmatisch gebaut — keine Binär-Fixtures, jeder Lauf identisch."""
+"""Fixture repos are built programmatically — no binary fixtures, every run identical."""
 
 from __future__ import annotations
 
@@ -15,14 +15,14 @@ ENV = {
     "GIT_COMMITTER_EMAIL": "t@t",
     "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
     "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z",
-    "HOME": "/nonexistent",  # keine User-gitconfig einlesen
+    "HOME": "/nonexistent",  # do not read the user gitconfig
     "GIT_CONFIG_GLOBAL": "/dev/null",
     "GIT_CONFIG_NOSYSTEM": "1",
 }
 
 
 def git(repo: Path, *args: str, date: str | None = None, author: str | None = None) -> str:
-    env = {**os.environ, **ENV}  # ergänzen, nicht ersetzen: Windows braucht PATH/SYSTEMROOT für git
+    env = {**os.environ, **ENV}  # extend, do not replace: Windows needs PATH/SYSTEMROOT for git
     if date:
         env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = date
     if author:
@@ -39,7 +39,7 @@ def commit(
     date: str | None = None,
     author: str | None = None,
 ) -> str:
-    """Commit mit festem Datum/Autor — Fixture-SHAs sind damit über Läufe hinweg identisch."""
+    """Commit with a fixed date/author — fixture SHAs are identical across runs."""
     for name, content in (files or {"f.txt": msg}).items():
         p = repo / name
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -54,7 +54,7 @@ def commit(
 
 @pytest.fixture
 def make_origin(tmp_path: Path):
-    """Bare-Origin mit Branches anlegen; gibt (origin_path, {branch: sha}) zurück."""
+    """Create a bare origin with branches; returns (origin_path, {branch: sha})."""
 
     def _make(branches: tuple[str, ...] = ("main",)) -> tuple[Path, dict[str, str]]:
         work = tmp_path / "seed"
@@ -64,7 +64,7 @@ def make_origin(tmp_path: Path):
         for b in branches[1:]:
             git(work, "checkout", "-q", "-b", b)
             shas[b] = commit(work, f"on {b}")
-        git(work, "checkout", "-q", branches[0])  # HEAD des Seeds = erster Branch -> origin/HEAD
+        git(work, "checkout", "-q", branches[0])  # HEAD of the seed = first branch -> origin/HEAD
         origin = tmp_path / "origin.git"
         git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
         return origin, shas
@@ -74,7 +74,7 @@ def make_origin(tmp_path: Path):
 
 @pytest.fixture
 def make_clone(tmp_path: Path):
-    """Klon von origin; ``set_head=False`` entfernt origin/HEAD (Fall: manuell hinzugefügtes Remote)."""
+    """Clone of origin; ``set_head=False`` removes origin/HEAD (case: a manually added remote)."""
 
     def _make(origin: Path, set_head: bool = True) -> Path:
         dst = tmp_path / "clone"

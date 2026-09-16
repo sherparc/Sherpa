@@ -1,7 +1,7 @@
-# CI: Tests + Coverage-Gate + Lint auf Linux, Windows und macOS (docs/plan.md §5).
-# Windows ist Pflicht: Kunden-Rechner, Git-Pfade und \r\n sind die typischen Bruchstellen von T0/T1.
-# macOS (arm64): Kunden-Laptops; zählt bei privaten Repos 10x auf das Minuten-Kontingent. Standardmäßig aus,
-# nur bei grossen Änderungen (Git-/Pfad-/Encoding-Logik) einschalten: macos-latest in der Matrix einkommentieren.
+# CI: tests + coverage gate + lint on Linux, Windows and macOS (docs/plan.md §5).
+# Windows is mandatory: customer machines, git paths and \r\n are the typical breaking points of T0/T1.
+# macOS (arm64): customer laptops; counts 10x against the minutes quota on private repos. Off by default,
+# enable only for large changes (git/path/encoding logic): uncomment macos-latest in the matrix.
 name: ci
 
 on:

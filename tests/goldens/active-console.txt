@@ -1,0 +1,13 @@
+harness-plan.yaml — 7 proposals, 3 reasoned no's
+  + outcome     shop                          mandatory: no harness without an outcome signal (ADR-0008) ✓
+  + owner-doc   pay                           24 commits/90d, 1 dependents ✓
+  + owner-doc   core                          1 commits/90d, 2 dependents ✓
+  + owner-doc   web                           1 commits/90d, 0 dependents ✓
+  + agent       pay                           rank 1/4 churn ✓ · 24 commits/90d ✓ · 40 files ✓ · 2 authors ✓
+  + test-infra  suite                         26 commits/90d vs. 24 (pay) ✓
+  + skill       regenerate-django-migrations  svc/pay/pay/migrations · 6 generated files, 1 configs ✓
+  - owner-doc   old                           0 commits/90d, 0 dependents ✗
+  - librarian   pay                           rank 1/4 momentum ✓ · 24 commits/30d, 24/90d ✗
+  - librarian   core                          rank 2/4 momentum ✓ · 1 commits/30d, 1/90d ✗
+  1 dormant units without owner doc (0 commits/90d, 0 dependents): old — the first commit turns them into a proposal.
+  not listed, out of reach: 2 units for agent (rank > 1 and < 20 commits/90d), 1 for librarian (rank > 2 and below both floors).

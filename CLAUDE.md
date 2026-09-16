@@ -1,35 +1,49 @@
 # Sherpa
 
-Generischer Harness-Generator. CLI `sherpa` (`scan | plan | apply | status`), Python 3.12, stdlib-first.
-Plan und Architektur: `docs/plan.md`. Scanner: `docs/scan.md`. Entscheidungen: `docs/adr/` (Index in `docs/adr/README.md`). Feldsemantik: `src/sherpa/schemas/`.
+Generic harness generator. CLI `sherpa` (`scan | plan | apply | status`), Python 3.12, stdlib-first.
+Plan and architecture: `docs/plan.md`. Scanner: `docs/scan.md`. Planner: `docs/harness-plan.md`. Decisions: `docs/adr/`
+(index in `docs/adr/README.md`). Field semantics: `src/sherpa/schemas/`.
 
-## Regeln
-- Owner-Prinzip: jede Tatsache hat genau einen Ort. `docs/plan.md` besitzt Architektur und Meilensteine,
-  ADRs besitzen Entscheidungen, Code besitzt Verhalten. Keine Duplikate in README oder Kommentaren.
-- Scanner und Applier bleiben deterministisch (kein LLM, keine Netzabhängigkeit). LLM nur in `plan`.
-- Jede erzeugte Datei trägt den `sherpa:generated`-Marker; handbearbeitete Dateien werden nie überschrieben.
-- Tests: `.venv/bin/pytest -q` aus der Repo-Wurzel; Lint `.venv/bin/ruff check . && .venv/bin/ruff format --check .` — beides muss vor jedem Commit grün sein (CI prüft Linux und Windows; macOS ist in der Matrix auskommentiert und wird nur bei grossen Änderungen an Git-/Pfad-/Encoding-Logik nach Rückfrage zugeschaltet). Jede neue Funktion kommt mit Tests; Fixture-Repos werden
-  programmatisch gebaut (`tests/conftest.py`), nie als Binärdaten eingecheckt. Coverage-Ziel ≥ 90 % (`docs/plan.md` §5).
-- Git-Messungen immer gegen `origin/<trunk>` via `sherpa.gitinfo.resolve_trunk` (ADR-0003), nie gegen `HEAD`.
-- Sprachunabhängig: T0 (Git) und T1 (Manifeste) müssen ohne Sprach-Adapter funktionieren (`docs/plan.md` §2.1).
-- Modell-Zugriff nur über `sherpa/llm/` (ADR-0004); kein LangChain/LangGraph, kein Provider-Code ausserhalb.
-- Vor jedem Commit den Diff zeigen (`git diff --stat` + Kernpunkte) und Andrei fragen; erst nach seinem Ja committen und pushen.
-- Nie direkt auf `main` pushen: jeder Schritt läuft Branch `task/<thema>` → PR → Squash-Merge (Guard: `.githooks/pre-push`, aktiv über `git config core.hooksPath .githooks`). Remote ist `github.com/sherparc/Sherpa`.
-- Namensräume (ADR-0009): Produkt und CLI heissen `sherpa`, das Python-Paket `sherpa-harness`, die GitHub-Org `sherparc`.
-- Commit-Messages: 1 bis 3 ganze Sätze, nie ein `Co-Authored-By`-Trailer.
-- README ist Marketing und Wahrheit zugleich: Sie wird bei jedem Schritt mitgezogen (Status-Tabelle, Roadmap, Zahlen) und behauptet nie etwas, das nicht läuft — Beispiele sind echte Ausgaben, Badges nur für Dinge, die existieren.
-- Sprache in Docs und Commits: Deutsch.
+## Language
+- **English everywhere that gets pushed**: code comments, docstrings, docs, ADRs, README, CLI output, test names,
+  goldens, commit messages, PR texts. Sherpa is used by developers who do not read German.
 
-## Produkt, nicht Projekt
-- Sherpa ist generisch. Docs, Code, Tests und Beispiele nennen **kein** konkretes Kundenprojekt beim Namen; Beispiele
-  verwenden neutrale Namen (`Shop.Pricing`). Das Referenz-Harness ist ein Datenpunkt (ADR-0002), nicht die Wahrheit.
-- Fremde Repos werden nur lokal zum Testen gescannt (`tests/corpus/`, ignored); ihre Modelle werden nicht eingecheckt.
+## Rules
+- Owner principle: every fact has exactly one place. `docs/plan.md` owns architecture and milestones, ADRs own
+  decisions, code owns behaviour. No duplicates in README or comments.
+- Scanner and applier stay deterministic (no LLM, no network dependency). LLM only in `plan` (stage 2).
+- Every generated file carries the `sherpa:generated` marker; hand-edited files are never overwritten.
+- Tests: `.venv/bin/pytest -q` from the repo root; lint `.venv/bin/ruff check . && .venv/bin/ruff format --check .` —
+  both must be green before every commit (CI runs Linux and Windows; macOS is commented out in the matrix and is only
+  enabled, after asking, for large changes to Git/path/encoding logic). Every new function comes with tests; fixture
+  repos are built programmatically (`tests/conftest.py`), never checked in as binaries. Coverage target ≥ 90 %
+  (`docs/plan.md` §5). Plan goldens live in `tests/goldens/`; `SHERPA_UPDATE_GOLDENS=1` refreshes them after an
+  intended rule change.
+- Git measurements always against `origin/<trunk>` via `sherpa.gitinfo.resolve_trunk` (ADR-0003), never against `HEAD`.
+- Language-agnostic: T0 (Git) and T1 (manifests) must work without language adapters (`docs/plan.md` §2.1).
+- Model access only through `sherpa/llm/` (ADR-0004); no LangChain/LangGraph, no provider code elsewhere.
+- Before every commit show the diff (`git diff --stat` + key points) and ask Andrei; commit and push only after his yes.
+- Never push to `main` directly: every step is branch `task/<topic>` → PR → squash merge (guard: `.githooks/pre-push`,
+  enabled via `git config core.hooksPath .githooks`). Remote is `github.com/sherparc/Sherpa`.
+- Namespaces (ADR-0009): product and CLI are `sherpa`, the Python package `sherpa-harness`, the GitHub org `sherparc`.
+- Commit messages: one to three full sentences, never a `Co-Authored-By` trailer.
+- README is marketing and truth at once: it moves with every step (status, roadmap, numbers) and never claims what
+  does not run — examples are real outputs, badges only for things that exist.
 
-## Zusammenarbeit
-- Nach jedem Schritt `docs/plan.md` kritisch revidieren: gegen die besten etablierten Marktlösungen (Terraform,
-  Backstage, Renovate, CodeScene, promptfoo, …) plus eigenes Wissen — Inkonsistenzen, fehlende Bausteine, bessere
-  Alternativen mit Begründung vorschlagen; Andrei entscheidet, was in den Plan kommt.
-- Nach jeder Iteration ein ADR je getroffener Entscheidung (`docs/adr/`, Index pflegen). Was kein ADR hat, ist
-  nicht entschieden.
-- Team-Arbeit: bei Unsicherheit oder Design-Entscheidungen Andrei fragen, nicht still entscheiden. Was getan wurde,
-  wird knapp berichtet — er muss jederzeit wissen, was passiert.
+## Product, not project
+- Sherpa is generic. Docs, code, tests and examples name **no** customer project; examples use neutral names
+  (`Shop.Pricing`). Industry methods (Terraform plan/apply, Backstage, CodeScene hotspots, Renovate) are first-class
+  sources of patterns, not any single harness.
+- **Nothing about customer repos or local calibration runs on them lands in this repo**: no mentions of a
+  "reference" or template repo, no module counts, plan results or findings derived from scanning a customer's
+  code, no `.sherpa/` artefacts left behind there. Calibration happens locally only (`tests/corpus/` is ignored);
+  docs argue with fixtures and neutral benchmark figures ("15k-file monorepo: 2.7 s") that name no source. Before
+  every commit, grep the diff for "referenz", "reference repo" and customer names — it must be empty.
+
+## Collaboration
+- After every step revise `docs/plan.md` critically: against the best established market solutions (Terraform,
+  Backstage, Renovate, CodeScene, promptfoo, …) plus own knowledge — propose inconsistencies, missing building blocks,
+  better alternatives with reasoning; Andrei decides what enters the plan.
+- After every iteration one ADR per decision taken (`docs/adr/`, keep the index). What has no ADR is not decided.
+- Teamwork: when unsure or at design decisions ask Andrei, do not decide silently. Report briefly what was done —
+  he must always know what is happening.

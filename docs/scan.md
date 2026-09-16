@@ -1,91 +1,105 @@
-# `sherpa scan` — Schichten T0 (Git) und T1 (Module)
+# `sherpa scan` — layers T0 (git), T1 (modules) and generator families
 
-> Owner für: Aufruf, Entscheidungen, Interpretation. Feldsemantik gehört dem Schema
-> [`src/sherpa/schemas/codebase-model.schema.json`](../src/sherpa/schemas/codebase-model.schema.json) (v2); Code in
-> [`src/sherpa/scan/t0_git.py`](../src/sherpa/scan/t0_git.py) und [`t1_modules.py`](../src/sherpa/scan/t1_modules.py).
-> Stand: M1a, v0.2.0.
+> Owner of: invocation, decisions, interpretation. Field semantics belong to the schema
+> [`src/sherpa/schemas/codebase-model.schema.json`](../src/sherpa/schemas/codebase-model.schema.json) (v3); code in
+> [`src/sherpa/scan/t0_git.py`](../src/sherpa/scan/t0_git.py), [`t1_modules.py`](../src/sherpa/scan/t1_modules.py)
+> and [`generators.py`](../src/sherpa/scan/generators.py). Status: M2, v0.3.0.
 
-## Aufruf
+## Invocation
 
 ```bash
 sherpa scan <repo>                      # → <repo>/.sherpa/codebase-model.json
-sherpa scan <repo> --out -              # JSON auf stdout
-sherpa scan <repo> --no-fetch           # ohne 'git fetch origin' (offline, Tests)
-sherpa scan <repo> --trunk dev          # Trunk erzwingen (schlägt sherpa.toml)
-sherpa scan <repo> --as-of 2026-03-01   # Fensterende fixieren (Reproduktion alter Stände)
-sherpa scan <repo> --top 50             # mehr Hotspots
+sherpa scan <repo> --out -              # JSON to stdout
+sherpa scan <repo> --no-fetch           # without 'git fetch origin' (offline, tests)
+sherpa scan <repo> --trunk dev          # force the trunk (beats sherpa.toml)
+sherpa scan <repo> --as-of 2026-03-01   # fix the window end (reproducing old states)
+sherpa scan <repo> --top 50             # more hotspots
 ```
 
-Exit 0 ok, 1 Fehler (kein Repo, kein origin, Trunk unbekannt, ungültiges Datum). Zusammenfassung auf stderr,
-Modell nur in die Datei bzw. stdout — damit ist `--out -` pipe-fähig.
+Exit 0 ok, 1 error (no repo, no origin, unknown trunk, invalid date). Summary on stderr, the model only in the
+file or on stdout — so `--out -` is pipe-friendly.
 
-Konfiguration in `<repo>/sherpa.toml` (optional, TOML wegen stdlib `tomllib`):
+Configuration in `<repo>/sherpa.toml` (optional, TOML because of stdlib `tomllib`):
 
 ```toml
 [scan]
-trunk = "dev"                          # ADR-0003 Override
+trunk = "dev"                          # ADR-0003 override
 hotspots = 20
-generated = ["*.g.cs", "gen/**"]       # ergänzt sherpa.config.GENERATED_DEFAULT
+generated = ["gen/**"]                 # own generator family "custom"; extends sherpa.config.GENERATED_DEFAULT
 ```
 
-## Was gemessen wird
+## What is measured
 
-| Feld | Bedeutung | Quelle |
+| Field | Meaning | Source |
 |---|---|---|
-| `git.trunk` | `origin/<branch>`, wie bestimmt (`override` / `origin/HEAD` / `candidate`), SHA | ADR-0003 |
-| `git.windows` | `as_of` = Committer-Datum des Trunk-Revs (oder `--as-of`); `since_90d`, `since_30d` | — |
-| `git.commits_*` | `total` inkl. Merges über die ganze Historie; `90d`/`30d` nur Nicht-Merge-Commits im Fenster | `git rev-list`, `git log --no-merges --since` |
-| `git.files[]` | jede Datei im Trunk-Baum: `loc` (null = binär), `generated`, Commits/Autoren im Fenster, `last_change` | `git ls-tree`, `git cat-file --batch` |
-| `git.dirs[]` | Tiefe 1 + 2 (`""` = Wurzel): Dateien, LOC-Summe, Commits, die etwas darunter berühren (je Commit einmal) | Aggregat |
-| `git.hotspots[]` | Top-N nach `commits_90d × loc`, nur Text, nur nicht-generiert | Tornhill |
-| `modules[]` | ein Modul je Manifest: `id`, `path`, `kind`, Dateien/LOC/Testdateien, `deps`/`dependents`/`tested_by` (nur repo-intern), Churn je Modul, bis zu 3 Hotspots | Manifest-Parser (T1) |
-| `conventions` | Sprachen nach LOC, CI-Dateien, Container-Dateien | Dateibaum |
+| `git.trunk` | `origin/<branch>`, how it was determined (`override` / `origin/HEAD` / `candidate`), SHA | ADR-0003 |
+| `git.windows` | `as_of` = committer date of the trunk rev (or `--as-of`); `since_90d`, `since_30d` | — |
+| `git.commits_*` | `total` incl. merges over the whole history; `90d`/`30d` non-merge commits in the window only | `git rev-list`, `git log --no-merges --since` |
+| `git.files[]` | every file in the trunk tree: `loc` (null = binary), `generated`, commits/authors in the window, `last_change` | `git ls-tree`, `git cat-file --batch` |
+| `git.dirs[]` | depth 1 + 2 (`""` = root): files, LOC sum, generator outputs, commits and authors touching something below (once per commit) | aggregate |
+| `git.hotspots[]` | top N by `commits_90d × loc`, text only, non-generated only | Tornhill |
+| `modules[]` | one module per manifest: `id`, `path`, `kind`, files/LOC/test files/generator outputs, `deps`/`dependents`/`tested_by` (in-repo only), churn per module, up to 3 hotspots | manifest parsers (T1) |
+| `generators[]` | one entry per (generator family, owning module): `home`, generated files/LOC, up to 5 sources and configs (closest to `home` first), regeneration command, `skill` | `scan/generators.py` |
+| `conventions` | languages by LOC, CI files, container files | file tree |
 
-### T1 — welche Manifeste, wie werden Abhängigkeiten aufgelöst
+### T1 — which manifests, how dependencies are resolved
 
-| `kind` | Manifest | Modulname | repo-interne Deps über | Test-Erkennung |
+| `kind` | Manifest | Module name | In-repo deps via | Test detection |
 |---|---|---|---|---|
-| `dotnet` | `*.csproj` `*.fsproj` `*.vbproj` | Dateistamm | `<ProjectReference Include>` → Manifest-Pfad (Backslashes normalisiert, Fallback Dateistamm) | eigenes Test-Projekt: `IsTestProject`, Paket xunit/nunit/mstest/tunit, Name `*Tests`/`*Test` → `is_test`, erscheint bei den referenzierten Modulen als `tested_by` |
-| `python` | `pyproject.toml` `setup.py` | `[project].name` / `[tool.poetry].name` | Namen aus `dependencies`, `optional-dependencies`, Poetry-Gruppen, PEP-503-normalisiert (`Shop_Lib` ≙ `shop-lib`) | Testdateien im Modul |
-| `node` | `package.json` | `name` | Schlüssel aus `dependencies`/`devDependencies`/`peerDependencies` | Testdateien im Modul |
-| `go` | `go.mod` | `module` | `require`-Zeilen und `replace`-Ziele, exakter Modulpfad | `*_test.go` |
-| `rust` | `Cargo.toml` mit `[package]` (reiner `[workspace]` ist kein Modul) | `package.name` | `path = "…"`-Deps → Manifest-Pfad; sonst Name | Testdateien im Modul |
-| `java` | `pom.xml` `build.gradle(.kts)` | `<artifactId>` (Gradle: Verzeichnisname) | `<dependency><artifactId>` gegen andere Module | `*Test.java`, `src/test/` |
+| `dotnet` | `*.csproj` `*.fsproj` `*.vbproj` | file stem | `<ProjectReference Include>` → manifest path (backslashes normalised, fallback file stem) | own test project: `IsTestProject`, package xunit/nunit/mstest/tunit, name `*Tests`/`*Test` → `is_test`, appears as `tested_by` on the referenced modules |
+| `python` | `pyproject.toml` `setup.py` | `[project].name` / `[tool.poetry].name` | names from `dependencies`, `optional-dependencies`, Poetry groups, PEP 503 normalised (`Shop_Lib` ≙ `shop-lib`) | test directory in the module path, test files in the module |
+| `node` | `package.json` | `name` | keys of `dependencies`/`devDependencies`/`peerDependencies` | test directory in the module path, test files in the module |
+| `go` | `go.mod` | `module` | `require` lines and `replace` targets, exact module path | `*_test.go` |
+| `rust` | `Cargo.toml` with `[package]` (a pure `[workspace]` is not a module) | `package.name` | `path = "…"` deps → manifest path; else name | test files in the module |
+| `java` | `pom.xml` `build.gradle(.kts)` | `<artifactId>` (Gradle: directory name) | `<dependency><artifactId>` against other modules | `*Test.java`, `src/test/` |
 
-Manifeste unter `node_modules/`, `vendor/`, `target/`, `bin/`, `obj/`, `dist/`, `build/`, `.venv/`, `packages/`
-sind keine Module. Zwei Manifeste im selben Verzeichnis (z. B. `package.json` neben `pyproject.toml`): das
-alphabetisch erste gewinnt — bewusst simpel, wird ein Kippkriterium, falls ein Korpus-Repo es braucht.
+Manifests under `node_modules/`, `vendor/`, `target/`, `bin/`, `obj/`, `dist/`, `build/`, `.venv/`, `packages/`
+are not modules. Two manifests in the same directory (e.g. `package.json` next to `pyproject.toml`): the
+alphabetically first wins — deliberately simple, becomes a flip criterion if a corpus repo needs it.
 
-Externe Pakete (`requests`, `serde`, `react`) tauchen **nicht** in `deps` auf: für Owner-Grenzen zählt nur, was im
-Repo lebt. Testdateien = Pfad enthält `tests/`, `test/`, `__tests__/`, `spec/` oder Name matcht `test_*.py`,
-`*_test.go`, `*.test.ts`, `*.spec.js`, `*Test.java`, `*Tests.cs`, `*_test.rs`, ….
+External packages (`requests`, `serde`, `react`) do **not** appear in `deps`: for owner boundaries only what lives
+in the repo counts. Test files = path contains `tests/`, `test/`, `__tests__/`, `spec/` or the name matches
+`test_*.py`, `*_test.go`, `*.test.ts`, `*.spec.js`, `*Test.java`, `*Tests.cs`, `*_test.rs`, ….
 
-## Entscheidungen und warum
+### Generator families — generated code is regenerated, not explained (ADR-0011)
 
-1. **Alles aus dem Trunk-Rev, nichts aus dem Working Tree.** Untracked/lokale Änderungen und der ausgecheckte
-   Branch beeinflussen das Modell nicht (`test_scan_ignores_local_branch_and_worktree`).
-2. **`as_of` = Committer-Datum des Trunk-Revs.** Damit ist der Scan bei gleichem Rev byte-identisch, auch Wochen
-   später. `--as-of` nur für Rückblicke.
-3. **Committer-Datum überall**, weil `git --since` danach filtert; Autor-Datum wäre bei Rebases irreführend.
-4. **Merges zählen nicht in den Fenstern.** Ein Merge berührt alle Dateien des Zweigs und würde Churn verdoppeln.
-5. **Im Fenster gelöschte Dateien fehlen im Modell.** Owner-Kandidaten sind nur Dateien, die es noch gibt.
-6. **Generierte Dateien sind nie Hotspot.** Erster Lauf auf dem Referenz-Repo (15 134 Dateien, 44 357 Commits,
-   2,5 s): die Top-5-Hotspots waren `*.Designer.cs`, `*ModelSnapshot.cs`, `*.resx` — Werkzeug-Rauschen.
-   Mit den Default-Globs (639 Dateien markiert) führen Test-Infrastruktur und Fachcode die Liste an.
-   Die Dateien bleiben in `files`/`dirs`, damit `dirs.commits_*` ehrlich bleibt.
-7. **Ein Prozess pro Git-Aufruf-Art**, keine Schleife über Dateien (`cat-file --batch`, ein `git log`).
-   Laufzeit ist Git-IO; Kippkriterium für einen Rust-Kern steht in ADR-0001.
-8. **Jede Datei gehört zum tiefsten Modul** (längster Manifest-Pfad, der Präfix ist). Ein Wurzel-Manifest
-   fängt den Rest. Dateien ohne Modul (`docs/`, `.github/`, `Dockerfile`) zählen in `git.dirs`, aber in keinem Modul.
-9. **Modul-Churn zählt je Commit einmal.** Ein Commit, der 40 Dateien eines Moduls berührt, ist ein Commit —
-   sonst gewinnen Refactorings jede Rangliste. Datei-Churn (`git.files`) bleibt daneben erhalten.
-10. **Sprach-Adapter (T2) sind optional.** T1 liest Manifeste, keinen Code. Referenz-Repo: 48 Module (46 dotnet,
-    2 node), `tested_by` korrekt über `ProjectReference`, 2,6 s.
+A family = globs for output, sources and configuration plus a regeneration command (`FAMILIES` in
+`generators.py`): EF Core, Django and Alembic migrations, protobuf/gRPC, OpenAPI clients, GraphQL codegen, ResX,
+.NET codegen (T4, source generators), `go generate`, Java codegen, test snapshots, frontend bundles, generic
+patterns (`*.generated.*`, `generated/`), lockfiles (no skill) and `custom` from `sherpa.toml`. A path belongs to
+the first matching family; output patterns take precedence over sources and configs. `home` is the common
+directory of the outputs — the central place for a skill. Example: `ef-migrations` in `src/Shop.Migrations` with
+399 files, source `ShopDbContext.cs`, command `dotnet ef migrations add`.
 
-## Interpretation für `plan` (M2)
+## Decisions and why
 
-- `dirs[].commits_90d` / `commits_30d` gegen die Schwellwerte in `docs/plan.md` §2.2 → Librarian-/Agent-Kandidaten.
-- `hotspots` → Owner-Doc-Abschnitt „Wo brennt es", Eval-Frage „Welche Datei ist der Hotspot in X?".
-- `authors_90d` = 1 bei hohem Churn → Bus-Faktor-Hinweis, Owner-Doc dringender.
-- `dirs` mit `path` unter `tests/` und hohem Churn → Test-Infrastruktur als eigener Bereich (blinder Fleck laut
-  Analyse-Praxis: oft mehr Commits als jedes Fachmodul, niemand betreut sie).
+1. **Everything from the trunk rev, nothing from the working tree.** Untracked/local changes and the checked-out
+   branch do not influence the model (`test_scan_ignores_local_branch_and_worktree`).
+2. **`as_of` = committer date of the trunk rev.** The scan is byte-identical for the same rev, even weeks later.
+   `--as-of` only for looking back.
+3. **Committer date everywhere**, because `git --since` filters by it; the author date would mislead after rebases.
+4. **Merges do not count in the windows.** A merge touches every file of the branch and would double the churn.
+5. **Files deleted within the window are absent from the model.** Owner candidates are only files that still exist.
+6. **Generated files are never hotspots.** On a 15k-file monorepo the top-5 hotspots of the first run were
+   `*.Designer.cs`, `*ModelSnapshot.cs`, `*.resx` — tool noise. With the default globs, test infrastructure and
+   business code lead the list. The files stay in `files`/`dirs` so `dirs.commits_*` stays honest.
+7. **One process per kind of git call**, no loop over files (`cat-file --batch`, one `git log`). Runtime is git
+   I/O; the flip criterion for a Rust core is in ADR-0001.
+8. **Every file belongs to the deepest module** (the longest manifest path that is a prefix). A root manifest
+   catches the rest. Files without a module (`docs/`, `.github/`, `Dockerfile`) count in `git.dirs` but in no module.
+9. **Module churn counts once per commit.** A commit touching 40 files of a module is one commit — otherwise
+   refactorings win every ranking. File churn (`git.files`) stays alongside.
+10. **Language adapters (T2) are optional.** T1 reads manifests, not code. A 15k-file .NET/Node monorepo yields
+    ~50 modules with correct `tested_by` via `ProjectReference` in 2.6 s.
+11. **Test modules in every language.** .NET via project property, test package or name; otherwise via a test
+    directory in the module path (`tests/suite`). This makes `tested_by` work for Python/Node/Go as well.
+12. **Glob classification in constant time per path** (`GlobSet`): exact names via dict, `*<suffix>` via
+    `endswith`, the rest via anchored regex, path globs only when their literal occurs. A naive regex alternation
+    cost 0.8 s on 15k paths, `GlobSet` 0.05 s — the scan is not slower with generators than without (2.75 s).
+
+## Interpretation for `plan`
+
+Implemented in M2, rules in [`docs/harness-plan.md`](harness-plan.md): modules and uncovered directories are
+units; `commits_90d`/`commits_30d`/`authors_90d`/`files` against rank and floor; `generated_files` decides skill
+instead of agent; test modules against the most active business unit. `hotspots` and `tested_by` become owner-doc
+sections and eval questions (M3/M4).
