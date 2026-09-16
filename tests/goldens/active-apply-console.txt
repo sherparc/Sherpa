@@ -1,13 +1,12 @@
-sherpa apply — plan origin/main@REV: 10 entries, 6 selected → 11 files
+sherpa apply — plan origin/main@REV: 10 entries, 5 selected → 10 files
   + .claude/agents/pay.md                                 agent pay                     new
   + .claude/docs/modules/core.md                          owner-doc core                new
   + .claude/docs/modules/pay.md                           owner-doc pay                 new
   + .claude/docs/modules/suite.md                         test-infra suite              new
-  + .claude/docs/modules/web.md                           owner-doc web                 new
   + .claude/hooks/sherpa-outcome.py                       harness                       new
   + .claude/scripts/sherpa-check.py                       harness                       new
   + .claude/settings.json                                 harness                       new
   + .claude/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .sherpa/telemetry/.gitignore                          harness                       new
   + CLAUDE.md                                             harness                       new
-11 to add, 0 to change, 0 unchanged, 0 skipped.
+10 to add, 0 to change, 0 unchanged, 0 skipped.

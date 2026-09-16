@@ -23,16 +23,16 @@ sherpa status [REPO]
 
 ```console
 $ sherpa status .
-sherpa status — harness_rev 5be9c857fd4b, applied 2026-09-16T22:07:12Z
+sherpa status — harness_rev f5c1cf090666, applied 2026-09-16T22:07:12Z
 drift: 4 files
   ? .claude/agents/old.md            in the state, no longer in the plan
-  - .claude/docs/modules/web.md      in the state, not on disk — apply recreates it
+  - .claude/docs/modules/core.md     in the state, not on disk — apply recreates it
   ! .claude/hooks/sherpa-outcome.py  hand-edited (skipped)
   ~ .claude/docs/modules/pay.md      block facts updated
 check: 0 FAIL, 1 WARN
   WARN C7 .claude/agents/pay.md: 162 lines > budget 150 (agent)
 outcomes: 3 executions labelled, 1 corrections
-  5be9c857fd4b (current): 1 success, 0 failed, 1 unknown
+  f5c1cf090666 (current): 1 success, 0 failed, 1 unknown
   000000000000: 0 success, 1 failed, 0 unknown
   note: .claude/scripts/sherpa-check.py is sherpa 0.0.1, installed is 0.4.0 — `sherpa apply` refreshes it
 ```

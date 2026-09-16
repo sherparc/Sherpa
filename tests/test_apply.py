@@ -304,17 +304,17 @@ def applied(repo: Path) -> None:
 def test_apply_is_idempotent_and_deterministic(active_repo: Path, capsys):  # noqa: F811
     applied(active_repo)
     out = capsys.readouterr().out
-    assert "11 to add, 0 to change, 0 unchanged, 0 skipped." in out and "check: 0 FAIL, 0 WARN" in out
+    assert "10 to add, 0 to change, 0 unchanged, 0 skipped." in out and "check: 0 FAIL, 0 WARN" in out
     state_path = active_repo / ".sherpa" / "state.json"
     first = state_path.read_bytes()
     st = state_mod.load(state_path)
     state_mod.validate(json.loads(first))
-    assert st.sherpa == __version__ and len(st.harness_rev) == 12 and len(st.files) == 11
+    assert st.sherpa == __version__ and len(st.harness_rev) == 12 and len(st.files) == 10
     assert st.plan["rev"] == scan(active_repo, fetch=False).git.trunk.rev
     h1 = tree_hash(active_repo / ".claude")
     assert main(["apply", str(active_repo), "--yes"]) == 0
     out = capsys.readouterr().out
-    assert "0 to add, 0 to change, 11 unchanged, 0 skipped.\nnothing to do.\n" in out
+    assert "0 to add, 0 to change, 10 unchanged, 0 skipped.\nnothing to do.\n" in out
     assert state_path.read_bytes() == first and tree_hash(active_repo / ".claude") == h1
     # the same input on a second clone → byte-identical tree
     r = subprocess.run(
@@ -409,7 +409,7 @@ def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, ca
     assert "drift: none — files match the state and the plan\ncheck: 0 FAIL, 0 WARN\noutcomes: none yet" in out
     hook = active_repo / ".claude" / "hooks" / "sherpa-outcome.py"
     hook.write_text(hook.read_text(encoding="utf-8") + "# mine\n", encoding="utf-8")
-    (active_repo / ".claude" / "docs" / "modules" / "web.md").unlink()
+    (active_repo / ".claude" / "docs" / "modules" / "core.md").unlink()
     st = state_mod.load(active_repo / ".sherpa" / "state.json")
     st.files[".claude/agents/old.md"] = FileRecord(BLOCKS, entry="agent:old:svc/old", blocks={})
     (active_repo / ".claude" / "agents" / "old.md").write_text(
@@ -440,7 +440,7 @@ def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, ca
     out = capsys.readouterr().out
     assert "drift: 4 files" in out
     assert "  ? .claude/agents/old.md            in the state, no longer in the plan" in out
-    assert "  - .claude/docs/modules/web.md      in the state, not on disk — apply recreates it" in out
+    assert "  - .claude/docs/modules/core.md     in the state, not on disk — apply recreates it" in out
     assert "  ! .claude/hooks/sherpa-outcome.py  hand-edited (skipped)" in out
     assert "  ! .claude/scripts/sherpa-check.py  hand-edited (skipped)" in out
     assert "outcomes: 3 executions labelled, 1 corrections\n" in out
@@ -472,14 +472,14 @@ def test_cli_apply_dry_run_asks_and_aborts(active_repo: Path, capsys, monkeypatc
     assert main(["apply", str(active_repo)]) == 0  # no terminal → dry run only
     assert "dry run only — pass --yes to write (no terminal to ask)." in capsys.readouterr().out
     assert main(["apply", str(active_repo), "--dry-run"]) == 0
-    assert "11 to add" in capsys.readouterr().out and not (active_repo / "CLAUDE.md").exists()
+    assert "10 to add" in capsys.readouterr().out and not (active_repo / "CLAUDE.md").exists()
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _: "n")
     assert main(["apply", str(active_repo)]) == 0
     assert "aborted, nothing written." in capsys.readouterr().out and not (active_repo / "CLAUDE.md").exists()
     monkeypatch.setattr("builtins.input", lambda _: "y")
     assert main(["apply", str(active_repo)]) == 0
-    assert "11 files written" in capsys.readouterr().out and (active_repo / "CLAUDE.md").exists()
+    assert "10 files written" in capsys.readouterr().out and (active_repo / "CLAUDE.md").exists()
 
 
 def test_cli_check_and_adopt(active_repo: Path, capsys):  # noqa: F811

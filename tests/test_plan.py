@@ -370,8 +370,31 @@ def test_merge_decisions_keeps_by_key_and_counts():
     assert yamlio.merge_decisions(p, stale)[1] == 0
 
 
+def test_small_units_without_dependents_get_no_owner_doc():
+    p = build_plan(
+        model(modules=[mod("tiny", "t", c90=3, files=2), mod("lib", "l", c90=3, files=2, dependents=("x",))])
+    )
+    docs = by_kind(p, "owner-doc")
+    assert (
+        docs["tiny"].default == SKIP
+        and docs["tiny"].reason == "small unit: 2 files. Flips when: files ≥ 5 or dependents ≥ 1"
+    )
+    assert docs["lib"].default == PROPOSE  # a dependent overrides the floor
+    assert (
+        build_plan(model(modules=[mod("tiny", "t", c90=3, files=2)]), PlanConfig(owner_doc_min_files=2))
+        .entries[1]
+        .default
+        == PROPOSE
+    )
+    (note,) = [n for n in p.notes if "small units" in n]
+    assert note == (
+        "1 small units without owner doc (< 5 files, 0 dependents): tiny — listed above as no's; "
+        "owner_doc_min_files in sherpa.toml [plan] moves the floor, a dependent overrides it."
+    )
+
+
 def test_render_console_marks_decisions_and_notes():
-    p = build_plan(model(modules=[mod("A", "src/A", c90=1), mod("Idle", "src/Idle")]))
+    p = build_plan(model(modules=[mod("A", "src/A", c90=1), mod("Idle", "src/Idle")]))  # 10 files each
     p.entries[1] = Entry(
         *(
             getattr(p.entries[1], f)
@@ -381,8 +404,8 @@ def test_render_console_marks_decisions_and_notes():
     )
     out = render_console(p, "harness-plan.yaml")
     assert out.startswith("harness-plan.yaml — 2 proposals, 3 reasoned no's\n")  # Idle dormant; A: agent, librarian
-    assert "  + owner-doc  A     1 commits/90d, 0 dependents ✓ [accept]\n" in out
-    assert "  - owner-doc  Idle  0 commits/90d, 0 dependents ✗\n" in out
+    assert "  + owner-doc  A     1 commits/90d, 0 dependents ✓ · 10 files ✓ [accept]\n" in out
+    assert "  - owner-doc  Idle  0 commits/90d, 0 dependents ✗ · 10 files ✓\n" in out
     assert out.rstrip().endswith("— the first commit turns them into a proposal; each is listed above as a no.")
 
 
@@ -420,7 +443,16 @@ def check_golden(name: str, text: str) -> None:
 def test_poly_fixture_golden(poly_repo: Path):  # noqa: F811
     m = scan(poly_repo, fetch=False)
     p = build_plan(m)
-    assert [e.kind for e in p.entries if e.default == PROPOSE] == ["outcome"] + ["owner-doc"] * 13
+    assert [e.kind for e in p.entries if e.default == PROPOSE] == ["outcome"] + ["owner-doc"] * 8
+    small = [e.target for e in p.entries if e.kind == "owner-doc" and e.default == SKIP]
+    assert small == [
+        "example.com/shop/svc",
+        "shop-api",
+        "shop-app",
+        "shop-cli",
+        "shop-parent",
+    ]  # < 5 files, no dependents
+    assert any(n.startswith("5 small units without owner doc (< 5 files, 0 dependents)") for n in p.notes)
     assert all(
         set(e.evidence)
         <= {
@@ -513,7 +545,7 @@ def test_active_fixture_acceptance(active_repo: Path):
 def test_cli_plan_scans_when_model_missing_then_reuses_and_keeps_decisions(poly_repo: Path, capsys):  # noqa: F811
     assert main(["plan", str(poly_repo), "--no-fetch"]) == 0
     out, err = capsys.readouterr()
-    assert "model scanned" in err and out.startswith("harness-plan.yaml — 14 proposals")
+    assert "model scanned" in err and out.startswith("harness-plan.yaml — 9 proposals")
     plan_path = poly_repo / ".sherpa" / "harness-plan.yaml"
     assert plan_path.exists() and (poly_repo / ".sherpa" / "codebase-model.json").exists()
     text = plan_path.read_text(encoding="utf-8").replace("decision: null", "decision: reject", 1)

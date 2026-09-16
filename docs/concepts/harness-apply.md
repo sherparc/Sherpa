@@ -29,23 +29,22 @@ Real output on the five-module test repo (`active_repo` in `tests/test_plan.py`,
 
 ```console
 $ sherpa apply . --dry-run
-sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 6 selected → 11 files
+sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 10 files
   + .claude/agents/pay.md                                 agent pay                     new
   + .claude/docs/modules/core.md                          owner-doc core                new
   + .claude/docs/modules/pay.md                           owner-doc pay                 new
   + .claude/docs/modules/suite.md                         test-infra suite              new
-  + .claude/docs/modules/web.md                           owner-doc web                 new
   + .claude/hooks/sherpa-outcome.py                       harness                       new
   + .claude/scripts/sherpa-check.py                       harness                       new
   + .claude/settings.json                                 harness                       new
   + .claude/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .sherpa/telemetry/.gitignore                          harness                       new
   + CLAUDE.md                                             harness                       new
-11 to add, 0 to change, 0 unchanged, 0 skipped.
+10 to add, 0 to change, 0 unchanged, 0 skipped.
 ```
 
-After `--yes`: `check: 0 FAIL, 0 WARN` · `11 files written · harness_rev 5be9c857fd4b → .sherpa/state.json`.
-The second run lists eleven `=` and ends with `nothing to do.` — that is the determinism guarantee made visible.
+After `--yes`: `check: 0 FAIL, 0 WARN` · `10 files written · harness_rev f5c1cf090666 → .sherpa/state.json`.
+The second run lists ten `=` and ends with `nothing to do.` — that is the determinism guarantee made visible.
 
 ## What each entry becomes
 
@@ -91,7 +90,7 @@ Hashes ignore line endings (`\r\n` = `\n`): a CRLF checkout is not a hand edit.
 {
   "schema_version": 1,
   "sherpa": "0.4.0",
-  "harness_rev": "5be9c857fd4b",
+  "harness_rev": "f5c1cf090666",
   "plan": {"trunk": "origin/main", "rev": "5db69c4d…", "as_of": "2026-03-01T00:00:00Z"},
   "applied_at": "2026-09-16T22:07:12Z",
   "files": {
@@ -114,7 +113,7 @@ something changed. Plan and state are checked in (ADR-0005), the model is not.
 `.sherpa/telemetry/outcomes.ndjson`:
 
 ```json
-{"kind": "outcome", "id": "<session>:3", "harness_rev": "5be9c857fd4b", "label": "success",
+{"kind": "outcome", "id": "<session>:3", "harness_rev": "f5c1cf090666", "label": "success",
  "signals": {"bash": 4, "bash_errors": 0, "edits": 2, "tests_run": 1, "tests_failed": 0, "last_test": "green",
              "pushed": false, "pr_created": false}, "prompt": "add a test for …"}
 ```
@@ -157,7 +156,7 @@ Example (lines exactly as `status` renders them; see `test_status_reports_drift_
 
 ```console
 $ sherpa status .
-sherpa status — harness_rev 5be9c857fd4b, applied 2026-09-16T22:07:12Z
+sherpa status — harness_rev f5c1cf090666, applied 2026-09-16T22:07:12Z
 drift: 3 files
   ! .claude/agents/pay.md            block manifest hand-edited (skipped)
   ~ .claude/docs/modules/pay.md      block facts updated
@@ -165,7 +164,7 @@ drift: 3 files
 check: 0 FAIL, 1 WARN
   WARN C7 .claude/agents/pay.md: 162 lines > budget 150 (agent)
 outcomes: 12 executions labelled, 1 corrections
-  5be9c857fd4b (current): 7 success, 2 failed, 3 unknown
+  f5c1cf090666 (current): 7 success, 2 failed, 3 unknown
 ```
 
 Drift is what `apply` would do now (`+ ~ !`), plus `-` files in the state that vanished (apply recreates them)

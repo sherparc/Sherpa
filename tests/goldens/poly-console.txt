@@ -1,18 +1,18 @@
-harness-plan.yaml — 14 proposals, 7 reasoned no's
+harness-plan.yaml — 9 proposals, 12 reasoned no's
   + outcome     clone                 mandatory: no harness without an outcome signal (ADR-0008) ✓
-  + owner-doc   Shop.Pricing          3 commits/90d, 1 dependents ✓
-  + owner-doc   Shop.Core             2 commits/90d, 2 dependents ✓
-  + owner-doc   @shop/ui              1 commits/90d, 1 dependents ✓
-  + owner-doc   @shop/web             1 commits/90d, 0 dependents ✓
-  + owner-doc   Shop_Lib              1 commits/90d, 1 dependents ✓
-  + owner-doc   example.com/shop/lib  1 commits/90d, 1 dependents ✓
-  + owner-doc   example.com/shop/svc  1 commits/90d, 0 dependents ✓
-  + owner-doc   shop-api              1 commits/90d, 0 dependents ✓
-  + owner-doc   shop-app              1 commits/90d, 0 dependents ✓
-  + owner-doc   shop-cli              1 commits/90d, 0 dependents ✓
-  + owner-doc   shop-core-rs          1 commits/90d, 1 dependents ✓
-  + owner-doc   shop-domain           1 commits/90d, 1 dependents ✓
-  + owner-doc   shop-parent           1 commits/90d, 0 dependents ✓
+  + owner-doc   Shop.Pricing          3 commits/90d, 1 dependents ✓ · 3 files ✓
+  + owner-doc   Shop.Core             2 commits/90d, 2 dependents ✓ · 2 files ✓
+  + owner-doc   @shop/ui              1 commits/90d, 1 dependents ✓ · 2 files ✓
+  + owner-doc   @shop/web             1 commits/90d, 0 dependents ✓ · 5 files ✓
+  + owner-doc   Shop_Lib              1 commits/90d, 1 dependents ✓ · 2 files ✓
+  + owner-doc   example.com/shop/lib  1 commits/90d, 1 dependents ✓ · 2 files ✓
+  + owner-doc   shop-core-rs          1 commits/90d, 1 dependents ✓ · 2 files ✓
+  + owner-doc   shop-domain           1 commits/90d, 1 dependents ✓ · 2 files ✓
+  - owner-doc   example.com/shop/svc  1 commits/90d, 0 dependents ✓ · 3 files ✗
+  - owner-doc   shop-api              1 commits/90d, 0 dependents ✓ · 3 files ✗
+  - owner-doc   shop-app              1 commits/90d, 0 dependents ✓ · 3 files ✗
+  - owner-doc   shop-cli              1 commits/90d, 0 dependents ✓ · 2 files ✗
+  - owner-doc   shop-parent           1 commits/90d, 0 dependents ✓ · 1 files ✗
   - agent       Shop.Pricing          rank 1/13 churn ✓ · 3 commits/90d ✗ · 3 files ✗ · 2 authors ✓
   - agent       Shop.Core             rank 2/13 churn ✓ · 2 commits/90d ✗ · 2 files ✗ · 2 authors ✓
   - agent       @shop/ui              rank 3/13 churn ✓ · 1 commits/90d ✗ · 2 files ✗ · 1 authors ✗
@@ -20,5 +20,6 @@ harness-plan.yaml — 14 proposals, 7 reasoned no's
   - librarian   Shop.Pricing          rank 1/13 momentum ✓ · 2 commits/30d, 3/90d ✗
   - librarian   Shop.Core             rank 2/13 momentum ✓ · 1 commits/30d, 2/90d ✗
   - test-infra  Shop.Pricing.Tests    1 commits/90d vs. 3 (Shop.Pricing) ✗
+  5 small units without owner doc (< 5 files, 0 dependents): example.com/shop/svc, shop-api, shop-app, shop-cli, shop-parent — listed above as no's; owner_doc_min_files in sherpa.toml [plan] moves the floor, a dependent overrides it.
   not listed, out of reach: 9 units for agent (rank > 4 and < 20 commits/90d), 11 for librarian (rank > 2 and below both floors).
   generator traces below the floor (no skill): resx ×1 — floor: 5 generated files.

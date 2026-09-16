@@ -21,6 +21,7 @@ librarian_min_commits_90d = 80
 dir_min_files = 10            # a directory without a module counts as a unit from this many files
 generated_share = 0.5         # from this share of generator output: no agent/librarian, a skill instead
 skill_min_generated_files = 5 # skill proposal from this many generated files
+owner_doc_min_files = 5       # owner doc from this many files — a dependent overrides the floor
 ```
 
 ## `[scan]`
@@ -49,9 +50,10 @@ three commits.
 | `dir_min_files` | int | `10` | units | a depth-1 directory no module covers becomes a unit from this many files (dot directories never) |
 | `generated_share` | float 0–1 | `0.5` | units | a unit with this share of generator output is generator-dominated: no agent, no librarian, no rank; its generator's skill takes over (ADR-0011) |
 | `skill_min_generated_files` | int | `5` | skill | a generator family is proposed as a skill from this many generated files; configuration files alone count only for families without detectable output (OpenAPI clients) |
+| `owner_doc_min_files` | int | `5` | owner-doc | a unit with fewer files and **no dependents** gets no owner doc (listed as a no, counted in a note): a two-file tool is explained where it is used, and a doc nobody links to is the first to go stale. Any dependent overrides the floor. |
 
 Every threshold in effect is written into `harness-plan.yaml` under `thresholds`, so a plan is readable without
-the config file. The owner-doc rule (≥ 1 commit/90d or ≥ 1 dependent), the test-infra comparison (most active
+the config file. The owner-doc activity rule (≥ 1 commit/90d or ≥ 1 dependent), the test-infra comparison (most active
 test unit vs. most active business unit) and the "within reach" listing rule are not configurable — they define
 what a plan is (ADR-0012).
 

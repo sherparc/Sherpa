@@ -18,6 +18,7 @@
     dir_min_files = 10                 # a directory without a module counts as a unit from this many files
     generated_share = 0.5              # from this share of generator output: no agent/librarian, a skill instead
     skill_min_generated_files = 5      # skill proposal from this many generated files (or config, see rules)
+    owner_doc_min_files = 5            # owner doc from this many files, unless something depends on the unit
 """
 
 from __future__ import annotations
@@ -56,6 +57,7 @@ class PlanConfig:
     dir_min_files: int = 10
     generated_share: float = 0.5
     skill_min_generated_files: int = 5
+    owner_doc_min_files: int = 5
 
 
 @dataclass(frozen=True)
