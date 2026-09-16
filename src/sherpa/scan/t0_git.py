@@ -8,13 +8,14 @@ Entscheidungen (Owner dieses Moduls):
 - Hotspot-Score = commits_90d × loc (Tornhill, „Your Code as a Crime Scene": Churn × Komplexitäts-Proxy).
 - Generierte Dateien (Globs aus ``config``) tragen ``generated: true`` und sind nie Hotspot.
 """
+
 from __future__ import annotations
 
 import subprocess
 from collections import defaultdict
-from fnmatch import fnmatchcase
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 from sherpa.gitinfo import GitError, Trunk
@@ -30,7 +31,7 @@ _REC, _UNIT = "\x1e", "\x1f"
 class Commit:
     sha: str
     author: str
-    date: datetime          # UTC
+    date: datetime  # UTC
     files: tuple[str, ...]
 
 
@@ -42,11 +43,11 @@ def _run(repo: Path, *args: str, stdin: bytes | None = None) -> bytes:
 
 
 def _iso(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return dt.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _parse_date(s: str) -> datetime:
-    return datetime.fromisoformat(s).astimezone(timezone.utc)
+    return datetime.fromisoformat(s).astimezone(UTC)
 
 
 def list_files(repo: Path, ref: str) -> list[str]:
@@ -67,12 +68,12 @@ def blob_contents(repo: Path, ref: str, paths: list[str]) -> dict[str, bytes | N
         header = out[pos:nl].decode()
         pos = nl + 1
         parts = header.split()
-        if len(parts) < 3 or parts[1] != "blob":     # "missing" oder anderer Typ (Submodule = commit)
+        if len(parts) < 3 or parts[1] != "blob":  # "missing" oder anderer Typ (Submodule = commit)
             contents[p] = None
             continue
         size = int(parts[2])
-        contents[p] = out[pos:pos + size]
-        pos += size + 1                                 # Inhalt + abschliessendes "\n"
+        contents[p] = out[pos : pos + size]
+        pos += size + 1  # Inhalt + abschliessendes "\n"
     return contents
 
 
@@ -103,8 +104,13 @@ def count_commits(repo: Path, ref: str) -> int:
 def log_since(repo: Path, ref: str, since: datetime) -> list[Commit]:
     """Nicht-Merge-Commits seit ``since`` mit berührten Dateien. Ein Prozess, feste Trennzeichen."""
     out = _run(
-        repo, "log", ref, "--no-merges", f"--since={_iso(since)}",
-        f"--format={_REC}%H{_UNIT}%an{_UNIT}%cI", "--name-only",
+        repo,
+        "log",
+        ref,
+        "--no-merges",
+        f"--since={_iso(since)}",
+        f"--format={_REC}%H{_UNIT}%an{_UNIT}%cI",
+        "--name-only",
     ).decode("utf-8", errors="surrogateescape")
     commits: list[Commit] = []
     for rec in out.split(_REC):
@@ -130,12 +136,13 @@ def is_generated(path: str, globs: tuple[str, ...]) -> bool:
 @dataclass(frozen=True)
 class T0Data:
     """Rohdaten eines Trunk-Revs — Grundlage für T0 (GitLayer) und T1 (Module)."""
+
     trunk: Trunk
     as_of: datetime
     since_90: datetime
     since_30: datetime
-    commits: tuple[Commit, ...]     # Nicht-Merge-Commits im 90d-Fenster, nur Dateien, die es noch gibt
-    paths: tuple[str, ...]          # sortierter Dateibaum
+    commits: tuple[Commit, ...]  # Nicht-Merge-Commits im 90d-Fenster, nur Dateien, die es noch gibt
+    paths: tuple[str, ...]  # sortierter Dateibaum
     locs: dict[str, int | None]
 
 
@@ -146,13 +153,15 @@ def collect(repo: Path, trunk: Trunk, *, as_of: datetime | None = None) -> T0Dat
     present = set(paths)
     commits = tuple(
         Commit(c.sha, c.author, c.date, tuple(f for f in c.files if f in present))
-        for c in log_since(repo, trunk.rev, since_90) if since_90 < c.date <= as_of
+        for c in log_since(repo, trunk.rev, since_90)
+        if since_90 < c.date <= as_of
     )
     return T0Data(trunk, as_of, since_90, since_30, commits, tuple(paths), blob_locs(repo, trunk.rev, paths))
 
 
-def scan_git(repo: Path, trunk: Trunk, *, as_of: datetime | None = None, top: int = 20,
-             generated: tuple[str, ...] = ()) -> GitLayer:
+def scan_git(
+    repo: Path, trunk: Trunk, *, as_of: datetime | None = None, top: int = 20, generated: tuple[str, ...] = ()
+) -> GitLayer:
     return build_git_layer(repo, collect(repo, trunk, as_of=as_of), top=top, generated=generated)
 
 
@@ -182,8 +191,18 @@ def build_git_layer(repo: Path, data: T0Data, *, top: int = 20, generated: tuple
                 if short:
                     d30[d].add(c.sha)
 
-    files = [FileStat(p, locs[p], is_generated(p, generated), c90[p], c30[p], len(authors[p]),
-                      _iso(last[p]) if p in last else None) for p in paths]
+    files = [
+        FileStat(
+            p,
+            locs[p],
+            is_generated(p, generated),
+            c90[p],
+            c30[p],
+            len(authors[p]),
+            _iso(last[p]) if p in last else None,
+        )
+        for p in paths
+    ]
 
     dfiles: dict[str, int] = defaultdict(int)
     dloc: dict[str, int] = defaultdict(int)
@@ -193,8 +212,11 @@ def build_git_layer(repo: Path, data: T0Data, *, top: int = 20, generated: tuple
             dloc[d] += locs[p] or 0
     dirs = [DirStat(d, dfiles[d], dloc[d], len(d90[d]), len(d30[d])) for d in sorted(dfiles)]
 
-    hot = [Hotspot(f.path, f.commits_90d, f.loc, f.commits_90d * f.loc)
-           for f in files if f.commits_90d >= 1 and f.loc is not None and not f.generated]
+    hot = [
+        Hotspot(f.path, f.commits_90d, f.loc, f.commits_90d * f.loc)
+        for f in files
+        if f.commits_90d >= 1 and f.loc is not None and not f.generated
+    ]
     hot.sort(key=lambda h: (-h.score, h.path))
 
     return GitLayer(

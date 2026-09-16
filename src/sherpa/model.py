@@ -2,6 +2,7 @@
 
 Serialisierung ist deterministisch: sortierte Schlüssel, feste Einrückung, ``\\n`` am Ende.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,7 +22,7 @@ class TrunkInfo:
 
 @dataclass(frozen=True)
 class Windows:
-    as_of: str          # ISO-8601 UTC; Ende beider Fenster
+    as_of: str  # ISO-8601 UTC; Ende beider Fenster
     since_90d: str
     since_30d: str
 
@@ -29,17 +30,17 @@ class Windows:
 @dataclass(frozen=True)
 class FileStat:
     path: str
-    loc: int | None     # None = binär
-    generated: bool     # matcht ein Generated-Glob (config.GENERATED_DEFAULT + sherpa.toml); kein Hotspot
+    loc: int | None  # None = binär
+    generated: bool  # matcht ein Generated-Glob (config.GENERATED_DEFAULT + sherpa.toml); kein Hotspot
     commits_90d: int
     commits_30d: int
     authors_90d: int
-    last_change: str | None   # ISO-8601 UTC des letzten Commits im 90d-Fenster, sonst None
+    last_change: str | None  # ISO-8601 UTC des letzten Commits im 90d-Fenster, sonst None
 
 
 @dataclass(frozen=True)
 class DirStat:
-    path: str           # "src/Foo" — Tiefe 1 und 2, ohne Slash am Ende; "" = Wurzel
+    path: str  # "src/Foo" — Tiefe 1 und 2, ohne Slash am Ende; "" = Wurzel
     files: int
     loc: int
     commits_90d: int
@@ -51,31 +52,31 @@ class Hotspot:
     path: str
     commits_90d: int
     loc: int
-    score: int          # commits_90d * loc (Tornhill: Churn × Grösse als Komplexitäts-Proxy)
+    score: int  # commits_90d * loc (Tornhill: Churn × Grösse als Komplexitäts-Proxy)
 
 
 @dataclass(frozen=True)
 class ModuleStat:
     id: str
-    path: str               # Verzeichnis des Manifests, "" = Wurzel
-    kind: str               # dotnet | python | node | go | rust | java
+    path: str  # Verzeichnis des Manifests, "" = Wurzel
+    kind: str  # dotnet | python | node | go | rust | java
     manifest: str
-    is_test: bool           # eigenes Test-Modul (dotnet)
+    is_test: bool  # eigenes Test-Modul (dotnet)
     files: int
     loc: int
-    test_files: int         # Testdateien innerhalb des Moduls
-    deps: list[str]         # Modul-ids im Repo
+    test_files: int  # Testdateien innerhalb des Moduls
+    deps: list[str]  # Modul-ids im Repo
     dependents: list[str]
-    tested_by: list[str]    # Test-Module, die dieses Modul referenzieren
+    tested_by: list[str]  # Test-Module, die dieses Modul referenzieren
     commits_90d: int
     commits_30d: int
     authors_90d: int
-    hotspots: list[str]     # Top-Pfade nach commits×loc innerhalb des Moduls
+    hotspots: list[str]  # Top-Pfade nach commits×loc innerhalb des Moduls
 
 
 @dataclass(frozen=True)
 class Conventions:
-    languages: dict[str, int]   # Sprache → LOC, absteigend
+    languages: dict[str, int]  # Sprache → LOC, absteigend
     ci: list[str]
     containers: list[str]
 
@@ -99,8 +100,8 @@ class GitLayer:
 class Model:
     sherpa: str
     schema_version: int
-    repo: str           # Basename des Repo-Verzeichnisses
-    origin: str         # URL von origin
+    repo: str  # Basename des Repo-Verzeichnisses
+    origin: str  # URL von origin
     git: GitLayer
     modules: list[ModuleStat] = field(default_factory=list)
     conventions: Conventions = field(default_factory=lambda: Conventions({}, [], []))

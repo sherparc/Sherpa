@@ -3,6 +3,7 @@
 Grundsatz (Trunk-Disziplin, ADR-0003): gemessen wird immer gegen ``origin/<trunk>``,
 nie gegen den lokalen ``HEAD`` — der steht oft auf einem Task-Branch.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -20,9 +21,9 @@ class GitError(RuntimeError):
 
 @dataclass(frozen=True)
 class Trunk:
-    ref: str      # z. B. "origin/main"
-    source: str   # "override" | "origin/HEAD" | "candidate"
-    rev: str      # voller SHA
+    ref: str  # z. B. "origin/main"
+    source: str  # "override" | "origin/HEAD" | "candidate"
+    rev: str  # voller SHA
 
 
 def _git(repo: Path, *args: str) -> str:

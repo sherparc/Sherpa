@@ -1,20 +1,28 @@
 """Fixture-Repos werden programmatisch gebaut — keine Binär-Fixtures, jeder Lauf identisch."""
+
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
 import pytest
 
 ENV = {
-    "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
-    "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z",
+    "GIT_AUTHOR_NAME": "t",
+    "GIT_AUTHOR_EMAIL": "t@t",
+    "GIT_COMMITTER_NAME": "t",
+    "GIT_COMMITTER_EMAIL": "t@t",
+    "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+    "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z",
     "HOME": "/nonexistent",  # keine User-gitconfig einlesen
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_NOSYSTEM": "1",
 }
 
 
 def git(repo: Path, *args: str, date: str | None = None, author: str | None = None) -> str:
-    env = dict(ENV)
+    env = {**os.environ, **ENV}  # ergänzen, nicht ersetzen: Windows braucht PATH/SYSTEMROOT für git
     if date:
         env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = date
     if author:
@@ -23,8 +31,14 @@ def git(repo: Path, *args: str, date: str | None = None, author: str | None = No
     return r.stdout.strip()
 
 
-def commit(repo: Path, msg: str, files: dict[str, str | bytes] | None = None, *,
-           date: str | None = None, author: str | None = None) -> str:
+def commit(
+    repo: Path,
+    msg: str,
+    files: dict[str, str | bytes] | None = None,
+    *,
+    date: str | None = None,
+    author: str | None = None,
+) -> str:
     """Commit mit festem Datum/Autor — Fixture-SHAs sind damit über Läufe hinweg identisch."""
     for name, content in (files or {"f.txt": msg}).items():
         p = repo / name
@@ -41,6 +55,7 @@ def commit(repo: Path, msg: str, files: dict[str, str | bytes] | None = None, *,
 @pytest.fixture
 def make_origin(tmp_path: Path):
     """Bare-Origin mit Branches anlegen; gibt (origin_path, {branch: sha}) zurück."""
+
     def _make(branches: tuple[str, ...] = ("main",)) -> tuple[Path, dict[str, str]]:
         work = tmp_path / "seed"
         work.mkdir()
@@ -53,16 +68,19 @@ def make_origin(tmp_path: Path):
         origin = tmp_path / "origin.git"
         git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
         return origin, shas
+
     return _make
 
 
 @pytest.fixture
 def make_clone(tmp_path: Path):
     """Klon von origin; ``set_head=False`` entfernt origin/HEAD (Fall: manuell hinzugefügtes Remote)."""
+
     def _make(origin: Path, set_head: bool = True) -> Path:
         dst = tmp_path / "clone"
         git(tmp_path, "clone", "-q", str(origin), str(dst))
         if not set_head:
             git(dst, "remote", "set-head", "origin", "-d")
         return dst
+
     return _make

@@ -6,15 +6,16 @@ Zeitachse (as_of = Committer-Datum des Trunk-Revs = 2026-03-01):
   2026-02-20  in 30d            src/a/hot.py (Autor B), bin.dat (binär)
   2026-03-01  in 30d            src/a/hot.py (Autor A)   ← Trunk-Rev
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from sherpa.gitinfo import resolve_trunk
 from sherpa.config import GENERATED_DEFAULT
+from sherpa.gitinfo import resolve_trunk
 from sherpa.scan.t0_git import blob_locs, is_generated, list_files, log_since, scan_git
 from tests.conftest import commit, git
 
@@ -29,7 +30,7 @@ def fixture_repo(tmp_path: Path) -> Path:
     commit(work, "c0", {"src/a/old.py": "x = 1\n", "README.md": "# r\n"}, date=D0, author="A")
     commit(work, "c1", {"src/a/hot.py": "a\nb\nc\n", "src/b/b.py": "b\n"}, date=D1, author="A")
     commit(work, "c2", {"src/a/hot.py": "a\nb\nc\nd\n", "bin.dat": b"\x00\x01\x02"}, date=D2, author="B")
-    commit(work, "c3", {"src/a/hot.py": "a\nb\nc\nd\ne"}, date=D3, author="A")   # ohne \n am Ende → 5 LOC
+    commit(work, "c3", {"src/a/hot.py": "a\nb\nc\nd\ne"}, date=D3, author="A")  # ohne \n am Ende → 5 LOC
     origin = tmp_path / "origin.git"
     git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
     clone = tmp_path / "clone"
@@ -55,7 +56,7 @@ def test_blob_locs_empty_input(fixture_repo: Path):
 
 def test_log_since_excludes_old_commits(fixture_repo: Path):
     t = resolve_trunk(fixture_repo)
-    since = datetime(2025, 12, 1, tzinfo=timezone.utc)
+    since = datetime(2025, 12, 1, tzinfo=UTC)
     cs = log_since(fixture_repo, t.rev, since)
     assert [c.author for c in cs] == ["A", "B", "A"]
     assert cs[0].files == ("src/a/hot.py",)
@@ -90,7 +91,7 @@ def test_scan_git_dir_aggregates(fixture_repo: Path):
     assert (by[""].files, by[""].loc, by[""].commits_90d, by[""].commits_30d) == (5, 8, 3, 2)
     assert (by["src/a"].files, by["src/a"].loc, by["src/a"].commits_90d, by["src/a"].commits_30d) == (2, 6, 3, 2)
     assert (by["src/b"].files, by["src/b"].commits_90d, by["src/b"].commits_30d) == (1, 1, 0)
-    assert by["src"].commits_90d == 3   # ein Commit zählt je Verzeichnis nur einmal
+    assert by["src"].commits_90d == 3  # ein Commit zählt je Verzeichnis nur einmal
 
 
 def test_scan_git_hotspots_ordered_and_text_only(fixture_repo: Path):
@@ -99,17 +100,20 @@ def test_scan_git_hotspots_ordered_and_text_only(fixture_repo: Path):
     assert "bin.dat" not in {h.path for h in g.hotspots}
 
 
-@pytest.mark.parametrize("path,expected", [
-    ("src/A/Properties/Resources.Designer.cs", True),
-    ("src/Data/Migrations/20260101_Init.cs", True),
-    ("src/Data/AppDbContextModelSnapshot.cs", True),
-    ("web/dist/app.min.js", True),
-    ("package-lock.json", True),
-    ("proto/x_pb2.py", True),
-    ("src/A/Service.cs", False),
-    ("src/Designer/Editor.cs", False),
-    ("README.md", False),
-])
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("src/A/Properties/Resources.Designer.cs", True),
+        ("src/Data/Migrations/20260101_Init.cs", True),
+        ("src/Data/AppDbContextModelSnapshot.cs", True),
+        ("web/dist/app.min.js", True),
+        ("package-lock.json", True),
+        ("proto/x_pb2.py", True),
+        ("src/A/Service.cs", False),
+        ("src/Designer/Editor.cs", False),
+        ("README.md", False),
+    ],
+)
 def test_is_generated_defaults(path, expected):
     assert is_generated(path, GENERATED_DEFAULT) is expected
 
@@ -123,7 +127,7 @@ def test_scan_git_generated_flag_excludes_from_hotspots(fixture_repo: Path):
     g = scan_git(fixture_repo, resolve_trunk(fixture_repo), generated=("src/a/hot.py",))
     by = {f.path: f for f in g.files}
     assert by["src/a/hot.py"].generated is True and by["src/b/b.py"].generated is False
-    assert by["src/a/hot.py"].commits_90d == 3            # Zählung bleibt
+    assert by["src/a/hot.py"].commits_90d == 3  # Zählung bleibt
     assert [h.path for h in g.hotspots] == ["src/b/b.py"]  # nur aus Hotspots raus
 
 
@@ -133,7 +137,7 @@ def test_scan_git_top_limits_hotspots(fixture_repo: Path):
 
 
 def test_scan_git_as_of_override_moves_windows(fixture_repo: Path):
-    as_of = datetime(2026, 2, 1, tzinfo=timezone.utc)   # c2/c3 liegen danach → nicht gezählt
+    as_of = datetime(2026, 2, 1, tzinfo=UTC)  # c2/c3 liegen danach → nicht gezählt
     g = scan_git(fixture_repo, resolve_trunk(fixture_repo), as_of=as_of)
     assert (g.commits_90d, g.commits_30d) == (1, 1)
     assert g.windows.as_of == "2026-02-01T00:00:00Z"
@@ -149,9 +153,9 @@ def test_scan_git_ignores_merge_commits_in_windows(fixture_repo: Path, tmp_path:
     git(other, "push", "-q", "origin", "main")
     git(fixture_repo, "fetch", "-q", "origin")
     g = scan_git(fixture_repo, resolve_trunk(fixture_repo))
-    assert g.commits_total == 6           # inkl. Merge
-    assert g.commits_90d == 4             # ohne Merge
-    assert g.windows.as_of == "2026-03-03T12:00:00Z"   # Merge-Commit ist der Trunk-Rev
+    assert g.commits_total == 6  # inkl. Merge
+    assert g.commits_90d == 4  # ohne Merge
+    assert g.windows.as_of == "2026-03-03T12:00:00Z"  # Merge-Commit ist der Trunk-Rev
     assert {f.path for f in g.files} >= {"src/b/new.py"}
 
 

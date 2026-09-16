@@ -4,7 +4,7 @@ import pytest
 
 from sherpa import gitinfo
 from sherpa.gitinfo import GitError, Trunk, resolve_trunk
-from tests.conftest import git, commit
+from tests.conftest import commit, git
 
 
 def test_not_a_repo(tmp_path: Path):
@@ -30,7 +30,7 @@ def test_candidate_order_when_no_origin_head(make_origin, make_clone):
     origin, shas = make_origin(("dev", "master"))
     clone = make_clone(origin, set_head=False)
     t = resolve_trunk(clone)
-    assert t.ref == "origin/master"          # master vor dev laut TRUNK_CANDIDATES
+    assert t.ref == "origin/master"  # master vor dev laut TRUNK_CANDIDATES
     assert t.source == "candidate"
     assert t.rev == shas["master"]
 

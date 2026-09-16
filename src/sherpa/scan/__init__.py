@@ -1,7 +1,8 @@
 """``sherpa scan`` — Codebase deterministisch erfassen. Schicht T0 (Git) in ``t0_git``."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sherpa import __version__, config, gitinfo
@@ -14,12 +15,18 @@ def parse_as_of(value: str) -> datetime:
     """``YYYY-MM-DD`` oder volles ISO-8601. Datum ohne Zeit = 00:00 UTC. Ohne Zeitzone = UTC."""
     dt = datetime.fromisoformat(value)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
-def scan(repo: Path, *, trunk: str | None = None, fetch: bool = True,
-         as_of: datetime | None = None, hotspots: int | None = None) -> Model:
+def scan(
+    repo: Path,
+    *,
+    trunk: str | None = None,
+    fetch: bool = True,
+    as_of: datetime | None = None,
+    hotspots: int | None = None,
+) -> Model:
     """Reihenfolge: Konfig laden → (fetch) → Trunk (ADR-0003) → T0 (Git) → T1 (Module, Konventionen).
 
     CLI-Argumente schlagen ``sherpa.toml``; ``as_of`` ohne Angabe = Committer-Datum des Trunk-Revs.

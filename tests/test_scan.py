@@ -1,4 +1,5 @@
 """Ende-zu-Ende: scan(), Determinismus, Konfig, Schema, CLI."""
+
 from __future__ import annotations
 
 import json
@@ -74,11 +75,14 @@ def test_scan_fetch_picks_up_upstream(clone: Path, tmp_path: Path):
     assert scan(clone, fetch=True).git.trunk.rev == new
 
 
-@pytest.mark.parametrize("value,expected", [
-    ("2026-03-01", "2026-03-01T00:00:00+00:00"),
-    ("2026-03-01T10:00:00", "2026-03-01T10:00:00+00:00"),
-    ("2026-03-01T10:00:00+02:00", "2026-03-01T08:00:00+00:00"),
-])
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("2026-03-01", "2026-03-01T00:00:00+00:00"),
+        ("2026-03-01T10:00:00", "2026-03-01T10:00:00+00:00"),
+        ("2026-03-01T10:00:00+02:00", "2026-03-01T08:00:00+00:00"),
+    ],
+)
 def test_parse_as_of(value, expected):
     assert parse_as_of(value).isoformat() == expected
 

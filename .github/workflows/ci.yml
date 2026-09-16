@@ -1,0 +1,39 @@
+# CI: Tests + Coverage-Gate + Lint auf Linux und Windows (docs/plan.md §5).
+# Windows ist Pflicht: Kunden-Rechner, Git-Pfade und \r\n sind die typischen Bruchstellen von T0/T1.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: pytest (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: git config --global init.defaultBranch main
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pytest -q --cov=sherpa --cov-report=term-missing --cov-fail-under=90
+
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .

@@ -12,6 +12,7 @@ Entscheidungen (Owner dieses Moduls):
 - Churn je Modul: ein Commit zählt je Modul einmal, wenn er mindestens eine Datei darin berührt.
 - Test-Erkennung: .NET über eigenes Test-Projekt (``tested_by``), sonst über Testdateien im Modul (``test_files``).
 """
+
 from __future__ import annotations
 
 import json
@@ -27,49 +28,115 @@ from pathlib import Path
 from sherpa.model import FileStat, ModuleStat
 from sherpa.scan.t0_git import T0Data, blob_contents
 
-SKIP_DIRS = ("node_modules", "vendor", "target", "bin", "obj", "dist", "build", ".venv", "venv",
-             "__pycache__", ".git", "packages", "Debug", "Release")
+SKIP_DIRS = (
+    "node_modules",
+    "vendor",
+    "target",
+    "bin",
+    "obj",
+    "dist",
+    "build",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".git",
+    "packages",
+    "Debug",
+    "Release",
+)
 
 # Manifest-Dateiname → Art. Reihenfolge egal, Erkennung über Dateiname bzw. Endung.
 MANIFEST_KINDS: dict[str, str] = {
-    "pyproject.toml": "python", "setup.py": "python",
+    "pyproject.toml": "python",
+    "setup.py": "python",
     "package.json": "node",
     "go.mod": "go",
     "Cargo.toml": "rust",
-    "pom.xml": "java", "build.gradle": "java", "build.gradle.kts": "java",
+    "pom.xml": "java",
+    "build.gradle": "java",
+    "build.gradle.kts": "java",
 }
 MANIFEST_SUFFIXES: dict[str, str] = {".csproj": "dotnet", ".fsproj": "dotnet", ".vbproj": "dotnet"}
 
-TEST_FILE_GLOBS = ("test_*.py", "*_test.py", "*_test.go", "*.test.js", "*.test.ts", "*.test.tsx",
-                   "*.spec.js", "*.spec.ts", "*Test.java", "*Tests.java", "*Test.kt",
-                   "*Tests.cs", "*Test.cs", "*_tests.rs", "*_test.rs")
+TEST_FILE_GLOBS = (
+    "test_*.py",
+    "*_test.py",
+    "*_test.go",
+    "*.test.js",
+    "*.test.ts",
+    "*.test.tsx",
+    "*.spec.js",
+    "*.spec.ts",
+    "*Test.java",
+    "*Tests.java",
+    "*Test.kt",
+    "*Tests.cs",
+    "*Test.cs",
+    "*_tests.rs",
+    "*_test.rs",
+)
 TEST_DIR_NAMES = ("tests", "test", "__tests__", "spec")
 DOTNET_TEST_PACKAGES = ("xunit", "nunit", "mstest", "tunit", "microsoft.net.test.sdk")
 
-CI_FILES = (".github/workflows/*", ".gitlab-ci.yml", "azure-pipelines*.yml", "Jenkinsfile",
-            ".circleci/config.yml", "bitbucket-pipelines.yml", ".drone.yml")
+CI_FILES = (
+    ".github/workflows/*",
+    ".gitlab-ci.yml",
+    "azure-pipelines*.yml",
+    "Jenkinsfile",
+    ".circleci/config.yml",
+    "bitbucket-pipelines.yml",
+    ".drone.yml",
+)
 CONTAINER_FILES = ("Dockerfile", "*.Dockerfile", "docker-compose*.yml", "docker-compose*.yaml", "compose*.yml")
 
-_EXT_LANG = {".cs": "csharp", ".fs": "fsharp", ".vb": "vb", ".py": "python", ".js": "javascript",
-             ".jsx": "javascript", ".ts": "typescript", ".tsx": "typescript", ".go": "go", ".rs": "rust",
-             ".java": "java", ".kt": "kotlin", ".rb": "ruby", ".php": "php", ".swift": "swift",
-             ".c": "c", ".h": "c", ".cpp": "cpp", ".hpp": "cpp", ".sql": "sql", ".sh": "shell",
-             ".ps1": "powershell", ".html": "html", ".css": "css", ".scss": "scss", ".md": "markdown",
-             ".yml": "yaml", ".yaml": "yaml", ".json": "json", ".xml": "xml", ".toml": "toml"}
+_EXT_LANG = {
+    ".cs": "csharp",
+    ".fs": "fsharp",
+    ".vb": "vb",
+    ".py": "python",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".go": "go",
+    ".rs": "rust",
+    ".java": "java",
+    ".kt": "kotlin",
+    ".rb": "ruby",
+    ".php": "php",
+    ".swift": "swift",
+    ".c": "c",
+    ".h": "c",
+    ".cpp": "cpp",
+    ".hpp": "cpp",
+    ".sql": "sql",
+    ".sh": "shell",
+    ".ps1": "powershell",
+    ".html": "html",
+    ".css": "css",
+    ".scss": "scss",
+    ".md": "markdown",
+    ".yml": "yaml",
+    ".yaml": "yaml",
+    ".json": "json",
+    ".xml": "xml",
+    ".toml": "toml",
+}
 
 
 @dataclass(frozen=True)
 class RawModule:
     id: str
-    path: str        # Verzeichnis, "" = Wurzel
+    path: str  # Verzeichnis, "" = Wurzel
     kind: str
     manifest: str
-    deps_by_manifest: tuple[str, ...]   # referenzierte Manifest-Pfade (dotnet, rust path-deps)
-    deps_by_name: tuple[str, ...]       # referenzierte Modulnamen (python, node, go, java)
+    deps_by_manifest: tuple[str, ...]  # referenzierte Manifest-Pfade (dotnet, rust path-deps)
+    deps_by_name: tuple[str, ...]  # referenzierte Modulnamen (python, node, go, java)
     is_test: bool
 
 
 # --------------------------------------------------------------------------- Manifest-Erkennung
+
 
 def manifest_kind(path: str) -> str | None:
     parts = path.split("/")
@@ -127,9 +194,9 @@ def parse_python(path: str, content: bytes) -> RawModule:
         proj, poetry = data.get("project", {}), data.get("tool", {}).get("poetry", {})
         name = proj.get("name") or poetry.get("name") or name
         for dep in proj.get("dependencies", []):
-            deps.append(re.split(r"[\s\[<>=!~;(]", dep, 1)[0])
+            deps.append(re.split(r"[\s\[<>=!~;(]", dep, maxsplit=1)[0])
         for group in proj.get("optional-dependencies", {}).values():
-            deps.extend(re.split(r"[\s\[<>=!~;(]", x, 1)[0] for x in group)
+            deps.extend(re.split(r"[\s\[<>=!~;(]", x, maxsplit=1)[0] for x in group)
         deps.extend(k for k in poetry.get("dependencies", {}) if k != "python")
         for grp in poetry.get("group", {}).values():
             deps.extend(grp.get("dependencies", {}))
@@ -154,7 +221,7 @@ def parse_go(path: str, content: bytes) -> RawModule:
     text = content.decode("utf-8", errors="replace")
     m = re.search(r"^module\s+(\S+)", text, re.M)
     name = m.group(1) if m else (posixpath.basename(d) if d else "root")
-    deps = set(re.findall(r"^\s*([\w.\-/]+\.[\w.\-/]+)\s+v[\w.\-+]+", text, re.M))     # require-Zeilen
+    deps = set(re.findall(r"^\s*([\w.\-/]+\.[\w.\-/]+)\s+v[\w.\-+]+", text, re.M))  # require-Zeilen
     deps.update(re.findall(r"^\s*replace\s+([\w.\-/]+)\s*=>", text, re.M))
     return RawModule(name, d, "go", path, (), tuple(sorted(deps)), False)
 
@@ -167,7 +234,7 @@ def parse_rust(path: str, content: bytes) -> RawModule | None:
         data = {}
     pkg = data.get("package")
     if not pkg:
-        return None                                   # reiner [workspace]-Root ist kein Modul
+        return None  # reiner [workspace]-Root ist kein Modul
     by_manifest, by_name = [], []
     for key in ("dependencies", "dev-dependencies", "build-dependencies"):
         for dep_name, spec in (data.get(key) or {}).items():
@@ -175,8 +242,15 @@ def parse_rust(path: str, content: bytes) -> RawModule | None:
                 by_manifest.append(posixpath.join(_norm_join(d, spec["path"]), "Cargo.toml"))
             else:
                 by_name.append(dep_name)
-    return RawModule(str(pkg.get("name") or posixpath.basename(d)), d, "rust", path,
-                     tuple(sorted(set(by_manifest))), tuple(sorted(set(by_name))), False)
+    return RawModule(
+        str(pkg.get("name") or posixpath.basename(d)),
+        d,
+        "rust",
+        path,
+        tuple(sorted(set(by_manifest))),
+        tuple(sorted(set(by_name))),
+        False,
+    )
 
 
 def parse_java(path: str, content: bytes) -> RawModule | None:
@@ -187,11 +261,13 @@ def parse_java(path: str, content: bytes) -> RawModule | None:
         root = ET.fromstring(content)
     except ET.ParseError:
         return RawModule(posixpath.basename(d) if d else "root", d, "java", path, (), (), False)
+
     def child(el, tag):
         for c in el:
             if _local_xml(c.tag) == tag:
                 return c
         return None
+
     art = child(root, "artifactId")
     name = (art.text or "").strip() if art is not None else (posixpath.basename(d) if d else "root")
     deps = []
@@ -204,8 +280,14 @@ def parse_java(path: str, content: bytes) -> RawModule | None:
     return RawModule(name, d, "java", path, (), tuple(sorted(set(deps))), False)
 
 
-PARSERS = {"dotnet": parse_dotnet, "python": parse_python, "node": parse_node,
-           "go": parse_go, "rust": parse_rust, "java": parse_java}
+PARSERS = {
+    "dotnet": parse_dotnet,
+    "python": parse_python,
+    "node": parse_node,
+    "go": parse_go,
+    "rust": parse_rust,
+    "java": parse_java,
+}
 
 
 def find_modules(paths: list[str], contents: dict[str, bytes | None]) -> list[RawModule]:
@@ -229,6 +311,7 @@ def find_modules(paths: list[str], contents: dict[str, bytes | None]) -> list[Ra
 
 
 # --------------------------------------------------------------------------- Auflösung + Aggregation
+
 
 def is_test_file(path: str) -> bool:
     parts = path.split("/")
@@ -262,7 +345,7 @@ def resolve_deps(modules: list[RawModule]) -> dict[str, list[str]]:
         deps: set[str] = set()
         for ref in m.deps_by_manifest:
             hit = by_manifest.get(ref) or by_manifest_ci.get(ref.lower())
-            if hit is None:                            # Fallback: Projektname = Dateistamm
+            if hit is None:  # Fallback: Projektname = Dateistamm
                 hit = by_name.get(posixpath.splitext(posixpath.basename(ref))[0])
             if hit and hit != m.id:
                 deps.add(hit)
@@ -274,8 +357,9 @@ def resolve_deps(modules: list[RawModule]) -> dict[str, list[str]]:
     return out
 
 
-def build_modules(data: T0Data, files: list[FileStat], contents: dict[str, bytes | None], *,
-                  hotspots_per_module: int = 3) -> list[ModuleStat]:
+def build_modules(
+    data: T0Data, files: list[FileStat], contents: dict[str, bytes | None], *, hotspots_per_module: int = 3
+) -> list[ModuleStat]:
     paths = list(data.paths)
     raw = find_modules(paths, contents)
     if not raw:
@@ -321,10 +405,20 @@ def build_modules(data: T0Data, files: list[FileStat], contents: dict[str, bytes
 
     return [
         ModuleStat(
-            id=m.id, path=m.path, kind=m.kind, manifest=m.manifest, is_test=m.is_test,
-            files=nfiles[m.id], loc=loc[m.id], test_files=tfiles[m.id],
-            deps=deps[m.id], dependents=sorted(dependents[m.id]), tested_by=sorted(tested_by[m.id]),
-            commits_90d=len(c90[m.id]), commits_30d=len(c30[m.id]), authors_90d=len(authors[m.id]),
+            id=m.id,
+            path=m.path,
+            kind=m.kind,
+            manifest=m.manifest,
+            is_test=m.is_test,
+            files=nfiles[m.id],
+            loc=loc[m.id],
+            test_files=tfiles[m.id],
+            deps=deps[m.id],
+            dependents=sorted(dependents[m.id]),
+            tested_by=sorted(tested_by[m.id]),
+            commits_90d=len(c90[m.id]),
+            commits_30d=len(c30[m.id]),
+            authors_90d=len(authors[m.id]),
             hotspots=[p for _, p in sorted(scored[m.id])[:hotspots_per_module]],
         )
         for m in sorted(raw, key=lambda m: (m.path, m.id))

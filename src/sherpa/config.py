@@ -7,6 +7,7 @@
     hotspots = 20      # Anzahl Hotspots im Modell
     generated = ["*.g.cs", "gen/**"]   # zusätzliche Globs für generierte Dateien (ergänzt GENERATED_DEFAULT)
 """
+
 from __future__ import annotations
 
 import tomllib
@@ -19,12 +20,34 @@ CONFIG_NAME = "sherpa.toml"
 # Werkzeug-Rauschen, keine Entwickler-Arbeit (Tornhill: Hotspots nur auf Hand-Code). fnmatch-Globs
 # gegen den vollen Repo-Pfad; "**" wird von fnmatch wie "*" behandelt (matcht auch über "/").
 GENERATED_DEFAULT: tuple[str, ...] = (
-    "*.Designer.cs", "*.g.cs", "*.g.i.cs", "*ModelSnapshot.cs", "*.resx",      # .NET, EF-Migrations
-    "*/Migrations/*.cs", "*.generated.*", "*.gen.*", "*_pb2.py", "*.pb.go",    # Migrationen, Codegen, protobuf
-    "*.min.js", "*.min.css", "*.bundle.js", "*.map",                             # Frontend-Bundles
-    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "uv.lock",
-    "Cargo.lock", "go.sum", "Gemfile.lock", "composer.lock", "packages.lock.json",
-    "*.snap", "*.svg", "*.csv", "*.sql.gz",
+    "*.Designer.cs",
+    "*.g.cs",
+    "*.g.i.cs",
+    "*ModelSnapshot.cs",
+    "*.resx",  # .NET, EF-Migrations
+    "*/Migrations/*.cs",
+    "*.generated.*",
+    "*.gen.*",
+    "*_pb2.py",
+    "*.pb.go",  # Migrationen, Codegen, protobuf
+    "*.min.js",
+    "*.min.css",
+    "*.bundle.js",
+    "*.map",  # Frontend-Bundles
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "poetry.lock",
+    "uv.lock",
+    "Cargo.lock",
+    "go.sum",
+    "Gemfile.lock",
+    "composer.lock",
+    "packages.lock.json",
+    "*.snap",
+    "*.svg",
+    "*.csv",
+    "*.sql.gz",
 )
 
 
@@ -47,5 +70,6 @@ def load(repo: Path) -> Config:
     raw = tomllib.loads(p.read_text(encoding="utf-8"))
     s = raw.get("scan", {})
     extra = tuple(str(g) for g in s.get("generated", ()))
-    return Config(scan=ScanConfig(trunk=s.get("trunk"), hotspots=int(s.get("hotspots", 20)),
-                                  generated=GENERATED_DEFAULT + extra))
+    return Config(
+        scan=ScanConfig(trunk=s.get("trunk"), hotspots=int(s.get("hotspots", 20)), generated=GENERATED_DEFAULT + extra)
+    )

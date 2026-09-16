@@ -9,3 +9,18 @@ build/
 .sherpa/
 tests/corpus/
 .coverage
+
+# Test/Lint-Caches und Reports
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+# lokale Claude-Code-Einstellungen (geteilte liegen in .claude/)
+.claude/settings.local.json
+# Geheimnisse / Umgebung
+.env
+.env.*
+# OS / Editoren
+.DS_Store
+Thumbs.db
+.vscode/
