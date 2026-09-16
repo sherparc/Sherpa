@@ -1,71 +1,65 @@
 <div align="center">
 
-# Sherpa
+# 🏔️ Sherpa
 
-**Sherpa liest eine Codebasis wie ein Senior-Engineer und schlägt daraus einen KI-Harness vor — Owner-Docs, Agents, Skills, Librarians, Evals — der erst nach deiner Freigabe angelegt wird.**
+**Dein Repository wächst. Deine KI-Agenten verlieren den Überblick.**
 
-[![CI](https://github.com/andreichirila/Sherpa/actions/workflows/ci.yml/badge.svg)](https://github.com/andreichirila/Sherpa/actions/workflows/ci.yml)
+Sherpa analysiert deine Codebasis deterministisch (wie CodeScene) und plant daraus die Wissensarchitektur für KI-Assistenten (wie Terraform): Owner-Docs, spezialisierte Agents, Skills, Librarians, Evals. Du prüfst den Plan — Sherpa richtet ihn nach deiner Freigabe ein.
+
+[![CI](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml/badge.svg)](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
-![Status: Scanner fertig, Planer in Arbeit](https://img.shields.io/badge/status-scanner%20fertig%20%C2%B7%20planer%20in%20Arbeit-orange)
-
-`scan` → `plan` → `apply`, wie `terraform plan/apply` — nur für Wissensarchitektur statt Infrastruktur.
+![Status: Scanner live, Planer in Arbeit](https://img.shields.io/badge/status-scanner%20live%20%C2%B7%20planer%20in%20Arbeit-orange)
 
 </div>
 
 ---
 
-## Was heute funktioniert
+## In 60 Sekunden zum KI-Harness
 
-Sherpa scannt sich selbst (echte Ausgabe, Stand `origin/main` `9612f03`):
+Heute live — Sherpa scannt sich selbst, echte Ausgabe auf `origin/main`:
 
 ```console
-$ sherpa scan . --no-fetch --out -
-… 20 Hotspots, 1 Module → -
+$ sherpa scan .
+… 20 Hotspots, 1 Module → .sherpa/codebase-model.json
 ```
 
-```jsonc
-{
-  "git": {
-    "trunk": { "ref": "origin/main", "source": "candidate", "rev": "9612f03…" },
-    "commits_total": 4,
-    "hotspots": [
-      { "path": "docs/plan.md",                 "commits_90d": 4, "loc": 238, "score": 952 },
-      { "path": "src/sherpa/scan/t1_modules.py", "commits_90d": 2, "loc": 449, "score": 898 }
-    ]
-  },
-  "modules": [
-    { "id": "sherpa", "kind": "python", "loc": 3129, "test_files": 8, "tested_by": [] }
-  ],
-  "conventions": { "ci": [".github/workflows/ci.yml"], "languages": { "python": 2027, "markdown": 602, "…": 0 } }
-}
+So sieht der ganze Weg aus, wenn M3 fertig ist (Zielbild, Ausgabe noch nicht real):
+
+```console
+$ sherpa plan .
+harness-plan.yaml — 3 Vorschläge, 2 begründete Neins
+  + owner-doc  Shop.Pricing        Rang 1/12 Churn ✓ · 214 Commits/90 T ✓
+  + agent      Shop.Pricing        Owner-Doc vorhanden ✓ · 5 Autoren ✓
+  + test-infra tests/Shop.Tests    mehr Commits als jedes Fachmodul ✓
+  - librarian  Shop.Core           Rang 4/12 ✗ · Boden 100 Commits ✗
+
+$ sherpa apply .           # Dry-Run: zeigt + ~ = ! je Datei
+$ sherpa apply . --yes     # legt .claude/** an, schreibt .sherpa/state.json
 ```
 
-| Kommando | Stand | Was es tut |
-|---|---|---|
-| `sherpa scan <repo>` | ✅ fertig | Deterministisches Codebase-Modell (`.sherpa/codebase-model.json`, Schema v2) |
-| `sherpa plan <repo>` | 🚧 M2, in Arbeit | Harness-Vorschläge mit Evidenz und Nein-Begründungen als YAML |
-| `sherpa apply <repo>` | ⏳ M3 | Freigegebenen Plan anlegen — Dry-Run als Default, idempotent, State-Datei |
-| `sherpa status <repo>` | ⏳ M3 | State gegen Dateisystem prüfen (Drift) |
-| `sherpa adopt <repo>` | ⏳ M3 | Bestehenden Harness übernehmen statt überschreiben |
-| `sherpa doctor` | ⏳ M2b | Umgebung prüfen (Git, Trunk, Provider, Update) |
+- `sherpa scan` 🟢 **Live** — deterministisches Codebase-Modell (Git-Churn, Hotspots, Module, Abhängigkeiten)
+- `sherpa plan` 🟡 **In Arbeit (M2)** — Vorschläge mit Evidenz und begründeten Neins als YAML
+- `sherpa apply` ⚪ **Geplant (M3)** — Dry-Run zuerst, idempotent, State-Datei
+- `sherpa status` · `sherpa adopt` ⚪ **Geplant (M3)** — Drift erkennen, bestehende Harnesse übernehmen
+- `sherpa doctor` ⚪ **Geplant (M2b)** — Umgebung prüfen, Update-Hinweis
 
-`plan`, `apply` und `status` sind heute Platzhalter und beenden mit Exit-Code 2. Die Meilensteine stehen in [docs/plan.md §3](docs/plan.md).
+Details je Kommando und die Meilensteine: [docs/plan.md](docs/plan.md).
 
 ## Quick Start
 
-Noch keine Release-Wheels (kommen mit M2b); Installation aus dem Repo:
+Direkt aus dem Repo, ohne Clone (Release-Wheels als Paket `sherpa-harness` kommen mit M2b):
 
 ```bash
-git clone git@github.com:andreichirila/Sherpa.git && cd Sherpa
-python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-.venv/bin/sherpa --version
+uv tool install git+https://github.com/sherparc/Sherpa.git     # oder: pipx install git+https://github.com/sherparc/Sherpa.git
+sherpa scan /pfad/zum/repo                                       # → /pfad/zum/repo/.sherpa/codebase-model.json
+sherpa scan /pfad/zum/repo --out -                               # JSON nach stdout, Zusammenfassung nach stderr
 ```
 
-Erstes Ergebnis in unter einer Minute — irgendein Repo mit einem `origin`-Remote:
+Zum Mitentwickeln klassisch:
 
 ```bash
-.venv/bin/sherpa scan /pfad/zum/repo            # → /pfad/zum/repo/.sherpa/codebase-model.json
-.venv/bin/sherpa scan /pfad/zum/repo --out -    # JSON nach stdout, Zusammenfassung nach stderr
+git clone git@github.com:sherparc/Sherpa.git && cd Sherpa
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 ```
 
 Optional `sherpa.toml` im Ziel-Repo:
@@ -93,6 +87,15 @@ Alle Felder sind im JSON-Schema beschrieben: [codebase-model.schema.json](src/sh
 
 ## Warum Sherpa
 
+Warum nicht einfach ein paar `.md`-Dateien für Claude oder Copilot schreiben?
+
+- **Kein Raten mehr.** Sherpa baut auf harten Daten — Commits, Autoren, LOC, Churn — nicht auf Bauchgefühl. Jeder Vorschlag trägt seine Evidenz, jedes Nein seine Begründung.
+- **Infrastructure as Code für Wissen.** `plan` → Freigabe → `apply`, wie Terraform. Du siehst jede Datei, bevor sie entsteht; Auto-Generated-Marker trennen Sherpas Anteil von deinem.
+- **Zerschiesst dir nicht das Repo.** Deterministisch gegen `origin/trunk`, lokale Branches unsichtbar, idempotent mit State-Datei, bestehende Harnesse werden übernommen statt überschrieben.
+- **Wächst mit.** Librarians halten Owner-Docs aktuell, Evals kommen aus dem Abhängigkeitsgraphen, und das Outcome zeigt, welche Harness-Teile wirklich helfen — das gibt es so am Markt nicht.
+
+Woher die Muster kommen:
+
 | Bewährt am Markt | Was Sherpa davon nimmt |
 |---|---|
 | Terraform `plan` / `apply` / `import` / State | Vorschlag vor Änderung, Freigabe, Idempotenz, `adopt` für bestehende Harnesse |
@@ -101,7 +104,6 @@ Alle Felder sind im JSON-Schema beschrieben: [codebase-model.schema.json](src/sh
 | Renovate | Librarians als Bots mit Scope und Takt |
 | `brew doctor` | `sherpa doctor` für das Onboarding |
 
-Was es so am Markt nicht gibt: Evals aus dem Abhängigkeitsgraphen ableiten und aus dem Outcome lernen, welche Harness-Teile wirklich helfen ([docs/plan.md §2.4–2.5](docs/plan.md)).
 
 ## Architektur
 
@@ -143,3 +145,9 @@ Vollständig mit Begründungen: [docs/plan.md](docs/plan.md) · jede Entscheidun
 ```
 
 CI läuft auf Linux und Windows mit Python 3.12 und 3.13; macOS ist in der Matrix vorbereitet und wird bei grossen Änderungen zugeschaltet. Test-Repos werden programmatisch erzeugt (kein Corpus im Repo). Arbeitsregeln für Menschen und Agenten: [CLAUDE.md](CLAUDE.md).
+
+`main` wird nur über Pull Requests mit Squash-Merge verändert. Einmal pro Clone den Guard aktivieren, der direkte Pushes nach `main` abweist:
+
+```bash
+git config core.hooksPath .githooks
+```

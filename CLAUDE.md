@@ -14,6 +14,8 @@ Plan und Architektur: `docs/plan.md`. Scanner: `docs/scan.md`. Entscheidungen: `
 - Sprachunabhängig: T0 (Git) und T1 (Manifeste) müssen ohne Sprach-Adapter funktionieren (`docs/plan.md` §2.1).
 - Modell-Zugriff nur über `sherpa/llm/` (ADR-0004); kein LangChain/LangGraph, kein Provider-Code ausserhalb.
 - Vor jedem Commit den Diff zeigen (`git diff --stat` + Kernpunkte) und Andrei fragen; erst nach seinem Ja committen und pushen.
+- Nie direkt auf `main` pushen: jeder Schritt läuft Branch `task/<thema>` → PR → Squash-Merge (Guard: `.githooks/pre-push`, aktiv über `git config core.hooksPath .githooks`). Remote ist `github.com/sherparc/Sherpa`.
+- Namensräume (ADR-0009): Produkt und CLI heissen `sherpa`, das Python-Paket `sherpa-harness`, die GitHub-Org `sherparc`.
 - Commit-Messages: 1 bis 3 ganze Sätze, nie ein `Co-Authored-By`-Trailer.
 - README ist Marketing und Wahrheit zugleich: Sie wird bei jedem Schritt mitgezogen (Status-Tabelle, Roadmap, Zahlen) und behauptet nie etwas, das nicht läuft — Beispiele sind echte Ausgaben, Badges nur für Dinge, die existieren.
 - Sprache in Docs und Commits: Deutsch.

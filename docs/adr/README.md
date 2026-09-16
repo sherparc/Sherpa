@@ -14,3 +14,4 @@ Entscheidungen hier festgehalten — was kein ADR hat, ist nicht entschieden.
 | [0006](0006-schwellen-relativ-mit-boden.md) | Schwellen relativ (Perzentil) mit absolutem Boden | akzeptiert |
 | [0007](0007-adopt-statt-ueberschreiben.md) | `sherpa adopt` übernimmt bestehende Harnesse, nie überschreiben | akzeptiert |
 | [0008](0008-dry-run-default-und-outcome-minimum.md) | `apply`: Dry-Run zuerst; Outcome-Minimum in jedem `apply` | akzeptiert |
+| [0009](0009-namensraeume-und-branch-schutz.md) | Produkt/CLI `sherpa`, Paket `sherpa-harness`, Org `sherparc`; `main` nur per PR, Pre-Push-Hook statt Ruleset | akzeptiert |

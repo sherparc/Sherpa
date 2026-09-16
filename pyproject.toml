@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sherpa"
+name = "sherpa-harness"  # PyPI-Name "sherpa" ist vergeben; Import-Paket und CLI bleiben "sherpa" (ADR-0009)
 version = "0.2.0"
 description = "Generischer Harness-Generator: Codebase ingestieren, Owner/Agents/Skills planen, nach Freigabe anlegen."
 requires-python = ">=3.12"

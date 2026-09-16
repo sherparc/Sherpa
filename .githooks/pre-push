@@ -1,0 +1,13 @@
+#!/bin/sh
+# Verweigert Pushes nach main. Aktivieren: git config core.hooksPath .githooks
+# Hintergrund: GitHub-Rulesets greifen auf privaten Repos im Free-Plan nicht (ADR-0009);
+# jeder Schritt geht Branch -> PR -> Squash-Merge. Notausgang bewusst nur: git push --no-verify.
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+    case "$remote_ref" in
+        refs/heads/main|refs/heads/master)
+            echo "pre-push: direkter Push nach ${remote_ref#refs/heads/} ist gesperrt — Branch anlegen und PR öffnen." >&2
+            exit 1
+            ;;
+    esac
+done
+exit 0
