@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sherpa"
+version = "0.1.0"
+description = "Generischer Harness-Generator: Codebase ingestieren, Owner/Agents/Skills planen, nach Freigabe anlegen."
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+sherpa = "sherpa.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=5", "jsonschema>=4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sherpa = ["schemas/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
