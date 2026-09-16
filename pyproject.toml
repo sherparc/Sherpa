@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sherpa-harness"  # the PyPI name "sherpa" is taken; import package and CLI stay "sherpa" (ADR-0009)
-version = "0.3.0"
-description = "Generischer Harness-Generator: Codebase ingestieren, Owner/Agents/Skills planen, nach Freigabe anlegen."
+version = "0.4.0"
+description = "Generic AI-harness generator: scan the codebase, plan owner docs, agents and skills, create them after approval."
 license = "LicenseRef-Proprietary"  # ADR-0010: proprietary until the public release
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
@@ -21,7 +21,7 @@ dev = ["pytest>=8", "pytest-cov>=5", "jsonschema>=4", "ruff>=0.6"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-sherpa = ["schemas/*.json"]
+sherpa = ["schemas/*.json", "apply/assets/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

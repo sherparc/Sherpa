@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "sherpa": "0.4.0",
+  "harness_rev": "29f20ebde7ce",
+  "plan": {
+    "trunk": "origin/main",
+    "rev": "29cbff09b83fc06d82c3dfcb350646dbd0202bb6",
+    "as_of": "2026-09-16T21:40:23Z"
+  },
+  "applied_at": "2026-09-16T22:34:27Z",
+  "files": {
+    ".claude/docs/modules/sherpa-harness.md": {
+      "mode": "blocks",
+      "origin": "generated",
+      "entry": "owner-doc:sherpa-harness:",
+      "blocks": {
+        "facts": "1d70bb53d0825f3a"
+      }
+    },
+    ".claude/hooks/sherpa-outcome.py": {
+      "mode": "managed",
+      "origin": "generated",
+      "hash": "ea614db31d052f0c"
+    },
+    ".claude/scripts/sherpa-check.py": {
+      "mode": "managed",
+      "origin": "generated",
+      "hash": "b4097850103e42be"
+    },
+    ".claude/settings.json": {
+      "mode": "json-hooks",
+      "origin": "generated",
+      "hash": "23ef47bc78d3cdd0"
+    },
+    ".sherpa/telemetry/.gitignore": {
+      "mode": "managed",
+      "origin": "generated",
+      "hash": "240a3e0d37d2e86b"
+    },
+    "CLAUDE.md": {
+      "mode": "blocks",
+      "origin": "generated",
+      "blocks": {
+        "harness": "5013ffa9e78fc96c"
+      }
+    }
+  }
+}

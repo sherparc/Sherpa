@@ -28,6 +28,8 @@ from sherpa.config import PlanConfig
 from sherpa.model import GeneratorStat, Model
 from sherpa.plan import PROPOSE, SKIP, Check, Entry, Plan
 
+MAX_NAMED = 12  # names in a note; the entries themselves list every unit
+
 COST = {
     "outcome": "hook set, label file, harness_rev in the state",
     "owner-doc": "1 owner doc (skeleton + scanner facts, maintained by sherpa)",
@@ -317,12 +319,15 @@ def build(model: Model, cfg: PlanConfig) -> Plan:
     kind_order = {k: i for i, k in enumerate(("outcome", "owner-doc", "agent", "librarian", "test-infra", "skill"))}
     entries.sort(key=lambda e: (e.default != PROPOSE, kind_order[e.kind], _pos(e, r90)))
 
-    dormant = [u.id for u in business if u.dormant]
+    dormant = sorted(u.id for u in business if u.dormant)
     notes = []
     if dormant:
+        names = ", ".join(dormant[:MAX_NAMED]) + (
+            f", … (+{len(dormant) - MAX_NAMED} more)" if len(dormant) > MAX_NAMED else ""
+        )
         notes.append(
             f"{len(dormant)} dormant units without owner doc (0 commits/90d, 0 dependents): "
-            f"{', '.join(sorted(dormant))} — the first commit turns them into a proposal."
+            f"{names} — the first commit turns them into a proposal; each is listed above as a no."
         )
     if out_of_reach["agent"] or out_of_reach["librarian"]:
         notes.append(

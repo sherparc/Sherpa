@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sherpa harness state",
+  "description": "What sherpa owns in the repo and the hash it wrote (.sherpa/state.json). Written by `sherpa apply`, read by `apply`, `status` and the outcome hook (harness_rev).",
+  "type": "object",
+  "required": ["schema_version", "sherpa", "harness_rev", "plan", "applied_at", "files"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "sherpa": {"type": "string", "description": "sherpa version that wrote the state"},
+    "harness_rev": {"type": "string", "pattern": "^[0-9a-f]{12}$", "description": "hash over every managed file/block hash plus the sherpa version; stamped on outcome labels"},
+    "plan": {
+      "type": "object",
+      "description": "trunk, rev and as_of of the applied plan",
+      "additionalProperties": {"type": "string"}
+    },
+    "applied_at": {"type": "string", "description": "ISO-8601 UTC of the last write — the only clock in apply"},
+    "files": {
+      "type": "object",
+      "description": "repo-relative path (\"/\" separated) → record",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["mode", "origin"],
+        "additionalProperties": false,
+        "properties": {
+          "mode": {"enum": ["managed", "blocks", "json-hooks"], "description": "managed = whole file; blocks = marked blocks only; json-hooks = merged hook entries"},
+          "origin": {"enum": ["generated", "adopted"]},
+          "entry": {"type": "string", "description": "kind/target/scope of the plan entry; absent for base files"},
+          "hash": {"type": "string", "pattern": "^[0-9a-f]{16}$", "description": "content hash, line endings normalised (managed, json-hooks)"},
+          "blocks": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{16}$"}, "description": "block name → hash of the inner text"}
+        }
+      }
+    }
+  }
+}

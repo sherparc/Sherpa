@@ -193,6 +193,9 @@ def test_dormant_module_gets_visible_no_and_note_but_no_agent_or_librarian_entry
     assert "Flips when: commits/90d ≥ 1 or dependents ≥ 1" in e.reason
     assert "Idle" not in by_kind(p, "agent") and "Idle" not in by_kind(p, "librarian")
     assert any(n.startswith("1 dormant units without owner doc") and "Idle" in n for n in p.notes)
+    many = model([mod(f"m{i:02d}", f"m{i:02d}") for i in range(15)] + [mod("live", "live", c90=5)])
+    (note,) = [n for n in build_plan(many).notes if n.startswith("15 dormant")]
+    assert "m11, … (+3 more)" in note and "m12" not in note
     assert by_kind(p, "owner-doc")["Live"].default == PROPOSE
 
 
@@ -380,7 +383,7 @@ def test_render_console_marks_decisions_and_notes():
     assert out.startswith("harness-plan.yaml — 2 proposals, 3 reasoned no's\n")  # Idle dormant; A: agent, librarian
     assert "  + owner-doc  A     1 commits/90d, 0 dependents ✓ [accept]\n" in out
     assert "  - owner-doc  Idle  0 commits/90d, 0 dependents ✗\n" in out
-    assert out.rstrip().endswith("— the first commit turns them into a proposal.")
+    assert out.rstrip().endswith("— the first commit turns them into a proposal; each is listed above as a no.")
 
 
 # ---------------------------------------------------------------- configuration
