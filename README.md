@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🏔️ Sherpa
+# Sherpa
+
+<img src="assets/sherpa-mark.png" width="132" alt="Sherpa">
 
 **Dein Repository wächst. Deine KI-Agenten verlieren den Überblick.**
 
@@ -9,7 +11,6 @@ Sherpa analysiert deine Codebasis deterministisch (wie CodeScene) und plant dara
 [![CI](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml/badge.svg)](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 ![Status: Scanner live, Planer in Arbeit](https://img.shields.io/badge/status-scanner%20live%20%C2%B7%20planer%20in%20Arbeit-orange)
-
 </div>
 
 ---
