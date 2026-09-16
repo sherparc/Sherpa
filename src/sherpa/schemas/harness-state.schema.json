@@ -9,6 +9,8 @@
     "schema_version": {"const": 1},
     "sherpa": {"type": "string", "description": "sherpa version that wrote the state"},
     "harness_rev": {"type": "string", "pattern": "^[0-9a-f]{12}$", "description": "hash over every managed file/block hash plus the sherpa version; stamped on outcome labels"},
+    "home": {"enum": [".agents", ".claude", ""], "description": "where owner docs, skills and the checker copy live (ADR-0015); empty before the first apply"},
+    "targets": {"type": "array", "items": {"enum": ["claude", "agents-md"]}, "description": "runtimes projected into: Claude Code files, AGENTS.md hierarchy"},
     "plan": {
       "type": "object",
       "description": "trunk, rev and as_of of the applied plan",

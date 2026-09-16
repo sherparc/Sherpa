@@ -1,20 +1,24 @@
 {
   "schema_version": 1,
   "sherpa": "0.4.0",
-  "harness_rev": "1646a04d852a",
+  "harness_rev": "368a9f1eeb19",
+  "home": ".claude",
+  "targets": [
+    "claude"
+  ],
   "plan": {
     "trunk": "origin/main",
-    "rev": "8d8f96e253954104000c6d6472e5ad4e20d3ed88",
-    "as_of": "2026-09-16T22:43:37Z"
+    "rev": "d0c3df5753ae9450b55146d1812e7bed9d9d864f",
+    "as_of": "2026-09-16T23:01:08Z"
   },
-  "applied_at": "2026-09-16T22:48:07Z",
+  "applied_at": "2026-09-16T23:09:20Z",
   "files": {
     ".claude/docs/modules/sherpa-harness.md": {
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:sherpa-harness:",
       "blocks": {
-        "facts": "77cabfbfaac59ca2"
+        "facts": "18ffd4fbd2cfb905"
       }
     },
     ".claude/hooks/sherpa-outcome.py": {
@@ -25,7 +29,7 @@
     ".claude/scripts/sherpa-check.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "b4097850103e42be"
+      "hash": "43f6b050b5da4948"
     },
     ".claude/settings.json": {
       "mode": "json-hooks",

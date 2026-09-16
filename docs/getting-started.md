@@ -73,26 +73,34 @@ Dry run first — every file with `+ new`, `~ updated`, `= unchanged` or `! skip
 question:
 
 ```console
-sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 10 files
-  + .claude/agents/pay.md                                 agent pay                     new
-  + .claude/docs/modules/core.md                          owner-doc core                new
-  + .claude/docs/modules/pay.md                           owner-doc pay                 new
+targets: claude, agents-md · home: .agents
+sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 18 files
+  + .agents/docs/modules/core.md                          owner-doc core                new
+  + .agents/docs/modules/pay.md                           owner-doc pay                 new
+  + .agents/docs/modules/suite.md                         test-infra suite              new
   …
-  + CLAUDE.md                                             harness                       new
-10 to add, 0 to change, 0 unchanged, 0 skipped.
+  + svc/pay/CLAUDE.md                                     owner-doc pay                 new
+  + tests/suite/AGENTS.md                                 test-infra suite              new
+  + tests/suite/CLAUDE.md                                 test-infra suite              new
+18 to add, 0 to change, 0 unchanged, 0 skipped.
 apply? [y/N] y
 check: 0 FAIL, 0 WARN
-10 files written · harness_rev f5c1cf090666 → .sherpa/state.json
+18 files written · harness_rev c38498363846 → .sherpa/state.json
 ```
 
-Sherpa now owns exactly the marked blocks inside those files (`<!-- sherpa:begin facts -->` …
+The first line is the layout Sherpa resolved: owner docs and skills live under `.agents/` (the directory Codex
+and the AGENTS.md family read) or `.claude/` — whichever your repo already has; Sherpa asks when it has both or
+neither, `.agents` being the default — and the
+files are projected for the runtimes it detected — Claude Code (`.claude/agents`, hooks, `CLAUDE.md`) and the
+`AGENTS.md` family (a nested `AGENTS.md` per module, loaded by Codex, Cursor, Gemini CLI, Copilot when they work
+there). Sherpa owns exactly the marked blocks inside those files (`<!-- sherpa:begin facts -->` …
 `<!-- sherpa:end facts -->`) plus its own scripts; every other line is yours. Write your knowledge into the owner
 docs' `structure`, `rules`, `key services` sections — the next `apply` refreshes the facts block and leaves your
 text alone.
 
 ## 5. Commit
 
-Commit `.sherpa/harness-plan.yaml`, `.sherpa/state.json`, `.claude/**` and `CLAUDE.md`. Do **not** commit
+Commit `.sherpa/harness-plan.yaml`, `.sherpa/state.json`, `.agents/**`, `.claude/**` and the `AGENTS.md`/`CLAUDE.md` files. Do **not** commit
 `.sherpa/codebase-model.json` (it is regenerated from the trunk) — add `.sherpa/codebase-model.json` to your
 `.gitignore`. Telemetry under `.sherpa/telemetry/` ignores itself.
 

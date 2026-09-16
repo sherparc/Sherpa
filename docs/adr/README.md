@@ -20,3 +20,5 @@ no ADR is not decided.
 | [0012](0012-plan-units-visibility-decisions.md) | Plan units (modules + directories), dormant = visible no, author floor, no's only within reach, `decision` survives re-plan | accepted |
 | [0013](0013-managed-blocks-and-single-source-checker.md) | `apply` owns marked blocks, not files; one checker source deployed as a delegating copy; rollback only on new FAILs; Terraform-style selection | accepted |
 | [0014](0014-owner-doc-floor-by-files.md) | Owner docs need ≥ 5 files unless something depends on the unit; small units listed as no's | accepted |
+| [0015](0015-target-layer-neutral-core.md) | Runtime-neutral core under `.agents`/`.claude` (`home`), adapters per target (`claude`, `agents-md`), nested AGENTS.md/CLAUDE.md per unit, ask when both homes exist | accepted |
+| [0016](0016-never-overwrite-only-add.md) | In the user's repository Sherpa never overwrites what exists — it creates, appends, merges, and rewrites only its own unchanged bytes | accepted |

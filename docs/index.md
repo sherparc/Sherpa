@@ -8,7 +8,7 @@ when the two have drifted apart.
 ```
 sherpa scan   ──►  .sherpa/codebase-model.json   what the repo is: modules, churn, hotspots, dependencies, generators
 sherpa plan   ──►  .sherpa/harness-plan.yaml     what the harness should contain: proposals and reasoned no's with evidence
-sherpa apply  ──►  .claude/** + .sherpa/state.json   the approved harness: owner docs, agents, skills, outcome hook
+sherpa apply  ──►  .agents/** · .claude/** · AGENTS.md · CLAUDE.md + .sherpa/state.json   the approved harness
 sherpa status ──►  drift, checker findings, outcome labels per harness version
 sherpa check  ──►  structural rules for .claude/** (also runs without sherpa installed)
 ```
@@ -27,7 +27,7 @@ One page per command: synopsis, every option, inputs and outputs, exit codes, re
 |---|---|---|
 | `sherpa scan` | deterministic codebase model from `origin/<trunk>` | [commands/scan.md](commands/scan.md) |
 | `sherpa plan` | proposals and reasoned no's with evidence; decisions survive a re-plan | [commands/plan.md](commands/plan.md) |
-| `sherpa apply` | dry run, then files under `.claude/` and the state; managed blocks; outcome hook | [commands/apply.md](commands/apply.md) |
+| `sherpa apply` | dry run, then the harness files (neutral core under `.agents/` or `.claude/`, projections for Claude Code and the AGENTS.md family) and the state; managed blocks; outcome hook | [commands/apply.md](commands/apply.md) |
 | `sherpa status` | drift between state, files and plan; checker; outcome labels | [commands/status.md](commands/status.md) |
 | `sherpa check` | structural rules C1–C8, standalone copy in the repo | [commands/check.md](commands/check.md) |
 

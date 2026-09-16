@@ -4,21 +4,21 @@ description: "Use this agent for work in svc/pay (pay). Trigger: changes to that
 # sherpa:begin knowledge
 knowledge:
   always:
-    - docs/modules/pay.md
+    - ../.agents/docs/modules/pay.md
   on_demand:
-    - skills/regenerate-django-migrations/SKILL.md
+    - ../.agents/skills/regenerate-django-migrations/SKILL.md
 # sherpa:end knowledge
 ---
 
 # pay — agent
 
 > Role: expert for `pay` (`svc/pay`). Facts do NOT live in this file — they live in
-> [docs/modules/pay.md](../docs/modules/pay.md); cite from there instead of from memory.
+> [.agents/docs/modules/pay.md](../../.agents/docs/modules/pay.md); cite from there instead of from memory.
 
 <!-- sherpa:begin manifest -->
 ## Knowledge manifest
 
-Read first: [docs/modules/pay.md](../docs/modules/pay.md).
+Read first: [.agents/docs/modules/pay.md](../../.agents/docs/modules/pay.md).
 Dependents that see your changes: `suite`.
 Scope: `svc/pay` (origin/main@REV, as of 2026-03-01).
 <!-- sherpa:end manifest -->

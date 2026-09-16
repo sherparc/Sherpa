@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sherpa import __version__
-from sherpa.apply.render import CHECK_SCRIPT
+from sherpa.apply.render import check_script
 from sherpa.apply.state import State
 from sherpa.check import FAIL, Finding
 from sherpa.check import check as run_check
@@ -59,9 +59,10 @@ def report(repo: Path, state: State, actions: list) -> Report:
     r.drift.sort(key=lambda d: d[1])
     r.findings = [f for f in run_check(repo) if f.rule != "C8"]  # drift above is the same information, sharper
     r.outcomes, r.corrections = _outcomes(repo / OUTCOMES)
-    deployed = _deployed_version(repo / CHECK_SCRIPT)
+    script = check_script(state.home or ".claude")
+    deployed = _deployed_version(repo / script)
     if deployed and deployed != __version__:
-        r.notes.append(f"{CHECK_SCRIPT} is sherpa {deployed}, installed is {__version__} — `sherpa apply` refreshes it")
+        r.notes.append(f"{script} is sherpa {deployed}, installed is {__version__} — `sherpa apply` refreshes it")
     return r
 
 

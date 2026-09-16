@@ -15,18 +15,17 @@ from pathlib import Path
 
 from sherpa import __version__
 from sherpa.apply.state import BLOCKS, JSON_HOOKS, MANAGED
+from sherpa.config import TARGETS
 from sherpa.model import DirStat, Model, ModuleStat
 from sherpa.plan import PROPOSE, Entry, Plan
 
 ASSETS = Path(__file__).parent / "assets"
 CLAUDE = ".claude"
-DOCS, AGENTS, SKILLS, HOOKS, SCRIPTS = (
-    f"{CLAUDE}/{d}" for d in ("docs/modules", "agents", "skills", "hooks", "scripts")
-)
+AGENTS = f"{CLAUDE}/agents"
 SETTINGS = f"{CLAUDE}/settings.json"
-CHECK_SCRIPT = f"{SCRIPTS}/sherpa-check.py"
-OUTCOME_HOOK = f"{HOOKS}/sherpa-outcome.py"
+OUTCOME_HOOK = f"{CLAUDE}/hooks/sherpa-outcome.py"
 TELEMETRY_IGNORE = ".sherpa/telemetry/.gitignore"
+CHECK_SCRIPT_NAME = "sherpa-check.py"
 HOOK_EVENTS = (
     ("UserPromptSubmit", ""),
     ("PostToolUse", "Bash|Edit|Write|MultiEdit"),
@@ -38,6 +37,10 @@ HOOK_COMMAND = (
     'sh -c \'command -v python3 >/dev/null 2>&1 && exec python3 "$0" || exec python "$0"\' '
     '"$CLAUDE_PROJECT_DIR/' + OUTCOME_HOOK + '"'
 )
+
+
+def check_script(home: str) -> str:
+    return f"{home}/scripts/{CHECK_SCRIPT_NAME}"
 
 
 @dataclass(frozen=True)
@@ -85,14 +88,29 @@ def _list(items: list[str], empty: str = "—") -> str:
 
 
 class Renderer:
-    def __init__(self, plan: Plan, model: Model, version: str = __version__) -> None:
+    """One neutral core (owner docs, skills, checker copy under ``home``) and one adapter per runtime target
+    (ADR-0015): ``claude`` = agents, hooks, ``CLAUDE.md`` root and nested; ``agents-md`` = ``AGENTS.md`` root and
+    nested. Every unit gets a proximity file per target so the runtime loads its facts when working there."""
+
+    def __init__(
+        self,
+        plan: Plan,
+        model: Model,
+        version: str = __version__,
+        *,
+        home: str = ".agents",
+        targets: tuple[str, ...] = TARGETS,
+    ) -> None:
         self.plan, self.model, self.version = plan, model, version
+        self.home, self.runtime_targets = home, tuple(targets)
         self.modules = {m.id: m for m in model.modules}
         self.dirs = {d.path: d for d in model.git.dirs}
         # No sherpa version in the stamp: an upgrade must not rewrite every facts block in the repo.
         self.stamp = f"{model.git.trunk.ref}@{model.git.trunk.rev[:10]}, as of {model.git.windows.as_of[:10]}"
         self.entries = selected(plan)
         self.slugs = self._slugs()
+        self.units = [e for e in self.entries if e.kind in ("owner-doc", "test-infra")]
+        self.docs = {e.target: self.doc_path(e) for e in self.units}  # unit → owner doc path
 
     # ------------------------------------------------------------ naming
 
@@ -108,82 +126,186 @@ class Renderer:
         return out
 
     def doc_path(self, e: Entry) -> str:
-        return f"{DOCS}/{self.slugs[entry_key(e)]}.md"
+        return f"{self.home}/docs/modules/{self.slugs[entry_key(e)]}.md"
 
-    # ------------------------------------------------------------ targets
+    def skill_path(self, e: Entry) -> str:
+        return f"{self.home}/skills/{self.slugs[entry_key(e)]}/SKILL.md"
+
+    def librarian_path(self, e: Entry) -> str:
+        return f"{self.home}/skills/{self.slugs[entry_key(e)]}-sync/SKILL.md"
+
+    # ------------------------------------------------------------ composition
 
     def targets(self) -> list[Target]:
-        out = list(self.base_targets())
-        docs: dict[str, str] = {}  # unit target → doc path, for agents/librarians pointing at their owner doc
-        for e in self.entries:
-            if e.kind in ("owner-doc", "test-infra"):
-                docs[e.target] = self.doc_path(e)
-        for e in self.entries:
-            if e.kind in ("owner-doc", "test-infra"):
-                out.append(self.owner_doc(e))
-            elif e.kind == "agent":
-                out.append(self.agent(e, docs.get(e.target)))
-            elif e.kind == "librarian":
-                out.append(self.librarian(e, docs.get(e.target)))
-            elif e.kind == "skill":
-                out.append(self.skill(e))
+        out = list(self.core_targets())
+        if "claude" in self.runtime_targets:
+            out.extend(self.claude_targets())
+        if "agents-md" in self.runtime_targets:
+            out.extend(self.agents_md_targets())
         out.sort(key=lambda t: t.path)
         return out
 
-    def base_targets(self) -> list[Target]:
-        """Always part of a harness: outcome minimum (ADR-0008), the checker copy, the CLAUDE.md block."""
+    def core_targets(self) -> list[Target]:
+        """Runtime-neutral: owner docs, skills, the checker copy, the telemetry ignore file."""
         from sherpa import check
 
-        check_src = (
-            Path(check.__file__)
-            .read_text(encoding="utf-8")
-            .replace('SHERPA_VERSION = "dev"', f'SHERPA_VERSION = "{self.version}"', 1)
-        )
-        hook_src = (
-            (ASSETS / "sherpa-outcome.py")
-            .read_text(encoding="utf-8")
-            .replace('SHERPA_VERSION = "dev"', f'SHERPA_VERSION = "{self.version}"', 1)
-        )
+        check_src = _stamped(Path(check.__file__).read_text(encoding="utf-8"), self.version)
+        out = [
+            Target(check_script(self.home), MANAGED, None, check_src),
+            Target(TELEMETRY_IGNORE, MANAGED, None, "*\n!.gitignore\n"),
+        ]
+        for e in self.entries:
+            if e.kind in ("owner-doc", "test-infra"):
+                out.append(self.owner_doc(e))
+            elif e.kind == "librarian":
+                out.append(self.librarian(e, self.docs.get(e.target)))
+            elif e.kind == "skill":
+                out.append(self.skill(e))
+        return out
+
+    # ------------------------------------------------------------ target: claude
+
+    def claude_targets(self) -> list[Target]:
+        """Claude Code: subagents, the outcome hook (the only runtime with hooks), CLAUDE.md root and nested,
+        and — when the core lives elsewhere — a stub per skill so ``.claude/skills/`` still lists it."""
+        hook_src = _stamped((ASSETS / "sherpa-outcome.py").read_text(encoding="utf-8"), self.version)
         hooks = {
             event: [{"matcher": matcher, "hooks": [{"type": "command", "command": HOOK_COMMAND, "timeout": 10}]}]
             if matcher
             else [{"hooks": [{"type": "command", "command": HOOK_COMMAND, "timeout": 10}]}]
             for event, matcher in HOOK_EVENTS
         }
-        claude_md = html_block(
-            "harness",
-            "\n".join(
-                [
-                    "## AI harness (managed by sherpa)",
-                    "",
-                    "Module facts live in `.claude/docs/modules/` — one owner doc per module, the single place",
-                    "for a fact. Agents in `.claude/agents/` carry a role and a knowledge manifest, never facts;",
-                    "skills in `.claude/skills/` are procedures. Blocks between `sherpa:begin` and `sherpa:end`",
-                    "markers are regenerated by `sherpa apply` — write outside them. Integrity: `sherpa status`",
-                    f"or `python3 {CHECK_SCRIPT}`.",
-                ]
-            ),
-        )
-        return [
-            Target(CHECK_SCRIPT, MANAGED, None, check_src),
+        out = [
             Target(OUTCOME_HOOK, MANAGED, None, hook_src),
-            Target(TELEMETRY_IGNORE, MANAGED, None, "*\n!.gitignore\n"),
             Target(SETTINGS, JSON_HOOKS, None, hooks=hooks),
-            Target(
-                "CLAUDE.md",
-                BLOCKS,
-                None,
-                self.claude_md_seed(claude_md),
-                {"harness": _inner(claude_md)},
-                append=True,
-            ),
+            self.root_file("CLAUDE.md", self.claude_md_overview()),
         ]
+        for e in self.entries:
+            if e.kind == "agent":
+                out.append(self.agent(e, self.docs.get(e.target)))
+        for e in self.units:
+            if e.scope:
+                out.append(self.nested_claude_md(e))
+        if self.home != CLAUDE:
+            for e in self.entries:
+                if e.kind in ("skill", "librarian"):
+                    out.append(self.skill_stub(e))
+        return out
 
-    def claude_md_seed(self, block: str) -> str:
-        """A repo with AGENTS.md (the cross-tool convention) keeps it as the source: CLAUDE.md imports it."""
-        has_agents_md = any(f.path == "AGENTS.md" for f in self.model.git.files)
-        head = f"# {self.model.repo}\n\n" + ("@AGENTS.md\n\n" if has_agents_md else "")
-        return f"{head}{block}\n"
+    def claude_md_overview(self) -> str:
+        return "\n".join(
+            [
+                "## AI harness (managed by sherpa)",
+                "",
+                f"Module facts live in `{self.home}/docs/modules/` — one owner doc per module, the single place",
+                "for a fact. Agents in `.claude/agents/` carry a role and a knowledge manifest, never facts;",
+                f"skills in `{self.home}/skills/` are procedures. Blocks between `sherpa:begin` and `sherpa:end`",
+                "markers are regenerated by `sherpa apply` — write outside them. Integrity: `sherpa status`",
+                f"or `python3 {check_script(self.home)}`.",
+            ]
+        )
+
+    def root_file(self, name: str, overview: str) -> Target:
+        """Root CLAUDE.md / AGENTS.md: seeded with a title, appended to when it exists. A new CLAUDE.md in a
+        repo that has (or gets) AGENTS.md imports it — the cross-tool file stays the source."""
+        block = html_block("harness", overview)
+        head = f"# {self.model.repo}\n\n"
+        if name == "CLAUDE.md" and (self.has_file("AGENTS.md") or "agents-md" in self.runtime_targets):
+            head += "@AGENTS.md\n\n"
+        return Target(name, BLOCKS, None, f"{head}{block}\n", {"harness": overview}, append=True)
+
+    def has_file(self, path: str) -> bool:
+        return any(f.path == path for f in self.model.git.files)
+
+    def nested_claude_md(self, e: Entry) -> Target:
+        """Claude Code loads a subdirectory's CLAUDE.md when it works there — the same proximity AGENTS.md has.
+        With the agents-md target on, the file imports its sibling instead of repeating the facts."""
+        inner = "@AGENTS.md" if "agents-md" in self.runtime_targets else self.proximity_block(e)
+        block = html_block("harness", inner)
+        return Target(f"{e.scope}/CLAUDE.md", BLOCKS, entry_key(e), f"{block}\n", {"harness": inner}, append=True)
+
+    def skill_description(self, e: Entry) -> str:
+        if e.kind == "librarian":
+            return (
+                f"Keep the owner doc of {e.target} in sync with the code: run on a schedule or after larger "
+                f"merges to {e.scope or '.'}."
+            )
+        title = str(e.evidence.get("title", e.target.removeprefix("regenerate-")))
+        return (
+            f"Regenerate {title} output in {e.scope or '.'} instead of editing generated files. Use when a "
+            "change touches the sources or configs listed in this skill."
+        )
+
+    def skill_stub(self, e: Entry) -> Target:
+        real = self.skill_path(e) if e.kind == "skill" else self.librarian_path(e)
+        name = real.split("/")[-2]
+        stub_dir = f"{CLAUDE}/skills/{name}"
+        content = "\n".join(
+            [
+                "---",
+                f"name: {name}",
+                "description: " + _quoted(self.skill_description(e)),
+                "---",
+                "",
+                f"This skill lives in [{real}]({_relpath(stub_dir, real)}) — read and follow that file.",
+                "(Stub managed by sherpa: the skill is runtime-neutral, Claude Code lists it from here.)",
+                "",
+            ]
+        )
+        return Target(f"{stub_dir}/SKILL.md", MANAGED, entry_key(e), content)
+
+    # ------------------------------------------------------------ target: agents-md
+
+    def agents_md_targets(self) -> list[Target]:
+        """The cross-tool convention (Codex, Cursor, Gemini CLI, Copilot, Jules, …): the closest AGENTS.md wins,
+        so every unit gets one with its facts; the root file carries the overview and the index."""
+        nested = [e for e in self.units if e.scope]
+        root_units = [e for e in self.units if not e.scope]
+        lines = [
+            "## AI harness (managed by sherpa)",
+            "",
+            f"Module facts live in `{self.home}/docs/modules/` (one owner doc per module, the single place for a",
+            f"fact); procedures in `{self.home}/skills/`. Blocks between `sherpa:begin` and `sherpa:end` markers",
+            "are regenerated by `sherpa apply` — write outside them. Integrity: `sherpa status` or",
+            f"`python3 {check_script(self.home)}`.",
+        ]
+        if nested:
+            lines += ["", "Nearest AGENTS.md per module (loaded when you work there):", ""]
+            lines += [f"- `{e.scope}/AGENTS.md` — {e.target}" for e in sorted(nested, key=lambda e: e.scope)]
+        for e in root_units:
+            lines += ["", self.proximity_block(e)]
+        out = [self.root_file("AGENTS.md", "\n".join(lines))]
+        for e in nested:
+            inner = self.proximity_block(e)
+            block = html_block("facts", inner)
+            out.append(
+                Target(f"{e.scope}/AGENTS.md", BLOCKS, entry_key(e), f"{block}\n", {"facts": inner}, append=True)
+            )
+        return out
+
+    def proximity_block(self, e: Entry) -> str:
+        """Short facts for the runtime that lands in this directory — the owner doc stays the place for detail."""
+        u = self.unit(e)
+        doc = self.docs.get(e.target)
+        what = "test infrastructure" if e.kind == "test-infra" else "module"
+        rows: list[tuple[str, str]] = [("unit", f"`{e.target}` ({what})")]
+        if isinstance(u, ModuleStat):
+            rows += [
+                ("depends on", _list(u.deps)),
+                ("dependents", _list(u.dependents, "none in the repo — changes here stay local")),
+                ("tested by", _list(u.tested_by, "no test module found")),
+                ("hotspots", _list(u.hotspots[:3])),
+            ]
+        gens = self.generator_skills(e)
+        if gens:
+            rows.append(("generated code", ", ".join(f"{fam} → `{p}` (never edit the output)" for fam, p in gens)))
+        lines = [f"## {e.target} (managed by sherpa, {self.stamp})", "", _table(rows), ""]
+        if doc:
+            lines.append(
+                f"Read the owner doc [{doc}]({_relpath(e.scope, doc)}) before answering questions about this unit; "
+                "facts live there, not here."
+            )
+        return "\n".join(lines)
 
     # ------------------------------------------------------------ facts
 
@@ -230,7 +352,8 @@ class Renderer:
             rows += [(k, f"{v}") for k, v in sorted(e.evidence.items()) if k != "path"]
         gens = self.generator_skills(e)
         if gens:
-            rows.append(("generators", ", ".join(f"{fam} → [skill]({_relpath(DOCS, p)})" for fam, p in gens)))
+            docs_dir = f"{self.home}/docs/modules"
+            rows.append(("generators", ", ".join(f"{fam} → [skill]({_relpath(docs_dir, p)})" for fam, p in gens)))
         return rows
 
     # ------------------------------------------------------------ files
@@ -271,7 +394,7 @@ class Renderer:
         u = self.unit(e)
         name = self.slugs[entry_key(e)]
         doc_rel = _relpath(AGENTS, doc) if doc else None
-        doc_text = _relpath(CLAUDE, doc) if doc else None
+        doc_text = doc
         always = [_relpath(CLAUDE, doc)] if doc else []
         on_demand = [_relpath(CLAUDE, p) for _, p in self.generator_skills(e)]
         knowledge = "\n".join(["knowledge:", *_yaml_list("always", always), *_yaml_list("on_demand", on_demand)])
@@ -326,8 +449,8 @@ class Renderer:
         name = f"{self.slugs[entry_key(e)]}-sync"
         c30 = u.commits_30d if u else e.evidence.get("commits_30d", 0)
         cadence = "weekly" if int(c30) >= 30 else "every two weeks"
-        doc_rel = _relpath(f"{SKILLS}/{name}", doc) if doc else None
-        doc_text = _relpath(CLAUDE, doc) if doc else None
+        doc_rel = _relpath(self.librarian_path(e).rsplit("/", 1)[0], doc) if doc else None
+        doc_text = doc
         scope = "\n".join(
             [
                 "## Scope",
@@ -342,11 +465,7 @@ class Renderer:
             [
                 "---",
                 f"name: {name}",
-                "description: "
-                + _quoted(
-                    f"Keep the owner doc of {e.target} in sync with the code: run on a schedule or after larger "
-                    f"merges to {e.scope or '.'}."
-                ),
+                "description: " + _quoted(self.skill_description(e)),
                 "---",
                 "",
                 f"# {e.target} — librarian",
@@ -368,10 +487,7 @@ class Renderer:
                 "",
             ]
         )
-        return Target(f"{SKILLS}/{name}/SKILL.md", BLOCKS, entry_key(e), seed, {"scope": scope})
-
-    def skill_path(self, e: Entry) -> str:
-        return f"{SKILLS}/{self.slugs[entry_key(e)]}/SKILL.md"
+        return Target(self.librarian_path(e), BLOCKS, entry_key(e), seed, {"scope": scope})
 
     def skill(self, e: Entry) -> Target:
         ev = e.evidence
@@ -398,11 +514,7 @@ class Renderer:
             [
                 "---",
                 f"name: {name}",
-                "description: "
-                + _quoted(
-                    f"Regenerate {title} output in {e.scope or '.'} instead of editing generated files. Use when a "
-                    "change touches the sources or configs listed in this skill."
-                ),
+                "description: " + _quoted(self.skill_description(e)),
                 "---",
                 "",
                 f"# {name}",
@@ -426,6 +538,10 @@ class Renderer:
             ]
         )
         return Target(self.skill_path(e), BLOCKS, entry_key(e), seed, {"facts": facts})
+
+
+def _stamped(src: str, version: str) -> str:
+    return src.replace('SHERPA_VERSION = "dev"', f'SHERPA_VERSION = "{version}"', 1)
 
 
 def _quoted(text: str) -> str:

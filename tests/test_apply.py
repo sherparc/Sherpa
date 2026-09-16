@@ -51,10 +51,10 @@ def test_slug_and_entry_key():
 def test_slug_collisions_get_the_scope_appended():
     m = model([mod("Shop.Core", "src/Shop.Core", c90=5), mod("shop_core", "lib/shop_core", c90=5)])
     r = Renderer(build_plan(m), m)
-    paths = sorted(t.path for t in r.targets() if t.entry and t.entry.startswith("owner-doc"))
+    paths = sorted(t.path for t in r.targets() if t.entry and t.entry.startswith("owner-doc") and "/docs/" in t.path)
     assert paths == [
-        ".claude/docs/modules/shop-core--lib-shop-core.md",
-        ".claude/docs/modules/shop-core--src-shop-core.md",
+        ".agents/docs/modules/shop-core--lib-shop-core.md",
+        ".agents/docs/modules/shop-core--src-shop-core.md",
     ]
 
 
@@ -82,24 +82,26 @@ def test_rendered_files_follow_the_owner_principle():
     )
     p = build_plan(m)
     by_path = {t.path: t for t in targets_for(p, m)}
-    doc = by_path[".claude/docs/modules/pay.md"]
+    doc = by_path[".agents/docs/modules/pay.md"]
     assert doc.mode == BLOCKS and set(doc.blocks) == {"facts"}
     assert "| depends on | `core` |" in doc.blocks["facts"] and "| dependents | `web` |" in doc.blocks["facts"]
     assert __version__ not in doc.blocks["facts"]  # an upgrade must not rewrite every facts block
     agent = by_path[".claude/agents/pay.md"]
     assert set(agent.blocks) == {"knowledge", "manifest"}
-    assert "    - docs/modules/pay.md" in agent.blocks["knowledge"] and "on_demand: []" in agent.blocks["knowledge"]
-    assert "[docs/modules/pay.md](../docs/modules/pay.md)" in agent.content
+    assert "    - ../.agents/docs/modules/pay.md" in agent.blocks["knowledge"]
+    assert "on_demand: []" in agent.blocks["knowledge"]
+    assert "[.agents/docs/modules/pay.md](../../.agents/docs/modules/pay.md)" in agent.content
     assert agent.content.startswith("---\nname: pay\ndescription: ")
     base = {t.path: t.mode for t in targets_for(p, m) if t.entry is None}
     assert base == {
+        ".agents/scripts/sherpa-check.py": MANAGED,
         ".claude/hooks/sherpa-outcome.py": MANAGED,
-        ".claude/scripts/sherpa-check.py": MANAGED,
         ".claude/settings.json": JSON_HOOKS,
         ".sherpa/telemetry/.gitignore": MANAGED,
+        "AGENTS.md": BLOCKS,
         "CLAUDE.md": BLOCKS,
     }
-    assert f'SHERPA_VERSION = "{__version__}"' in by_path[".claude/scripts/sherpa-check.py"].content
+    assert f'SHERPA_VERSION = "{__version__}"' in by_path[".agents/scripts/sherpa-check.py"].content
     assert f'SHERPA_VERSION = "{__version__}"' in by_path[".claude/hooks/sherpa-outcome.py"].content
     assert by_path["CLAUDE.md"].append
 
@@ -108,11 +110,44 @@ def test_claude_md_imports_agents_md_when_present():
     from sherpa.model import FileStat
 
     m = model([mod("pay", "svc/pay", c90=30, c30=30, authors=2, files=40)])
-    seed = {t.path: t for t in targets_for(build_plan(m), m)}["CLAUDE.md"].content
-    assert seed.startswith("# Shop\n\n<!-- sherpa:begin harness -->")
+    only_claude = {t.path: t for t in targets_for(build_plan(m), m, targets=("claude",))}
+    assert only_claude["CLAUDE.md"].content.startswith("# Shop\n\n<!-- sherpa:begin harness -->")
+    assert "AGENTS.md" not in only_claude and "svc/pay/AGENTS.md" not in only_claude
+    assert only_claude["svc/pay/CLAUDE.md"].blocks["harness"].startswith("## pay (managed by sherpa")  # facts inline
     m2 = replace(m, git=replace(m.git, files=[FileStat("AGENTS.md", 10, False, 1, 1, 1, None)]))
-    seed = {t.path: t for t in targets_for(build_plan(m2), m2)}["CLAUDE.md"].content
-    assert seed.startswith("# Shop\n\n@AGENTS.md\n\n<!-- sherpa:begin harness -->")
+    seed = {t.path: t for t in targets_for(build_plan(m2), m2, targets=("claude",))}["CLAUDE.md"].content
+    assert seed.startswith("# Shop\n\n@AGENTS.md\n\n<!-- sherpa:begin harness -->")  # existing AGENTS.md is the source
+    both = {t.path: t for t in targets_for(build_plan(m), m)}
+    assert both["CLAUDE.md"].content.startswith("# Shop\n\n@AGENTS.md\n\n")  # sherpa creates AGENTS.md itself
+    assert both["svc/pay/CLAUDE.md"].blocks == {"harness": "@AGENTS.md"} and both["svc/pay/CLAUDE.md"].append
+    assert "- `svc/pay/AGENTS.md` — pay" in both["AGENTS.md"].blocks["harness"]
+    assert both["svc/pay/AGENTS.md"].blocks["facts"].startswith("## pay (managed by sherpa")
+
+
+def test_home_claude_keeps_everything_under_claude_and_needs_no_stubs():
+    m = model([mod("pay", "svc/pay", c90=30, c30=30, authors=2, files=40, gen=6)])
+    from sherpa.model import GeneratorStat
+
+    m = replace(
+        m, generators=[GeneratorStat("protobuf", "Protobuf", "pay", "svc/pay/proto", 6, 60, [], [], "protoc", True)]
+    )
+    paths = {t.path for t in targets_for(build_plan(m), m, home=".claude", targets=("claude",))}
+    assert ".claude/docs/modules/pay.md" in paths and ".claude/scripts/sherpa-check.py" in paths
+    assert (
+        ".claude/skills/regenerate-protobuf/SKILL.md" in paths
+        and ".agents/skills/regenerate-protobuf/SKILL.md" not in paths
+    )
+    agent = {t.path: t for t in targets_for(build_plan(m), m, home=".claude", targets=("claude",))}[
+        ".claude/agents/pay.md"
+    ]
+    assert "    - docs/modules/pay.md" in agent.blocks["knowledge"]
+
+
+def test_root_module_facts_land_in_the_root_agents_md():
+    m = model([mod("app", "", c90=30, c30=30, authors=2, files=40)])
+    by_path = {t.path: t for t in targets_for(build_plan(m), m, targets=("agents-md",))}
+    assert "## app (managed by sherpa" in by_path["AGENTS.md"].blocks["harness"]
+    assert not any(p.endswith("/AGENTS.md") for p in by_path) and "CLAUDE.md" not in by_path
 
 
 def test_generator_skill_is_linked_from_owner_doc_and_agent():
@@ -139,10 +174,19 @@ def test_generator_skill_is_linked_from_owner_doc_and_agent():
     by_path = {t.path: t for t in targets_for(build_plan(m), m)}
     assert (
         "django-migrations → [skill](../../skills/regenerate-django-migrations/SKILL.md)"
-        in by_path[".claude/docs/modules/pay.md"].blocks["facts"]
+        in by_path[".agents/docs/modules/pay.md"].blocks["facts"]
     )
-    assert "    - skills/regenerate-django-migrations/SKILL.md" in by_path[".claude/agents/pay.md"].blocks["knowledge"]
-    skill = by_path[".claude/skills/regenerate-django-migrations/SKILL.md"]
+    assert (
+        "    - ../.agents/skills/regenerate-django-migrations/SKILL.md"
+        in by_path[".claude/agents/pay.md"].blocks["knowledge"]
+    )
+    skill = by_path[".agents/skills/regenerate-django-migrations/SKILL.md"]
+    stub = by_path[".claude/skills/regenerate-django-migrations/SKILL.md"]
+    assert stub.mode == MANAGED and "name: regenerate-django-migrations" in stub.content
+    assert (
+        "[.agents/skills/regenerate-django-migrations/SKILL.md](../../../.agents/skills/regenerate-django-migrations/SKILL.md)"
+        in stub.content
+    )
     assert "| command | `python manage.py makemigrations` |" in skill.blocks["facts"]
 
 
@@ -155,17 +199,17 @@ def test_directory_unit_and_accepted_librarian():
     p = build_plan(m)
     entries = [replace(e, decision="accept") if e.kind == "librarian" else e for e in p.entries]
     by_path = {t.path: t for t in targets_for(replace(p, entries=entries), m)}
-    infra = by_path[".claude/docs/modules/infra.md"].blocks["facts"]
+    infra = by_path[".agents/docs/modules/infra.md"].blocks["facts"]
     assert (
         "| kind | directory without a module manifest |" in infra
         and "| commits 90d / 30d | 9 / 1 · 1 authors |" in infra
     )
-    lib = by_path[".claude/skills/pay-sync/SKILL.md"]
+    lib = by_path[".agents/skills/pay-sync/SKILL.md"]
     assert (
         lib.blocks == {"scope": lib.blocks["scope"]}
         and "40 commits/30d, suggested cadence: weekly" in lib.blocks["scope"]
     )
-    assert "- owner doc: [docs/modules/pay.md](../../docs/modules/pay.md)" in lib.blocks["scope"]
+    assert "- owner doc: [.agents/docs/modules/pay.md](../../docs/modules/pay.md)" in lib.blocks["scope"]
     assert lib.content.startswith("---\nname: pay-sync\ndescription: ")
 
 
@@ -229,9 +273,12 @@ def test_blocks_file_modes(tmp_path: Path):
     # exists without markers and without state → not ours
     a = run(t, tmp_path, "# theirs\n", None)
     assert a.op == SKIPPED and "sherpa adopt" in a.detail
-    # state lost but our markers present → ours again
+    # markers present but no state record → somebody's block, never overwritten (ADR-0016)
     a = run(t, tmp_path, cur, None)
-    assert a.op == UPDATED and "new facts" in a.new
+    assert (a.op, a.detail) == (SKIPPED, "exists with sherpa markers but no state record — `sherpa adopt`")
+    # a block with sherpa's name that sherpa never wrote (no hash in the record) stays untouched
+    a = run(t, tmp_path, cur, FileRecord(BLOCKS, blocks={}))
+    assert (a.op, a.detail) == (SKIPPED, "block facts not written by sherpa (skipped)")
     # unchanged
     a = run(
         t,
@@ -304,17 +351,23 @@ def applied(repo: Path) -> None:
 def test_apply_is_idempotent_and_deterministic(active_repo: Path, capsys):  # noqa: F811
     applied(active_repo)
     out = capsys.readouterr().out
-    assert "10 to add, 0 to change, 0 unchanged, 0 skipped." in out and "check: 0 FAIL, 0 WARN" in out
+    assert "18 to add, 0 to change, 0 unchanged, 0 skipped." in out and "check: 0 FAIL, 0 WARN" in out
     state_path = active_repo / ".sherpa" / "state.json"
     first = state_path.read_bytes()
     st = state_mod.load(state_path)
     state_mod.validate(json.loads(first))
-    assert st.sherpa == __version__ and len(st.harness_rev) == 12 and len(st.files) == 10
+    assert (
+        st.sherpa == __version__
+        and len(st.harness_rev) == 12
+        and len(st.files) == 18
+        and st.home == ".agents"
+        and st.targets == ("claude", "agents-md")
+    )
     assert st.plan["rev"] == scan(active_repo, fetch=False).git.trunk.rev
     h1 = tree_hash(active_repo / ".claude")
     assert main(["apply", str(active_repo), "--yes"]) == 0
     out = capsys.readouterr().out
-    assert "0 to add, 0 to change, 10 unchanged, 0 skipped.\nnothing to do.\n" in out
+    assert "0 to add, 0 to change, 18 unchanged, 0 skipped.\nnothing to do.\n" in out
     assert state_path.read_bytes() == first and tree_hash(active_repo / ".claude") == h1
     # the same input on a second clone → byte-identical tree
     r = subprocess.run(
@@ -333,7 +386,7 @@ def test_harness_rev_changes_only_with_managed_content():
 
 def test_rescan_updates_the_facts_block_and_keeps_human_text(active_repo: Path, capsys):  # noqa: F811
     applied(active_repo)
-    doc = active_repo / ".claude" / "docs" / "modules" / "pay.md"
+    doc = active_repo / ".agents" / "docs" / "modules" / "pay.md"
     doc.write_text(
         doc.read_text(encoding="utf-8").replace("## structure\n", "## structure\n\nOrder → charge → ledger.\n"),
         encoding="utf-8",
@@ -351,7 +404,8 @@ def test_rescan_updates_the_facts_block_and_keeps_human_text(active_repo: Path, 
     assert main(["plan", str(active_repo)]) == 0
     assert main(["apply", str(active_repo), "--yes"]) == 0
     out = capsys.readouterr().out
-    assert "~ .claude/docs/modules/pay.md" in out and "block facts updated" in out
+    assert "~ .agents/docs/modules/pay.md" in out and "block facts updated" in out
+    assert "~ svc/pay/AGENTS.md" in out  # the proximity file follows the facts
     assert "! .claude/agents/pay.md" in out and "block manifest hand-edited (skipped)" in out
     text = doc.read_text(encoding="utf-8")
     assert "Order → charge → ledger." in text and "| files / LOC | 41 / 43 (6 generated) |" in text
@@ -409,7 +463,7 @@ def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, ca
     assert "drift: none — files match the state and the plan\ncheck: 0 FAIL, 0 WARN\noutcomes: none yet" in out
     hook = active_repo / ".claude" / "hooks" / "sherpa-outcome.py"
     hook.write_text(hook.read_text(encoding="utf-8") + "# mine\n", encoding="utf-8")
-    (active_repo / ".claude" / "docs" / "modules" / "core.md").unlink()
+    (active_repo / ".agents" / "docs" / "modules" / "core.md").unlink()
     st = state_mod.load(active_repo / ".sherpa" / "state.json")
     st.files[".claude/agents/old.md"] = FileRecord(BLOCKS, entry="agent:old:svc/old", blocks={})
     (active_repo / ".claude" / "agents" / "old.md").write_text(
@@ -431,24 +485,26 @@ def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, ca
         + "\n",
         encoding="utf-8",
     )
-    check_py = active_repo / ".claude" / "scripts" / "sherpa-check.py"
+    check_py = active_repo / ".agents" / "scripts" / "sherpa-check.py"
     check_py.write_text(
         check_py.read_text(encoding="utf-8").replace(f'SHERPA_VERSION = "{__version__}"', 'SHERPA_VERSION = "0.0.1"'),
         encoding="utf-8",
     )
-    assert main(["status", str(active_repo)]) == 0
+    assert main(["status", str(active_repo)]) == 1  # the deleted owner doc breaks the nested AGENTS.md link
     out = capsys.readouterr().out
-    assert "drift: 4 files" in out
+    assert (
+        "drift: 4 files" in out and "FAIL C4 svc/core/AGENTS.md: link target ../../.agents/docs/modules/core.md" in out
+    )
     assert "  ? .claude/agents/old.md            in the state, no longer in the plan" in out
-    assert "  - .claude/docs/modules/core.md     in the state, not on disk — apply recreates it" in out
+    assert "  - .agents/docs/modules/core.md     in the state, not on disk — apply recreates it" in out
     assert "  ! .claude/hooks/sherpa-outcome.py  hand-edited (skipped)" in out
-    assert "  ! .claude/scripts/sherpa-check.py  hand-edited (skipped)" in out
+    assert "  ! .agents/scripts/sherpa-check.py  hand-edited (skipped)" in out
     assert "outcomes: 3 executions labelled, 1 corrections\n" in out
     assert (
         f"  {st.harness_rev} (current): 1 success, 0 failed, 1 unknown\n  000000000000: 0 success, 1 failed, 0 unknown\n"
         in out
     )
-    assert f"note: .claude/scripts/sherpa-check.py is sherpa 0.0.1, installed is {__version__}" in out
+    assert f"note: .agents/scripts/sherpa-check.py is sherpa 0.0.1, installed is {__version__}" in out
     (active_repo / "CLAUDE.md").write_text("<!-- sherpa:begin harness -->\n", encoding="utf-8")
     assert main(["status", str(active_repo)]) == 1  # a FAIL is the only non-zero exit of status
     assert "FAIL C5 CLAUDE.md" in capsys.readouterr().out
@@ -472,14 +528,14 @@ def test_cli_apply_dry_run_asks_and_aborts(active_repo: Path, capsys, monkeypatc
     assert main(["apply", str(active_repo)]) == 0  # no terminal → dry run only
     assert "dry run only — pass --yes to write (no terminal to ask)." in capsys.readouterr().out
     assert main(["apply", str(active_repo), "--dry-run"]) == 0
-    assert "10 to add" in capsys.readouterr().out and not (active_repo / "CLAUDE.md").exists()
+    assert "18 to add" in capsys.readouterr().out and not (active_repo / "CLAUDE.md").exists()
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _: "n")
     assert main(["apply", str(active_repo)]) == 0
     assert "aborted, nothing written." in capsys.readouterr().out and not (active_repo / "CLAUDE.md").exists()
     monkeypatch.setattr("builtins.input", lambda _: "y")
     assert main(["apply", str(active_repo)]) == 0
-    assert "10 files written" in capsys.readouterr().out and (active_repo / "CLAUDE.md").exists()
+    assert "18 files written" in capsys.readouterr().out and (active_repo / "CLAUDE.md").exists()
 
 
 def test_cli_check_and_adopt(active_repo: Path, capsys):  # noqa: F811
@@ -500,11 +556,13 @@ def test_active_fixture_goldens(active_repo: Path, capsys):  # noqa: F811
     assert main(["apply", str(active_repo), "--dry-run"]) == 0
     check_golden("active-apply-console.txt", capsys.readouterr().out)
     assert main(["apply", str(active_repo), "--yes"]) == 0
-    check_golden("active-owner-doc-pay.md", (active_repo / ".claude/docs/modules/pay.md").read_text(encoding="utf-8"))
+    check_golden("active-owner-doc-pay.md", (active_repo / ".agents/docs/modules/pay.md").read_text(encoding="utf-8"))
+    check_golden("active-agents-md-root.md", (active_repo / "AGENTS.md").read_text(encoding="utf-8"))
+    check_golden("active-agents-md-pay.md", (active_repo / "svc/pay/AGENTS.md").read_text(encoding="utf-8"))
     check_golden("active-agent-pay.md", (active_repo / ".claude/agents/pay.md").read_text(encoding="utf-8"))
     check_golden(
         "active-skill-migrations.md",
-        (active_repo / ".claude/skills/regenerate-django-migrations/SKILL.md").read_text(encoding="utf-8"),
+        (active_repo / ".agents/skills/regenerate-django-migrations/SKILL.md").read_text(encoding="utf-8"),
     )
     check_golden("active-claude-md.md", (active_repo / "CLAUDE.md").read_text(encoding="utf-8"))
 
@@ -616,3 +674,85 @@ def test_outcome_hook_fails_open(tmp_path: Path):
     assert r.returncode == 0
     r = fire(tmp_path, {"hook_event_name": "Stop"})
     assert labels(tmp_path)[0]["harness_rev"] == "none" and labels(tmp_path)[0]["session_id"] == "unknown"
+
+
+# ---------------------------------------------------------------- target layer (ADR-0015): home and targets
+
+
+def test_config_apply_section(tmp_path: Path):
+    from sherpa.config import load
+
+    (tmp_path / "sherpa.toml").write_text('[apply]\nhome = ".claude"\ntargets = ["agents-md"]\n', encoding="utf-8")
+    assert (load(tmp_path).apply.home, load(tmp_path).apply.targets) == (".claude", ("agents-md",))
+    for bad, msg in (
+        ('[apply]\nhome = "docs"\n', "home 'docs' — allowed"),
+        ('[apply]\ntargets = ["cursor"]\n', "cursor.*allowed"),
+        ("[apply]\ntargets = []\n", "at least one"),
+        ('[apply]\nhomes = ".agents"\n', "unknown keys .'homes'."),
+    ):
+        (tmp_path / "sherpa.toml").write_text(bad, encoding="utf-8")
+        with pytest.raises(ValueError, match=msg):
+            load(tmp_path)
+
+
+def test_resolve_layout_detects_asks_and_remembers(tmp_path: Path, monkeypatch):
+    from sherpa.cli import _resolve_layout
+
+    assert _resolve_layout(tmp_path, State(), ask=False) == (".agents", ("claude", "agents-md"))  # bare, no terminal
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    asked = []
+    monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or "")
+    assert _resolve_layout(tmp_path, State(), ask=True)[0] == ".agents"  # bare: the user decides, Enter = default
+    assert asked[-1].startswith("no harness directory yet — owner docs and skills under [1] .agents (default")
+    monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or "2")
+    assert _resolve_layout(tmp_path, State(), ask=True)[0] == ".claude"
+    (tmp_path / ".claude").mkdir()
+    asked.clear()
+    assert (
+        _resolve_layout(tmp_path, State(), ask=True) == (".claude", ("claude",)) and not asked
+    )  # one exists: no question
+    (tmp_path / "AGENTS.md").write_text("# x\n", encoding="utf-8")
+    assert _resolve_layout(tmp_path, State(), ask=False) == (".claude", ("claude", "agents-md"))
+    (tmp_path / ".agents").mkdir()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    with pytest.raises(ValueError, match="both .agents/ and .claude/ exist"):
+        _resolve_layout(tmp_path, State(), ask=True)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    assert _resolve_layout(tmp_path, State(), ask=True)[0] == ".claude" and asked[-1].startswith(
+        "both .agents/ and .claude/ exist"
+    )
+    monkeypatch.setattr("builtins.input", lambda _: "")
+    assert _resolve_layout(tmp_path, State(), ask=True)[0] == ".agents"
+    # the state remembers, the config file wins
+    assert _resolve_layout(tmp_path, State(home=".claude", targets=("claude",)), ask=False) == (".claude", ("claude",))
+    (tmp_path / "sherpa.toml").write_text('[apply]\nhome = ".agents"\ntargets = ["agents-md"]\n', encoding="utf-8")
+    assert _resolve_layout(tmp_path, State(home=".claude", targets=("claude",)), ask=False) == (
+        ".agents",
+        ("agents-md",),
+    )
+
+
+def test_cli_apply_refuses_ambiguous_home_without_terminal(active_repo: Path, capsys):  # noqa: F811
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    (active_repo / ".claude").mkdir()
+    (active_repo / ".agents").mkdir()
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--dry-run"]) == 1
+    assert 'Set [apply] home = ".agents" or ".claude" in sherpa.toml' in capsys.readouterr().err
+
+
+def test_existing_nested_agents_md_gets_the_block_appended(active_repo: Path, capsys):  # noqa: F811
+    nested = active_repo / "svc" / "pay" / "AGENTS.md"
+    nested.write_text("# pay — team notes\n\nRun `make test` first.\n", encoding="utf-8")
+    root = active_repo / "AGENTS.md"
+    root.write_text("# shop\n\nHouse rules.\n", encoding="utf-8")
+    applied(active_repo)
+    out = capsys.readouterr().out
+    assert "~ AGENTS.md" in out and "block harness appended" in out
+    assert "~ svc/pay/AGENTS.md" in out and "block facts appended" in out
+    text = nested.read_text(encoding="utf-8")
+    assert text.startswith("# pay — team notes\n\nRun `make test` first.\n\n<!-- sherpa:begin facts -->")
+    assert root.read_text(encoding="utf-8").startswith("# shop\n\nHouse rules.\n\n<!-- sherpa:begin harness -->")
+    assert "targets: agents-md · home: .agents" in out and not (active_repo / "CLAUDE.md").exists()  # detected
+    assert "note: no target with hooks" in out  # honest: no outcome labels without Claude Code
+    assert main(["check", str(active_repo)]) == 0

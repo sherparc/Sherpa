@@ -152,6 +152,38 @@ def _load_state(repo: Path):
     return state_mod.load(path) if path.exists() else state_mod.State()
 
 
+def _resolve_layout(repo: Path, state, *, ask: bool) -> tuple[str, tuple[str, ...]]:
+    """Home and targets (ADR-0015): sherpa.toml beats the state beats detection. Both ``.agents`` and ``.claude``
+    present and nothing decided yet → ask on a terminal, refuse otherwise."""
+    from sherpa import config
+
+    cfg = config.load(repo).apply
+    has_claude = (repo / ".claude").is_dir() or (repo / "CLAUDE.md").is_file()
+    has_agents = (repo / ".agents").is_dir() or (repo / "AGENTS.md").is_file()
+    home = cfg.home or state.home
+    if not home:
+        both = (repo / ".agents").is_dir() and (repo / ".claude").is_dir()
+        neither = not (repo / ".agents").is_dir() and not (repo / ".claude").is_dir()
+        if both and not (ask and sys.stdin.isatty()):
+            raise ValueError(
+                "both .agents/ and .claude/ exist — where should owner docs and skills live? "
+                'Set [apply] home = ".agents" or ".claude" in sherpa.toml'
+            )
+        if (both or neither) and ask and sys.stdin.isatty():
+            what = "both .agents/ and .claude/ exist" if both else "no harness directory yet"
+            answer = input(f"{what} — owner docs and skills under [1] .agents (default, cross-tool)  [2] .claude ? ")
+            home = ".claude" if answer.strip() in ("2", ".claude") else ".agents"
+        elif (repo / ".claude").is_dir():
+            home = ".claude"
+        else:
+            home = ".agents"  # the cross-tool default, also without a terminal
+    targets = cfg.targets or state.targets
+    if not targets:
+        detected = tuple(t for t, on in (("claude", has_claude), ("agents-md", has_agents)) if on)
+        targets = detected or config.TARGETS
+    return home, tuple(targets)
+
+
 def cmd_apply(args: argparse.Namespace) -> int:
     """Dry run always; then ask (or ``--yes``), write, check, roll back on new FAILs, write the state."""
     from sherpa import apply
@@ -160,7 +192,15 @@ def cmd_apply(args: argparse.Namespace) -> int:
     plan, model = _load_plan_and_model(repo)
     _refuse_stale(repo, plan)
     state = _load_state(repo)
-    actions = apply.plan_files(apply.targets_for(plan, model), repo, state)
+    home, targets = _resolve_layout(repo, state, ask=not args.yes and not args.dry_run)
+    actions = apply.plan_files(apply.targets_for(plan, model, home=home, targets=targets), repo, state)
+    sys.stdout.write(f"targets: {', '.join(targets)} · home: {home}\n")
+    if "claude" not in targets:
+        print(
+            "note: no target with hooks (claude) — outcome labels are not collected (ADR-0008); "
+            "add it to [apply] targets in sherpa.toml when Claude Code is used here.",
+            file=sys.stdout,
+        )
     sys.stdout.write(apply.render_actions(actions, plan))
     if not any(a.new is not None for a in actions):
         print("nothing to do.", file=sys.stdout)
@@ -175,7 +215,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         if answer not in ("y", "yes"):
             print("aborted, nothing written.", file=sys.stdout)
             return EXIT_OK
-    result = apply.write(actions, repo, state, plan, check=not args.no_check)
+    result = apply.write(actions, repo, state, plan, check=not args.no_check, home=home, targets=targets)
     sys.stdout.write(apply.render_result(result))
     return EXIT_ERROR if result.rolled_back else EXIT_OK
 
@@ -199,7 +239,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
     state = _load_state(repo)
     plan, model = _load_plan_and_model(repo)
-    actions = apply.plan_files(apply.targets_for(plan, model), repo, state)
+    home, targets = _resolve_layout(repo, state, ask=False)
+    actions = apply.plan_files(apply.targets_for(plan, model, home=home, targets=targets), repo, state)
     report = status_mod.report(repo, state, actions)
     sys.stdout.write(status_mod.render(report))
     return EXIT_ERROR if report.fails else EXIT_OK

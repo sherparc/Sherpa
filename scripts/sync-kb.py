@@ -22,7 +22,6 @@ commit date of the source on HEAD, or ``uncommitted``), ``tags``.
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import os
 import re
 import subprocess
@@ -81,16 +80,7 @@ def note_type(rel: str) -> str:
 def sources() -> list[Path]:
     out: set[Path] = set()
     for pattern in SOURCES:
-        if "**" in pattern:
-            base, _, rest = pattern.partition("/**/")
-            out.update(p for p in (ROOT / base).rglob(rest) if p.is_file())
-        elif any(ch in pattern for ch in "*?["):
-            head = pattern.rsplit("/", 1)[0] if "/" in pattern else ""
-            for p in (ROOT / head).glob(pattern.rsplit("/", 1)[-1]) if "/" in pattern else ROOT.glob(pattern):
-                if p.is_file() and fnmatch.fnmatch(p.relative_to(ROOT).as_posix(), pattern):
-                    out.add(p)
-        elif (ROOT / pattern).is_file():
-            out.add(ROOT / pattern)
+        out.update(p for p in ROOT.glob(pattern) if p.is_file())
     return sorted(out)
 
 

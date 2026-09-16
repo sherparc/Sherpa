@@ -10,9 +10,9 @@ hash that ``sherpa apply`` and ``sherpa status`` use, so drift is measured with 
 Rules (FAIL = exit 1, WARN informational):
 
   C1 agent-frontmatter   every .claude/agents/*.md has front matter with name and description
-  C2 skill-frontmatter   every .claude/skills/*/SKILL.md has front matter with name and description
+  C2 skill-frontmatter   every .claude/skills/*/SKILL.md and .agents/skills/*/SKILL.md has name and description
   C3 manifest-paths      every path under knowledge.always / knowledge.on_demand exists (relative to .claude/)
-  C4 links               relative file links in .claude/**/*.md and CLAUDE.md resolve (archive/ is history, skipped)
+  C4 links               relative file links in .claude/**, .agents/**, CLAUDE.md and AGENTS.md files resolve
   C5 blocks              sherpa:begin/end markers are balanced, named and unique per file
   C6 hooks               .claude/settings.json is valid JSON and every hook command under $CLAUDE_PROJECT_DIR exists
   C7 budgets (WARN)      agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate
@@ -148,13 +148,31 @@ def _scalar(value: str, *, empty: object) -> object:
 # ---------------------------------------------------------------- rules
 
 
+SKIP_DIRS = {"node_modules", "vendor", "target", "bin", "obj", "dist", "build", ".venv", ".git", "packages", ".sherpa"}
+
+
 def _md_files(root: Path) -> list[Path]:
-    claude = root / ".claude"
-    files = sorted(p for p in claude.rglob("*.md") if p.is_file()) if claude.is_dir() else []
-    top = root / "CLAUDE.md"
-    if top.is_file():
-        files.append(top)
-    return files
+    """Harness markdown: everything under .claude/ and .agents/, plus every CLAUDE.md and AGENTS.md in the tree
+    (root and nested proximity files), skipping dependency and build directories."""
+    files: set[Path] = set()
+    for home in (".claude", ".agents"):
+        d = root / home
+        if d.is_dir():
+            files.update(p for p in d.rglob("*.md") if p.is_file())
+    stack = [root]
+    while stack:
+        d = stack.pop()
+        try:
+            entries = list(d.iterdir())
+        except OSError:
+            continue
+        for p in entries:
+            if p.is_dir():
+                if p.name not in SKIP_DIRS and not (p.name.startswith(".") and p != root):
+                    stack.append(p)
+            elif p.name in ("CLAUDE.md", "AGENTS.md"):
+                files.add(p)
+    return sorted(files)
 
 
 def _rel(root: Path, p: Path) -> str:
@@ -164,9 +182,9 @@ def _rel(root: Path, p: Path) -> str:
 def _kind_of(rel: str) -> str | None:
     if rel.startswith(".claude/agents/") and rel.endswith(".md"):
         return "agent"
-    if rel.startswith(".claude/docs/modules/") and rel.endswith(".md"):
+    if rel.startswith((".claude/docs/modules/", ".agents/docs/modules/")) and rel.endswith(".md"):
         return "owner-doc"
-    if rel.startswith(".claude/skills/") and rel.endswith("/SKILL.md"):
+    if rel.startswith((".claude/skills/", ".agents/skills/")) and rel.endswith("/SKILL.md"):
         return "skill"
     return None
 

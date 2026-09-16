@@ -19,6 +19,10 @@
     generated_share = 0.5              # from this share of generator output: no agent/librarian, a skill instead
     skill_min_generated_files = 5      # skill proposal from this many generated files (or config, see rules)
     owner_doc_min_files = 5            # owner doc from this many files, unless something depends on the unit
+
+    [apply]                            # target layer (ADR-0015); both default to detection, see docs/commands/apply.md
+    home = ".agents"                   # where owner docs, skills and the checker copy live: ".agents" or ".claude"
+    targets = ["claude", "agents-md"]  # runtimes to project into: Claude Code files, AGENTS.md hierarchy
 """
 
 from __future__ import annotations
@@ -60,10 +64,21 @@ class PlanConfig:
     owner_doc_min_files: int = 5
 
 
+HOMES = (".agents", ".claude")
+TARGETS = ("claude", "agents-md")
+
+
+@dataclass(frozen=True)
+class ApplyConfig:
+    home: str | None = None  # None = detect (ask when both .agents and .claude exist)
+    targets: tuple[str, ...] | None = None  # None = detect from the repo; nothing detected = all
+
+
 @dataclass(frozen=True)
 class Config:
     scan: ScanConfig = ScanConfig()
     plan: PlanConfig = PlanConfig()
+    apply: ApplyConfig = ApplyConfig()
 
 
 def load(repo: Path) -> Config:
@@ -79,6 +94,16 @@ def load(repo: Path) -> Config:
     if unknown:
         raise ValueError(f"sherpa.toml [plan]: unknown keys {unknown}; allowed: {sorted(known)}")
     plan = PlanConfig(**{k: (float(v) if known[k] == "float" else int(v)) for k, v in pl.items()})
+    ap = raw.get("apply", {})
+    unknown = sorted(set(ap) - {"home", "targets"})
+    if unknown:
+        raise ValueError(f"sherpa.toml [apply]: unknown keys {unknown}; allowed: ['home', 'targets']")
+    home = ap.get("home")
+    if home is not None and home not in HOMES:
+        raise ValueError(f"sherpa.toml [apply]: home {home!r} — allowed: {list(HOMES)}")
+    targets = tuple(str(t) for t in ap["targets"]) if "targets" in ap else None
+    if targets is not None and (not targets or set(targets) - set(TARGETS)):
+        raise ValueError(f"sherpa.toml [apply]: targets {list(targets)} — allowed: {list(TARGETS)}, at least one")
     return Config(
         scan=ScanConfig(
             trunk=s.get("trunk"),
@@ -87,4 +112,5 @@ def load(repo: Path) -> Config:
             custom_generated=extra,
         ),
         plan=plan,
+        apply=ApplyConfig(home=home, targets=targets),
     )

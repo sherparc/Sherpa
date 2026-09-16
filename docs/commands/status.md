@@ -23,18 +23,18 @@ sherpa status [REPO]
 
 ```console
 $ sherpa status .
-sherpa status — harness_rev f5c1cf090666, applied 2026-09-16T22:07:12Z
+sherpa status — harness_rev c38498363846, applied 2026-09-16T22:07:12Z
 drift: 4 files
   ? .claude/agents/old.md            in the state, no longer in the plan
-  - .claude/docs/modules/core.md     in the state, not on disk — apply recreates it
+  - .agents/docs/modules/core.md     in the state, not on disk — apply recreates it
   ! .claude/hooks/sherpa-outcome.py  hand-edited (skipped)
-  ~ .claude/docs/modules/pay.md      block facts updated
+  ~ .agents/docs/modules/pay.md      block facts updated
 check: 0 FAIL, 1 WARN
   WARN C7 .claude/agents/pay.md: 162 lines > budget 150 (agent)
 outcomes: 3 executions labelled, 1 corrections
-  f5c1cf090666 (current): 1 success, 0 failed, 1 unknown
+  c38498363846 (current): 1 success, 0 failed, 1 unknown
   000000000000: 0 success, 1 failed, 0 unknown
-  note: .claude/scripts/sherpa-check.py is sherpa 0.0.1, installed is 0.4.0 — `sherpa apply` refreshes it
+  note: .agents/scripts/sherpa-check.py is sherpa 0.0.1, installed is 0.4.0 — `sherpa apply` refreshes it
 ```
 
 Without drift the second line reads `drift: none — files match the state and the plan`; without labels,

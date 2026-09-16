@@ -9,7 +9,7 @@
 | `.sherpa/codebase-model.json` | `plan`, `apply`, `status` | rescanned by `plan` when missing, stale or of an old schema |
 | `.sherpa/harness-plan.yaml` | `plan` (decisions), `apply`, `status` | the previous plan's `decision:` values are carried over |
 | `.sherpa/state.json` | `apply`, `status`, `check` (C8), the outcome hook (`harness_rev`) | empty state when missing |
-| `.claude/**`, `CLAUDE.md` | `apply` (current content), `check`, `status` | |
+| `.claude/**`, `.agents/**`, every `CLAUDE.md` and `AGENTS.md` | `apply` (current content), `check`, `status` | nested proximity files included |
 | `.sherpa/telemetry/outcomes.ndjson` | `status` | written by the outcome hook |
 
 ## Files Sherpa writes
@@ -19,9 +19,10 @@
 | `.sherpa/codebase-model.json` | `scan`, `plan` | **no** — regenerated from the trunk; add to `.gitignore` |
 | `.sherpa/harness-plan.yaml` | `plan` | **yes** — it carries the team's decisions (ADR-0005) |
 | `.sherpa/state.json` | `apply` | **yes** — what sherpa owns and the harness version (ADR-0005) |
-| `.claude/docs/modules/*.md`, `.claude/agents/*.md`, `.claude/skills/*/SKILL.md` | `apply` | yes — the harness |
-| `.claude/hooks/sherpa-outcome.py`, `.claude/scripts/sherpa-check.py`, `.claude/settings.json` (hook entries) | `apply` | yes |
-| `CLAUDE.md` (block `harness`) | `apply` | yes |
+| `<home>/docs/modules/*.md`, `<home>/skills/*/SKILL.md`, `<home>/scripts/sherpa-check.py` (`home` = `.agents` or `.claude`) | `apply` | yes — the neutral core |
+| `.claude/agents/*.md`, `.claude/hooks/sherpa-outcome.py`, `.claude/settings.json` (hook entries), `.claude/skills/*/SKILL.md` stubs | `apply`, target `claude` | yes |
+| `CLAUDE.md`, `<unit>/CLAUDE.md` (block `harness`) | `apply`, target `claude` | yes |
+| `AGENTS.md` (block `harness`), `<unit>/AGENTS.md` (block `facts`) | `apply`, target `agents-md` | yes |
 | `.sherpa/telemetry/.gitignore` | `apply` | yes (it ignores everything else in the directory) |
 | `.sherpa/telemetry/outcomes.ndjson`, `session-*.json` | the outcome hook | **no** — ignored via the file above |
 
