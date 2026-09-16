@@ -2,57 +2,184 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sherpa.local/schemas/codebase-model.schema.json",
   "title": "codebase-model",
-  "description": "Ausgabe von `sherpa scan`. Schicht T0 (Git) ist immer vorhanden; T1/T2 kommen in späteren Schema-Versionen dazu.",
+  "description": "Ausgabe von `sherpa scan`. Schicht T0 (git) und T1 (modules, conventions) sind immer vorhanden; T2 (Sprach-Adapter) kommt in einer späteren Schema-Version.",
   "type": "object",
-  "required": ["sherpa", "schema_version", "repo", "origin", "git"],
+  "required": [
+    "sherpa",
+    "schema_version",
+    "repo",
+    "origin",
+    "git",
+    "modules",
+    "conventions"
+  ],
   "additionalProperties": false,
   "properties": {
-    "sherpa": {"type": "string", "description": "Sherpa-Version, die das Modell erzeugt hat."},
-    "schema_version": {"type": "integer", "const": 1},
-    "repo": {"type": "string", "description": "Basename des Repo-Verzeichnisses."},
-    "origin": {"type": "string", "description": "URL des Remotes origin."},
+    "sherpa": {
+      "type": "string",
+      "description": "Sherpa-Version, die das Modell erzeugt hat."
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "repo": {
+      "type": "string",
+      "description": "Basename des Repo-Verzeichnisses."
+    },
+    "origin": {
+      "type": "string",
+      "description": "URL des Remotes origin."
+    },
     "git": {
       "type": "object",
       "description": "Schicht T0: alles aus Git, gemessen gegen origin/<trunk> (ADR-0003).",
-      "required": ["trunk", "windows", "commits_total", "commits_90d", "commits_30d", "authors_90d", "first_commit", "last_commit", "files", "dirs", "hotspots"],
+      "required": [
+        "trunk",
+        "windows",
+        "commits_total",
+        "commits_90d",
+        "commits_30d",
+        "authors_90d",
+        "first_commit",
+        "last_commit",
+        "files",
+        "dirs",
+        "hotspots"
+      ],
       "additionalProperties": false,
       "properties": {
         "trunk": {
-          "type": "object", "required": ["ref", "source", "rev"], "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "ref",
+            "source",
+            "rev"
+          ],
+          "additionalProperties": false,
           "properties": {
-            "ref": {"type": "string", "description": "z. B. origin/main"},
-            "source": {"type": "string", "enum": ["override", "origin/HEAD", "candidate"], "description": "Wie der Trunk bestimmt wurde (ADR-0003)."},
-            "rev": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+            "ref": {
+              "type": "string",
+              "description": "z. B. origin/main"
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "override",
+                "origin/HEAD",
+                "candidate"
+              ],
+              "description": "Wie der Trunk bestimmt wurde (ADR-0003)."
+            },
+            "rev": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
           }
         },
         "windows": {
-          "type": "object", "required": ["as_of", "since_90d", "since_30d"], "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "as_of",
+            "since_90d",
+            "since_30d"
+          ],
+          "additionalProperties": false,
           "description": "Zeitfenster. as_of = Committer-Datum von trunk.rev (Default) oder --as-of; damit ist der Scan bei gleichem Rev reproduzierbar.",
           "properties": {
-            "as_of": {"type": "string", "format": "date-time"},
-            "since_90d": {"type": "string", "format": "date-time"},
-            "since_30d": {"type": "string", "format": "date-time"}
+            "as_of": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "since_90d": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "since_30d": {
+              "type": "string",
+              "format": "date-time"
+            }
           }
         },
-        "commits_total": {"type": "integer", "minimum": 0, "description": "Alle Commits auf dem Trunk, inkl. Merges."},
-        "commits_90d": {"type": "integer", "minimum": 0, "description": "Nicht-Merge-Commits mit since_90d < Committer-Datum <= as_of."},
-        "commits_30d": {"type": "integer", "minimum": 0},
-        "authors_90d": {"type": "integer", "minimum": 0, "description": "Verschiedene Autorennamen im 90d-Fenster."},
-        "first_commit": {"type": "string", "format": "date-time", "description": "Committer-Datum des Wurzel-Commits."},
-        "last_commit": {"type": "string", "format": "date-time", "description": "Committer-Datum von trunk.rev."},
+        "commits_total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Alle Commits auf dem Trunk, inkl. Merges."
+        },
+        "commits_90d": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Nicht-Merge-Commits mit since_90d < Committer-Datum <= as_of."
+        },
+        "commits_30d": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "authors_90d": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Verschiedene Autorennamen im 90d-Fenster."
+        },
+        "first_commit": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Committer-Datum des Wurzel-Commits."
+        },
+        "last_commit": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Committer-Datum von trunk.rev."
+        },
         "files": {
           "type": "array",
           "description": "Jede Datei im Baum von trunk.rev (git ls-tree), sortiert nach path.",
           "items": {
-            "type": "object", "required": ["path", "loc", "generated", "commits_90d", "commits_30d", "authors_90d", "last_change"], "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "path",
+              "loc",
+              "generated",
+              "commits_90d",
+              "commits_30d",
+              "authors_90d",
+              "last_change"
+            ],
+            "additionalProperties": false,
             "properties": {
-              "path": {"type": "string"},
-              "loc": {"type": ["integer", "null"], "minimum": 0, "description": "Zeilen; null = binär (NUL-Byte im Blob)."},
-              "generated": {"type": "boolean", "description": "Pfad matcht einen Generated-Glob (Defaults in sherpa.config.GENERATED_DEFAULT, Ergänzung via sherpa.toml [scan].generated). Bleibt in files/dirs, ist nie Hotspot."},
-              "commits_90d": {"type": "integer", "minimum": 0},
-              "commits_30d": {"type": "integer", "minimum": 0},
-              "authors_90d": {"type": "integer", "minimum": 0},
-              "last_change": {"type": ["string", "null"], "description": "Committer-Datum des jüngsten Commits im 90d-Fenster; null wenn keiner."}
+              "path": {
+                "type": "string"
+              },
+              "loc": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "description": "Zeilen; null = binär (NUL-Byte im Blob)."
+              },
+              "generated": {
+                "type": "boolean",
+                "description": "Pfad matcht einen Generated-Glob (Defaults in sherpa.config.GENERATED_DEFAULT, Ergänzung via sherpa.toml [scan].generated). Bleibt in files/dirs, ist nie Hotspot."
+              },
+              "commits_90d": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "commits_30d": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authors_90d": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "last_change": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Committer-Datum des jüngsten Commits im 90d-Fenster; null wenn keiner."
+              }
             }
           }
         },
@@ -60,13 +187,36 @@
           "type": "array",
           "description": "Aggregate je Verzeichnis der Tiefe 1 und 2 (\"\" = Wurzel), sortiert nach path. commits_* zählt Commits, die mindestens eine Datei darunter berühren.",
           "items": {
-            "type": "object", "required": ["path", "files", "loc", "commits_90d", "commits_30d"], "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "path",
+              "files",
+              "loc",
+              "commits_90d",
+              "commits_30d"
+            ],
+            "additionalProperties": false,
             "properties": {
-              "path": {"type": "string"},
-              "files": {"type": "integer", "minimum": 0},
-              "loc": {"type": "integer", "minimum": 0, "description": "Summe der Text-LOC darunter."},
-              "commits_90d": {"type": "integer", "minimum": 0},
-              "commits_30d": {"type": "integer", "minimum": 0}
+              "path": {
+                "type": "string"
+              },
+              "files": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "loc": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Summe der Text-LOC darunter."
+              },
+              "commits_90d": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "commits_30d": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           }
         },
@@ -74,14 +224,174 @@
           "type": "array",
           "description": "Top-N Textdateien nach score = commits_90d * loc, absteigend, Gleichstand nach path. Nur Dateien mit commits_90d >= 1 und generated = false.",
           "items": {
-            "type": "object", "required": ["path", "commits_90d", "loc", "score"], "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "path",
+              "commits_90d",
+              "loc",
+              "score"
+            ],
+            "additionalProperties": false,
             "properties": {
-              "path": {"type": "string"},
-              "commits_90d": {"type": "integer", "minimum": 1},
-              "loc": {"type": "integer", "minimum": 0},
-              "score": {"type": "integer", "minimum": 0}
+              "path": {
+                "type": "string"
+              },
+              "commits_90d": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "loc": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "score": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           }
+        }
+      }
+    },
+    "modules": {
+      "type": "array",
+      "description": "Schicht T1: ein Modul je Manifest (csproj/fsproj/vbproj, pyproject.toml, setup.py, package.json, go.mod, Cargo.toml mit [package], pom.xml, build.gradle). Sortiert nach path, id. Manifeste unter node_modules/, vendor/, target/, bin/, obj/, dist/, build/ zählen nicht.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "path",
+          "kind",
+          "manifest",
+          "is_test",
+          "files",
+          "loc",
+          "test_files",
+          "deps",
+          "dependents",
+          "tested_by",
+          "commits_90d",
+          "commits_30d",
+          "authors_90d",
+          "hotspots"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Modulname aus dem Manifest (csproj-Stamm, project.name, package name, go module, crate name, artifactId)."
+          },
+          "path": {
+            "type": "string",
+            "description": "Verzeichnis des Manifests; \"\" = Repo-Wurzel. Dateien gehören zum tiefsten Modul, dessen Verzeichnis sie enthält."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "dotnet",
+              "python",
+              "node",
+              "go",
+              "rust",
+              "java"
+            ]
+          },
+          "manifest": {
+            "type": "string"
+          },
+          "is_test": {
+            "type": "boolean",
+            "description": "Eigenständiges Test-Modul (dotnet: IsTestProject, Test-Framework-Paket oder Name *Tests/*Test)."
+          },
+          "files": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "loc": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Summe Text-LOC der zugeordneten Dateien."
+          },
+          "test_files": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Zugeordnete Dateien unter tests/, test/, __tests__/, spec/ oder mit Test-Namensmuster (test_*.py, *_test.go, *.test.ts, *Test.java, *Tests.cs, …)."
+          },
+          "deps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Abhängigkeiten auf andere Module DIESES Repos (ProjectReference, path-deps, Namens-Treffer bei python/node/go/java). Externe Pakete fehlen absichtlich."
+          },
+          "dependents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Umkehrung von deps."
+          },
+          "tested_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Test-Module (is_test), die dieses Modul in deps haben."
+          },
+          "commits_90d": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Nicht-Merge-Commits im 90d-Fenster, die mindestens eine Datei des Moduls berühren; je Commit einmal."
+          },
+          "commits_30d": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "authors_90d": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hotspots": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Bis zu 3 Pfade im Modul nach commits_90d×loc, nicht generiert, absteigend."
+          }
+        }
+      }
+    },
+    "conventions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "languages",
+        "ci",
+        "containers"
+      ],
+      "description": "Aus dem Dateibaum erkannte Konventionen.",
+      "properties": {
+        "languages": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "Sprache (nach Dateiendung) → Summe LOC, absteigend sortiert."
+        },
+        "ci": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "CI-Definitionen (.github/workflows/*, .gitlab-ci.yml, azure-pipelines*.yml, Jenkinsfile, .circleci/config.yml, …)."
+        },
+        "containers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Dockerfile*, docker-compose*.yml, compose*.yml."
         }
       }
     }

@@ -1,8 +1,9 @@
-# `sherpa scan` — Schicht T0 (Git)
+# `sherpa scan` — Schichten T0 (Git) und T1 (Module)
 
 > Owner für: Aufruf, Entscheidungen, Interpretation. Feldsemantik gehört dem Schema
-> [`src/sherpa/schemas/codebase-model.schema.json`](../src/sherpa/schemas/codebase-model.schema.json); Code in
-> [`src/sherpa/scan/t0_git.py`](../src/sherpa/scan/t0_git.py). Stand: M1, v0.1.0.
+> [`src/sherpa/schemas/codebase-model.schema.json`](../src/sherpa/schemas/codebase-model.schema.json) (v2); Code in
+> [`src/sherpa/scan/t0_git.py`](../src/sherpa/scan/t0_git.py) und [`t1_modules.py`](../src/sherpa/scan/t1_modules.py).
+> Stand: M1a, v0.2.0.
 
 ## Aufruf
 
@@ -37,6 +38,27 @@ generated = ["*.g.cs", "gen/**"]       # ergänzt sherpa.config.GENERATED_DEFAUL
 | `git.files[]` | jede Datei im Trunk-Baum: `loc` (null = binär), `generated`, Commits/Autoren im Fenster, `last_change` | `git ls-tree`, `git cat-file --batch` |
 | `git.dirs[]` | Tiefe 1 + 2 (`""` = Wurzel): Dateien, LOC-Summe, Commits, die etwas darunter berühren (je Commit einmal) | Aggregat |
 | `git.hotspots[]` | Top-N nach `commits_90d × loc`, nur Text, nur nicht-generiert | Tornhill |
+| `modules[]` | ein Modul je Manifest: `id`, `path`, `kind`, Dateien/LOC/Testdateien, `deps`/`dependents`/`tested_by` (nur repo-intern), Churn je Modul, bis zu 3 Hotspots | Manifest-Parser (T1) |
+| `conventions` | Sprachen nach LOC, CI-Dateien, Container-Dateien | Dateibaum |
+
+### T1 — welche Manifeste, wie werden Abhängigkeiten aufgelöst
+
+| `kind` | Manifest | Modulname | repo-interne Deps über | Test-Erkennung |
+|---|---|---|---|---|
+| `dotnet` | `*.csproj` `*.fsproj` `*.vbproj` | Dateistamm | `<ProjectReference Include>` → Manifest-Pfad (Backslashes normalisiert, Fallback Dateistamm) | eigenes Test-Projekt: `IsTestProject`, Paket xunit/nunit/mstest/tunit, Name `*Tests`/`*Test` → `is_test`, erscheint bei den referenzierten Modulen als `tested_by` |
+| `python` | `pyproject.toml` `setup.py` | `[project].name` / `[tool.poetry].name` | Namen aus `dependencies`, `optional-dependencies`, Poetry-Gruppen, PEP-503-normalisiert (`Shop_Lib` ≙ `shop-lib`) | Testdateien im Modul |
+| `node` | `package.json` | `name` | Schlüssel aus `dependencies`/`devDependencies`/`peerDependencies` | Testdateien im Modul |
+| `go` | `go.mod` | `module` | `require`-Zeilen und `replace`-Ziele, exakter Modulpfad | `*_test.go` |
+| `rust` | `Cargo.toml` mit `[package]` (reiner `[workspace]` ist kein Modul) | `package.name` | `path = "…"`-Deps → Manifest-Pfad; sonst Name | Testdateien im Modul |
+| `java` | `pom.xml` `build.gradle(.kts)` | `<artifactId>` (Gradle: Verzeichnisname) | `<dependency><artifactId>` gegen andere Module | `*Test.java`, `src/test/` |
+
+Manifeste unter `node_modules/`, `vendor/`, `target/`, `bin/`, `obj/`, `dist/`, `build/`, `.venv/`, `packages/`
+sind keine Module. Zwei Manifeste im selben Verzeichnis (z. B. `package.json` neben `pyproject.toml`): das
+alphabetisch erste gewinnt — bewusst simpel, wird ein Kippkriterium, falls ein Korpus-Repo es braucht.
+
+Externe Pakete (`requests`, `serde`, `react`) tauchen **nicht** in `deps` auf: für Owner-Grenzen zählt nur, was im
+Repo lebt. Testdateien = Pfad enthält `tests/`, `test/`, `__tests__/`, `spec/` oder Name matcht `test_*.py`,
+`*_test.go`, `*.test.ts`, `*.spec.js`, `*Test.java`, `*Tests.cs`, `*_test.rs`, ….
 
 ## Entscheidungen und warum
 
@@ -53,6 +75,12 @@ generated = ["*.g.cs", "gen/**"]       # ergänzt sherpa.config.GENERATED_DEFAUL
    Die Dateien bleiben in `files`/`dirs`, damit `dirs.commits_*` ehrlich bleibt.
 7. **Ein Prozess pro Git-Aufruf-Art**, keine Schleife über Dateien (`cat-file --batch`, ein `git log`).
    Laufzeit ist Git-IO; Kippkriterium für einen Rust-Kern steht in ADR-0001.
+8. **Jede Datei gehört zum tiefsten Modul** (längster Manifest-Pfad, der Präfix ist). Ein Wurzel-Manifest
+   fängt den Rest. Dateien ohne Modul (`docs/`, `.github/`, `Dockerfile`) zählen in `git.dirs`, aber in keinem Modul.
+9. **Modul-Churn zählt je Commit einmal.** Ein Commit, der 40 Dateien eines Moduls berührt, ist ein Commit —
+   sonst gewinnen Refactorings jede Rangliste. Datei-Churn (`git.files`) bleibt daneben erhalten.
+10. **Sprach-Adapter (T2) sind optional.** T1 liest Manifeste, keinen Code. Referenz-Repo: 48 Module (46 dotnet,
+    2 node), `tested_by` korrekt über `ProjectReference`, 2,6 s.
 
 ## Interpretation für `plan` (M2)
 

@@ -59,7 +59,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     model.write(out)
     print(f"sherpa scan: {model.repo} @ {g.trunk.ref} {g.trunk.rev[:10]} ({g.trunk.source}) — "
           f"{len(g.files)} Dateien, {g.commits_90d} Commits/90d, {g.commits_30d}/30d, "
-          f"{len(g.hotspots)} Hotspots → {out}", file=sys.stderr)
+          f"{len(g.hotspots)} Hotspots, {len(model.modules)} Module → {out}", file=sys.stderr)
     return EXIT_OK
 
 

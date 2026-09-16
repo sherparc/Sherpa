@@ -1,0 +1,301 @@
+"""T1 auf einem programmatischen Polyglott-Fixture: dotnet, python, node, go, rust, java in EINEM Repo.
+
+Erwartete Modul-Landschaft (Pfad → id, Deps innerhalb des Repos):
+  src/Shop.Core/Shop.Core.csproj                 Shop.Core
+  src/Shop.Pricing/Shop.Pricing.csproj           Shop.Pricing      → Shop.Core
+  tests/Shop.Pricing.Tests/….csproj              Shop.Pricing.Tests → Shop.Pricing, Shop.Core (is_test)
+  py/lib/pyproject.toml                          shop-lib
+  py/app/pyproject.toml                          shop-app          → shop-lib (PEP-503-Normalisierung "Shop_Lib")
+  web/package.json                               @shop/web         → @shop/ui  (devDependency)
+  web/ui/package.json                            @shop/ui
+  web/node_modules/left-pad/package.json         (ignoriert)
+  go/svc/go.mod                                  example.com/shop/svc → example.com/shop/lib (require)
+  go/lib/go.mod                                  example.com/shop/lib
+  rust/Cargo.toml                                [workspace] (kein Modul)
+  rust/core/Cargo.toml                           shop-core-rs
+  rust/cli/Cargo.toml                            shop-cli          → shop-core-rs (path-dep)
+  java/pom.xml                                   shop-parent
+  java/api/pom.xml                               shop-api          → shop-domain (artifactId)
+  java/domain/pom.xml                            shop-domain
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from sherpa.gitinfo import resolve_trunk
+from sherpa.model import FileStat
+from sherpa.scan import scan
+from sherpa.scan.t0_git import collect
+from sherpa.scan.t1_modules import (
+    assign_files, build_modules, detect_conventions, find_modules, is_test_file, load_manifests,
+    manifest_kind, parse_dotnet, parse_go, parse_java, parse_node, parse_python, parse_rust, resolve_deps,
+)
+from tests.conftest import commit, git
+
+CSPROJ = '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>{body}</Project>'
+D1, D2 = "2026-01-15T12:00:00Z", "2026-02-20T12:00:00Z"
+
+FILES: dict[str, str | bytes] = {
+    "src/Shop.Core/Shop.Core.csproj": CSPROJ.format(body=""),
+    "src/Shop.Core/Money.cs": "class Money {}\n",
+    "src/Shop.Pricing/Shop.Pricing.csproj": CSPROJ.format(
+        body='<ItemGroup><ProjectReference Include="..\\Shop.Core\\Shop.Core.csproj" /></ItemGroup>'),
+    "src/Shop.Pricing/PriceEngine.cs": "class PriceEngine {}\n",
+    "src/Shop.Pricing/Properties/Resources.Designer.cs": "// generated\n" * 50,
+    "tests/Shop.Pricing.Tests/Shop.Pricing.Tests.csproj": CSPROJ.format(
+        body='<ItemGroup><PackageReference Include="xunit" Version="2.9" />'
+             '<ProjectReference Include="../../src/Shop.Pricing/Shop.Pricing.csproj" />'
+             '<ProjectReference Include="../../src/Shop.Core/Shop.Core.csproj" /></ItemGroup>'),
+    "tests/Shop.Pricing.Tests/PriceEngineTests.cs": "class PriceEngineTests {}\n",
+    "py/lib/pyproject.toml": '[project]\nname = "Shop_Lib"\nversion = "0"\n',
+    "py/lib/shop_lib/__init__.py": "",
+    "py/app/pyproject.toml": '[project]\nname = "shop-app"\nversion = "0"\ndependencies = ["shop-lib>=0", "requests"]\n'
+                             '[project.optional-dependencies]\ndev = ["pytest"]\n',
+    "py/app/shop_app/main.py": "print(1)\n",
+    "py/app/tests/test_main.py": "def test_x(): pass\n",
+    "web/package.json": '{"name": "@shop/web", "devDependencies": {"@shop/ui": "*", "vite": "5"}}',
+    "web/src/app.ts": "export {}\n",
+    "web/src/app.test.ts": "test('x', () => {})\n",
+    "web/ui/package.json": '{"name": "@shop/ui", "dependencies": {"react": "18"}}',
+    "web/ui/index.ts": "export {}\n",
+    "web/node_modules/left-pad/package.json": '{"name": "left-pad"}',
+    "web/node_modules/left-pad/index.js": "x\n",
+    "go/svc/go.mod": "module example.com/shop/svc\n\ngo 1.22\n\nrequire (\n\texample.com/shop/lib v0.0.0\n\tgithub.com/x/y v1.2.3\n)\n"
+                     "\nreplace example.com/shop/lib => ../lib\n",
+    "go/svc/main.go": "package main\n",
+    "go/svc/main_test.go": "package main\n",
+    "go/lib/go.mod": "module example.com/shop/lib\n\ngo 1.22\n",
+    "go/lib/lib.go": "package lib\n",
+    "rust/Cargo.toml": '[workspace]\nmembers = ["core", "cli"]\n',
+    "rust/core/Cargo.toml": '[package]\nname = "shop-core-rs"\nversion = "0.1.0"\n',
+    "rust/core/src/lib.rs": "pub fn f() {}\n",
+    "rust/cli/Cargo.toml": '[package]\nname = "shop-cli"\nversion = "0.1.0"\n[dependencies]\nshop-core-rs = { path = "../core" }\nserde = "1"\n',
+    "rust/cli/src/main.rs": "fn main() {}\n",
+    "java/pom.xml": '<project xmlns="http://maven.apache.org/POM/4.0.0"><artifactId>shop-parent</artifactId>'
+                    '<packaging>pom</packaging><modules><module>api</module><module>domain</module></modules></project>',
+    "java/api/pom.xml": '<project><artifactId>shop-api</artifactId><dependencies>'
+                        '<dependency><groupId>x</groupId><artifactId>shop-domain</artifactId></dependency>'
+                        '<dependency><groupId>org.junit</groupId><artifactId>junit</artifactId></dependency>'
+                        '</dependencies></project>',
+    "java/api/src/main/java/Api.java": "class Api {}\n",
+    "java/api/src/test/java/ApiTest.java": "class ApiTest {}\n",
+    "java/domain/pom.xml": '<project><artifactId>shop-domain</artifactId></project>',
+    "java/domain/src/main/java/Domain.java": "class Domain {}\n",
+    ".github/workflows/ci.yml": "on: push\n",
+    "Dockerfile": "FROM scratch\n",
+    "docs/README.md": "# docs\n",
+}
+
+
+@pytest.fixture
+def poly_repo(tmp_path: Path) -> Path:
+    work = tmp_path / "seed"
+    work.mkdir()
+    git(work, "init", "-q", "-b", "main")
+    commit(work, "c1", FILES, date=D1, author="A")
+    commit(work, "c2", {"src/Shop.Pricing/PriceEngine.cs": "class PriceEngine { int x; }\n",
+                        "src/Shop.Core/Money.cs": "class Money { int v; }\n"}, date=D2, author="B")
+    commit(work, "c3", {"src/Shop.Pricing/PriceEngine.cs": "class PriceEngine { int x, y; }\n"},
+           date="2026-03-01T12:00:00Z", author="A")
+    origin = tmp_path / "origin.git"
+    git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
+    clone = tmp_path / "clone"
+    git(tmp_path, "clone", "-q", str(origin), str(clone))
+    return clone
+
+
+# ---------------------------------------------------------------- Erkennung
+
+@pytest.mark.parametrize("path,kind", [
+    ("src/A/A.csproj", "dotnet"), ("x/y.fsproj", "dotnet"), ("pyproject.toml", "python"), ("setup.py", "python"),
+    ("web/package.json", "node"), ("go.mod", "go"), ("Cargo.toml", "rust"), ("pom.xml", "java"),
+    ("app/build.gradle.kts", "java"),
+    ("web/node_modules/x/package.json", None), ("rust/target/debug/Cargo.toml", None),
+    ("src/A/bin/Debug/A.csproj", None), ("README.md", None), ("src/A/A.csproj.user", None),
+])
+def test_manifest_kind(path, kind):
+    assert manifest_kind(path) == kind
+
+
+@pytest.mark.parametrize("path,expected", [
+    ("tests/x.cs", True), ("a/test/b.py", True), ("a/__tests__/b.js", True), ("spec/x.rb", True),
+    ("pkg/test_x.py", True), ("pkg/x_test.py", True), ("cmd/x_test.go", True), ("web/a.test.ts", True),
+    ("web/a.spec.js", True), ("src/FooTest.java", True), ("src/FooTests.cs", True), ("src/x_tests.rs", True),
+    ("src/Foo.cs", False), ("src/testing/Foo.cs", False), ("contest/x.py", False),
+])
+def test_is_test_file(path, expected):
+    assert is_test_file(path) is expected
+
+
+# ---------------------------------------------------------------- Parser
+
+def test_parse_dotnet_refs_and_test_detection():
+    m = parse_dotnet("tests/Shop.Pricing.Tests/Shop.Pricing.Tests.csproj",
+                     FILES["tests/Shop.Pricing.Tests/Shop.Pricing.Tests.csproj"].encode())
+    assert m.id == "Shop.Pricing.Tests" and m.path == "tests/Shop.Pricing.Tests" and m.is_test
+    assert m.deps_by_manifest == ("src/Shop.Core/Shop.Core.csproj", "src/Shop.Pricing/Shop.Pricing.csproj")
+
+
+def test_parse_dotnet_backslash_ref_and_is_test_property():
+    m = parse_dotnet("src/Shop.Pricing/Shop.Pricing.csproj", FILES["src/Shop.Pricing/Shop.Pricing.csproj"].encode())
+    assert m.deps_by_manifest == ("src/Shop.Core/Shop.Core.csproj",) and not m.is_test
+    m2 = parse_dotnet("t/X/X.csproj", CSPROJ.format(body="<PropertyGroup><IsTestProject>true</IsTestProject></PropertyGroup>").encode())
+    assert m2.is_test
+    m3 = parse_dotnet("t/X/X.csproj", b"<not xml")
+    assert m3.id == "X" and m3.deps_by_manifest == ()
+
+
+def test_parse_python_normalises_names():
+    m = parse_python("py/app/pyproject.toml", FILES["py/app/pyproject.toml"].encode())
+    assert m.id == "shop-app" and m.deps_by_name == ("pytest", "requests", "shop-lib")
+    lib = parse_python("py/lib/pyproject.toml", FILES["py/lib/pyproject.toml"].encode())
+    assert lib.id == "Shop_Lib"
+    poetry = parse_python("p/pyproject.toml", b'[tool.poetry]\nname="p"\n[tool.poetry.dependencies]\npython="^3.12"\nq="1"\n')
+    assert poetry.id == "p" and poetry.deps_by_name == ("q",)
+    assert parse_python("setup.py", b"").id == "root"
+    assert parse_python("x/pyproject.toml", b"not = toml = bad").id == "x"
+
+
+def test_parse_node():
+    m = parse_node("web/package.json", FILES["web/package.json"].encode())
+    assert m.id == "@shop/web" and m.deps_by_name == ("@shop/ui", "vite")
+    assert parse_node("web/package.json", b"{bad").id == "web"
+
+
+def test_parse_go():
+    m = parse_go("go/svc/go.mod", FILES["go/svc/go.mod"].encode())
+    assert m.id == "example.com/shop/svc"
+    assert m.deps_by_name == ("example.com/shop/lib", "github.com/x/y")
+
+
+def test_parse_rust_workspace_root_is_not_a_module():
+    assert parse_rust("rust/Cargo.toml", FILES["rust/Cargo.toml"].encode()) is None
+    m = parse_rust("rust/cli/Cargo.toml", FILES["rust/cli/Cargo.toml"].encode())
+    assert m.id == "shop-cli" and m.deps_by_manifest == ("rust/core/Cargo.toml",) and m.deps_by_name == ("serde",)
+    assert parse_rust("x/Cargo.toml", b"[package\nbad") is None
+
+
+def test_parse_java():
+    m = parse_java("java/api/pom.xml", FILES["java/api/pom.xml"].encode())
+    assert m.id == "shop-api" and m.deps_by_name == ("junit", "shop-domain")
+    assert parse_java("java/pom.xml", FILES["java/pom.xml"].encode()).id == "shop-parent"   # Namespace-XML
+    assert parse_java("g/build.gradle", b"").id == "g"
+    assert parse_java("b/pom.xml", b"<bad").id == "b"
+
+
+# ---------------------------------------------------------------- Auflösung
+
+def test_find_modules_one_per_dir_and_skips_tool_dirs():
+    paths = sorted(FILES)
+    contents = {p: (v.encode() if isinstance(v, str) else v) for p, v in FILES.items()}
+    mods = find_modules(paths, contents)
+    ids = {m.id for m in mods}
+    assert "left-pad" not in ids and "shop-parent" in ids
+    assert len(mods) == 14
+    two = {"x/pyproject.toml": b'[project]\nname="a"\n', "x/package.json": b'{"name":"b"}'}
+    assert [m.id for m in find_modules(sorted(two), two)] == ["b"]   # package.json < pyproject.toml alphabetisch
+
+
+def test_assign_files_deepest_module_wins_and_root_catches_rest():
+    from sherpa.scan.t1_modules import RawModule
+    root = RawModule("root", "", "node", "package.json", (), (), False)
+    sub = RawModule("sub", "pkg/sub", "node", "pkg/sub/package.json", (), (), False)
+    got = assign_files(["a.txt", "pkg/sub/x.js", "pkg/other.js"], [root, sub])
+    assert got == {"a.txt": "root", "pkg/sub/x.js": "sub", "pkg/other.js": "root"}
+    assert assign_files(["a.txt"], [sub]) == {"a.txt": None}
+
+
+def test_resolve_deps_cross_language_rules():
+    paths = sorted(FILES)
+    contents = {p: (v.encode() if isinstance(v, str) else v) for p, v in FILES.items()}
+    deps = resolve_deps(find_modules(paths, contents))
+    assert deps["Shop.Pricing"] == ["Shop.Core"]
+    assert deps["Shop.Pricing.Tests"] == ["Shop.Core", "Shop.Pricing"]
+    assert deps["shop-app"] == ["Shop_Lib"]                 # PEP 503: shop-lib ≙ Shop_Lib
+    assert deps["@shop/web"] == ["@shop/ui"]
+    assert deps["example.com/shop/svc"] == ["example.com/shop/lib"]
+    assert deps["shop-cli"] == ["shop-core-rs"]
+    assert deps["shop-api"] == ["shop-domain"]
+    assert deps["Shop.Core"] == [] and deps["shop-parent"] == []
+
+
+def test_resolve_deps_manifest_fallback_by_stem():
+    from sherpa.scan.t1_modules import RawModule
+    a = RawModule("A", "src/A", "dotnet", "src/A/A.csproj", ("wrong/path/B.csproj",), (), False)
+    b = RawModule("B", "lib/B", "dotnet", "lib/B/B.csproj", (), (), False)
+    assert resolve_deps([a, b])["A"] == ["B"]
+
+
+# ---------------------------------------------------------------- Ende-zu-Ende
+
+def test_build_modules_on_poly_repo(poly_repo: Path):
+    m = scan(poly_repo, fetch=False)
+    by = {x.id: x for x in m.modules}
+    assert len(m.modules) == 14
+    assert [x.id for x in m.modules] == sorted((x.id for x in m.modules), key=lambda i: (by[i].path, i))
+
+    pricing = by["Shop.Pricing"]
+    assert (pricing.kind, pricing.path, pricing.files, pricing.is_test) == ("dotnet", "src/Shop.Pricing", 3, False)
+    assert pricing.deps == ["Shop.Core"] and pricing.dependents == ["Shop.Pricing.Tests"]
+    assert pricing.tested_by == ["Shop.Pricing.Tests"]
+    assert (pricing.commits_90d, pricing.commits_30d, pricing.authors_90d) == (3, 2, 2)
+    # Designer.cs ist generiert → kein Hotspot; csproj hat 1 Commit × 1 LOC → hinten
+    assert pricing.hotspots == ["src/Shop.Pricing/PriceEngine.cs", "src/Shop.Pricing/Shop.Pricing.csproj"]
+    assert pricing.loc == 50 + 1 + 1                                     # LOC inkl. generierter Datei
+
+    core = by["Shop.Core"]
+    assert core.dependents == ["Shop.Pricing", "Shop.Pricing.Tests"] and core.tested_by == ["Shop.Pricing.Tests"]
+    assert (core.commits_90d, core.commits_30d) == (2, 1)
+
+    tests = by["Shop.Pricing.Tests"]
+    assert tests.is_test and tests.test_files == 2                      # csproj + Tests.cs liegen unter tests/
+
+    assert by["shop-app"].test_files == 1 and by["@shop/web"].test_files == 1
+    assert by["example.com/shop/svc"].test_files == 1 and by["shop-api"].test_files == 1
+    assert by["Shop_Lib"].commits_90d == 1 and by["Shop_Lib"].commits_30d == 0
+
+    assert m.conventions.ci == [".github/workflows/ci.yml"] and m.conventions.containers == ["Dockerfile"]
+    assert list(m.conventions.languages)[0] == "csharp"
+
+
+def test_files_outside_modules_are_not_counted(poly_repo: Path):
+    m = scan(poly_repo, fetch=False)
+    assert sum(x.files for x in m.modules) < len(m.git.files)             # docs/, Dockerfile, .github/ gehören keinem Modul
+
+
+def test_no_manifests_gives_empty_modules(make_origin, make_clone):
+    origin, _ = make_origin()
+    clone = make_clone(origin)
+    m = scan(clone, fetch=False)
+    assert m.modules == [] and m.conventions.languages == {} and m.conventions.ci == []
+
+
+def test_load_manifests_reads_only_manifests(poly_repo: Path):
+    t = resolve_trunk(poly_repo)
+    data = collect(poly_repo, t)
+    contents = load_manifests(poly_repo, t.rev, list(data.paths))
+    assert "src/Shop.Core/Shop.Core.csproj" in contents and "src/Shop.Core/Money.cs" not in contents
+    assert "web/node_modules/left-pad/package.json" not in contents
+
+
+def test_build_modules_direct_with_empty_files():
+    from sherpa.scan.t0_git import T0Data
+    from datetime import datetime, timezone
+    from sherpa.gitinfo import Trunk
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    data = T0Data(Trunk("origin/main", "candidate", "0" * 40), now, now, now, (), (), {})
+    assert build_modules(data, [], {}) == []
+
+
+def test_detect_conventions_counts_loc_per_language():
+    langs, ci, containers = detect_conventions(
+        ["a.cs", "b.cs", "c.py", "d.bin", "Jenkinsfile", "ops/docker-compose.prod.yml", "x.Dockerfile"],
+        {"a.cs": 10, "b.cs": 5, "c.py": 7, "d.bin": None, "Jenkinsfile": 1, "ops/docker-compose.prod.yml": 1, "x.Dockerfile": 1})
+    assert list(langs.items()) == [("csharp", 15), ("python", 7), ("yaml", 1)]
+    assert ci == ["Jenkinsfile"] and containers == ["ops/docker-compose.prod.yml", "x.Dockerfile"]
+
+
+def test_scan_stays_deterministic_with_modules(poly_repo: Path):
+    assert scan(poly_repo, fetch=False).to_json() == scan(poly_repo, fetch=False).to_json()

@@ -1,6 +1,6 @@
 # Sherpa — Plan
 
-> **Datum:** 2026-09-16 · **Autor:** Claude (Opus 5) mit Andrei · **Stand:** v0.1.0, M1 (T0-Scanner) fertig
+> **Datum:** 2026-09-16 · **Autor:** Claude (Opus 5) mit Andrei · **Stand:** v0.2.0, M1a (T0+T1-Scanner) fertig
 > **Vorlage:** ein produktives Claude-Code-Harness (.NET-Monorepo, ~120 Harness-Commits, 17 Agents, 5 Librarians,
 > deterministischer Checker) und dessen Bewertung vom 2026-09-16 (Innovation 8/10, Stabilität 6/10). Sherpa nennt
 > dieses Projekt nicht beim Namen: Sherpa ist ein generisches Produkt, das Referenz-Harness nur ein Datenpunkt.
@@ -49,7 +49,7 @@ Deterministisch, testbar mit Fixture-Repos, **sprachunabhängig**. Drei Schichte
 | Schicht | Quelle | Gilt für | Liefert |
 |---|---|---|---|
 | **T0 Git** ✅ M1 | `git log`, `git ls-tree` gegen `origin/<trunk>` (ADR-0003) | jedes Repo | Churn, Hotspots, Autoren, Dateibaum, LOC, generierte Dateien — Details in `docs/scan.md` |
-| **T1 Struktur** | Verzeichnis-Heuristik + Manifest-Dateien (`*.csproj`, `pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`, `pom.xml`, …) | jedes Repo mit Manifesten | Module, Deps zwischen Modulen, Test-Zuordnung |
+| **T1 Struktur** ✅ M1a | Manifest-Dateien (`*.csproj`, `pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`, `pom.xml`, `build.gradle`) | jedes Repo mit Manifesten | Module, repo-interne Deps, `tested_by`, Churn je Modul, Sprachen/CI/Container — Details in `docs/scan.md` |
 | **T2 Sprache** | Adapter (`sherpa/adapters/<lang>/`), optional tree-sitter | pro Sprache, erste: `dotnet`, `python` | Symbole/Anker, feinere Deps |
 
 Ein Repo ohne Adapter bekommt T0+T1 und damit Owner-Docs, Hotspots, Churn-Schwellen und Evals aus dem Graph —
@@ -57,19 +57,18 @@ nur Code-Anker (C7) fehlen. Der Adapter ist ein Plugin, kein Muss.
 
 ```json
 {
-  "sherpa": "0.1.0", "schema_version": 1, "repo": "…", "origin": "…",
+  "sherpa": "0.2.0", "schema_version": 2, "repo": "…", "origin": "…",
   "git": {"trunk": {"ref": "origin/main", "source": "origin/HEAD", "rev": "…"}, "windows": {…},
-          "commits_90d": 1018, "files": […], "dirs": […], "hotspots": […]},          ← T0, implementiert (M1)
-  "modules": [                                                                         ← T1, geplant
-    {"id": "Shop.Pricing", "path": "src/Shop.Pricing/", "kind": "project",
-     "files": 212, "loc": 18400, "tests": "tests/Shop.Pricing.Tests/",
-     "deps": ["Shop.Core", "Shop.Data"], "dependents": ["Shop.Api"],
-     "churn": {"commits_90d": 143, "commits_30d": 51, "authors_90d": 3},
-     "hotspots": [{"file": "Services/PriceEngine.cs", "commits_90d": 31, "loc": 940}],
-     "anchors": ["PriceEngine", "IPricingRule", "…"]}
+          "commits_90d": 1018, "files": […], "dirs": […], "hotspots": […]},          ← T0 (M1)
+  "modules": [                                                                         ← T1 (M1a)
+    {"id": "Shop.Pricing", "path": "src/Shop.Pricing", "kind": "dotnet", "manifest": "…csproj",
+     "is_test": false, "files": 212, "loc": 18400, "test_files": 0,
+     "deps": ["Shop.Core"], "dependents": ["Shop.Api"], "tested_by": ["Shop.Pricing.Tests"],
+     "commits_90d": 143, "commits_30d": 51, "authors_90d": 3,
+     "hotspots": ["src/Shop.Pricing/Services/PriceEngine.cs"]}
   ],
-  "infra": {"tests": "…", "ci": "…", "migrations": "…"},
-  "conventions": {"lang": "csharp", "solution": "Shop.sln", "test_runner": "dotnet test"}
+  "conventions": {"languages": {"csharp": 5953126, "typescript": 480000}, "ci": […], "containers": […]},
+  "anchors": […]                                                                       ← T2, geplant (Adapter)
 }
 ```
 
@@ -145,7 +144,7 @@ vorliegen. Lernen ohne Signal ist ein Versprechen, keine Funktion.
 |---|---|---|
 | M0 ✅ | Skelett, ADRs, Plan (dieses Doc) | `sherpa --version`, Tests grün |
 | M1 ✅ | Scanner T0 (jede Sprache): Trunk, Churn, Hotspots, Dateibaum, generierte Dateien, JSON-Schema | Fixture-Repo → identisches JSON bei zwei Läufen (`test_scan_is_deterministic`); 58 Tests, 98 % Coverage; Referenz-Repo 15k Dateien in 2,5 s |
-| M1a | Scanner T1: Module aus Manifesten, Deps, Test-Zuordnung | Fixture-Repos (≥ 3 Sprachen), Snapshot-Goldens |
+| M1a ✅ | Scanner T1: Module aus Manifesten (6 Ökosysteme), repo-interne Deps, `tested_by`, Churn je Modul, Konventionen | Polyglott-Fixture (dotnet+python+node+go+rust+java in einem Repo, `tests/test_t1_modules.py`); 105 Tests, 99 %; Referenz-Repo 48 Module in 2,6 s |
 | M1b | Adapter `dotnet` + `python` (T2: Anker) | Scan des Referenz-Repos liefert die Anker, die dessen Checker heute prüft |
 | M2 | `plan` ohne LLM: Schwellwert-Regeln, Nein-Begründungen | Plan auf Fixture reproduzierbar; jeder Eintrag hat Evidenz |
 | M3 | `apply` Owner-Docs + Checker + State + Marker | zweiter Lauf = no-op; Hand-Edit wird nicht überschrieben; Checker 0 FAIL |
@@ -174,12 +173,12 @@ Viele Tests, kleine Einheiten, alles reproduzierbar:
 |---|---|---|
 | Unit | jede Funktion in `src/sherpa/` | `pytest`, Fixture-Repos werden **programmatisch** gebaut (`tests/conftest.py`), feste Git-Daten/Autoren → gleiche SHAs |
 | Determinismus | `scan`, `apply`, `status` | zwei Läufe, Baum-Hash-Vergleich |
-| Snapshot | `codebase-model.json`, `harness-plan.yaml` je Fixture | eingecheckte Golden-Dateien, Diff bei Abweichung |
+| Snapshot | `codebase-model.json`, `harness-plan` je Fixture | ab M2 (Golden-Dateien lohnen erst, wenn `plan` sie konsumiert); bis dahin Feld-Assertions |
 | Selftest | Checker (Muster: Selftest des Referenz-Checkers) | je Regel ein positiver und ein negativer Fall |
 | Korpus | echte Repos unter `tests/corpus/` (ignored) | Smoke: Scan läuft durch, Schema valide, Laufzeit < 60 s |
 | Schema | `codebase-model`, `harness-plan`, `sherpa-state` | JSON-Schema unter `src/sherpa/schemas/`; Validierung in Tests immer, zur Laufzeit wenn `jsonschema` installiert (dev-Extra) |
 
-Gate: Coverage ≥ 90 % für `src/sherpa/`, `pytest -q` grün vor jedem Meilenstein. Stand M1: 58 Tests, 98 %.
+Gate: Coverage ≥ 90 % für `src/sherpa/`, `pytest -q` grün vor jedem Meilenstein. Stand M1a: 105 Tests, 99 %.
 
 ## 6. Offene Fragen
 

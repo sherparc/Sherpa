@@ -8,7 +8,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SCHEMA_PATH = Path(__file__).parent / "schemas" / "codebase-model.schema.json"
 
 
@@ -55,6 +55,32 @@ class Hotspot:
 
 
 @dataclass(frozen=True)
+class ModuleStat:
+    id: str
+    path: str               # Verzeichnis des Manifests, "" = Wurzel
+    kind: str               # dotnet | python | node | go | rust | java
+    manifest: str
+    is_test: bool           # eigenes Test-Modul (dotnet)
+    files: int
+    loc: int
+    test_files: int         # Testdateien innerhalb des Moduls
+    deps: list[str]         # Modul-ids im Repo
+    dependents: list[str]
+    tested_by: list[str]    # Test-Module, die dieses Modul referenzieren
+    commits_90d: int
+    commits_30d: int
+    authors_90d: int
+    hotspots: list[str]     # Top-Pfade nach commits×loc innerhalb des Moduls
+
+
+@dataclass(frozen=True)
+class Conventions:
+    languages: dict[str, int]   # Sprache → LOC, absteigend
+    ci: list[str]
+    containers: list[str]
+
+
+@dataclass(frozen=True)
 class GitLayer:
     trunk: TrunkInfo
     windows: Windows
@@ -76,6 +102,8 @@ class Model:
     repo: str           # Basename des Repo-Verzeichnisses
     origin: str         # URL von origin
     git: GitLayer
+    modules: list[ModuleStat] = field(default_factory=list)
+    conventions: Conventions = field(default_factory=lambda: Conventions({}, [], []))
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), sort_keys=True, indent=2, ensure_ascii=False) + "\n"

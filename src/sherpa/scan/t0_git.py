@@ -54,13 +54,13 @@ def list_files(repo: Path, ref: str) -> list[str]:
     return sorted(p for p in out.split("\0") if p)
 
 
-def blob_locs(repo: Path, ref: str, paths: list[str]) -> dict[str, int | None]:
-    """LOC je Datei über EIN ``git cat-file --batch``. Binär (NUL im Inhalt) → None."""
+def blob_contents(repo: Path, ref: str, paths: list[str]) -> dict[str, bytes | None]:
+    """Blob-Inhalte über EIN ``git cat-file --batch``. None = fehlt oder kein Blob (Submodule)."""
     if not paths:
         return {}
     stdin = "".join(f"{ref}:{p}\n" for p in paths).encode("utf-8", errors="surrogateescape")
     out = _run(repo, "cat-file", "--batch", stdin=stdin)
-    locs: dict[str, int | None] = {}
+    contents: dict[str, bytes | None] = {}
     pos = 0
     for p in paths:
         nl = out.index(b"\n", pos)
@@ -68,16 +68,23 @@ def blob_locs(repo: Path, ref: str, paths: list[str]) -> dict[str, int | None]:
         pos = nl + 1
         parts = header.split()
         if len(parts) < 3 or parts[1] != "blob":     # "missing" oder anderer Typ (Submodule = commit)
-            locs[p] = None
+            contents[p] = None
             continue
         size = int(parts[2])
-        content = out[pos:pos + size]
+        contents[p] = out[pos:pos + size]
         pos += size + 1                                 # Inhalt + abschliessendes "\n"
-        if b"\0" in content:
-            locs[p] = None
-        else:
-            locs[p] = content.count(b"\n") + (1 if content and not content.endswith(b"\n") else 0)
-    return locs
+    return contents
+
+
+def loc_of(content: bytes | None) -> int | None:
+    """Zeilen; None = binär (NUL im Inhalt) oder kein Blob."""
+    if content is None or b"\0" in content:
+        return None
+    return content.count(b"\n") + (1 if content and not content.endswith(b"\n") else 0)
+
+
+def blob_locs(repo: Path, ref: str, paths: list[str]) -> dict[str, int | None]:
+    return {p: loc_of(c) for p, c in blob_contents(repo, ref, paths).items()}
 
 
 def commit_date(repo: Path, ref: str) -> datetime:
@@ -120,15 +127,38 @@ def is_generated(path: str, globs: tuple[str, ...]) -> bool:
     return any(fnmatchcase(path, g) or fnmatchcase(name, g) for g in globs)
 
 
-def scan_git(repo: Path, trunk: Trunk, *, as_of: datetime | None = None, top: int = 20,
-             generated: tuple[str, ...] = ()) -> GitLayer:
+@dataclass(frozen=True)
+class T0Data:
+    """Rohdaten eines Trunk-Revs — Grundlage für T0 (GitLayer) und T1 (Module)."""
+    trunk: Trunk
+    as_of: datetime
+    since_90: datetime
+    since_30: datetime
+    commits: tuple[Commit, ...]     # Nicht-Merge-Commits im 90d-Fenster, nur Dateien, die es noch gibt
+    paths: tuple[str, ...]          # sortierter Dateibaum
+    locs: dict[str, int | None]
+
+
+def collect(repo: Path, trunk: Trunk, *, as_of: datetime | None = None) -> T0Data:
     as_of = as_of or commit_date(repo, trunk.rev)
     since_90, since_30 = as_of - WINDOW_LONG, as_of - WINDOW_SHORT
-
-    commits = [c for c in log_since(repo, trunk.rev, since_90) if since_90 < c.date <= as_of]
     paths = list_files(repo, trunk.rev)
-    locs = blob_locs(repo, trunk.rev, paths)
     present = set(paths)
+    commits = tuple(
+        Commit(c.sha, c.author, c.date, tuple(f for f in c.files if f in present))
+        for c in log_since(repo, trunk.rev, since_90) if since_90 < c.date <= as_of
+    )
+    return T0Data(trunk, as_of, since_90, since_30, commits, tuple(paths), blob_locs(repo, trunk.rev, paths))
+
+
+def scan_git(repo: Path, trunk: Trunk, *, as_of: datetime | None = None, top: int = 20,
+             generated: tuple[str, ...] = ()) -> GitLayer:
+    return build_git_layer(repo, collect(repo, trunk, as_of=as_of), top=top, generated=generated)
+
+
+def build_git_layer(repo: Path, data: T0Data, *, top: int = 20, generated: tuple[str, ...] = ()) -> GitLayer:
+    trunk, as_of, since_90, since_30 = data.trunk, data.as_of, data.since_90, data.since_30
+    commits, paths, locs = data.commits, list(data.paths), data.locs
 
     c90: dict[str, int] = defaultdict(int)
     c30: dict[str, int] = defaultdict(int)
@@ -141,8 +171,6 @@ def scan_git(repo: Path, trunk: Trunk, *, as_of: datetime | None = None, top: in
         short = c.date > since_30
         in30 += short
         for f in c.files:
-            if f not in present:              # im Fenster gelöscht/umbenannt → nicht im Baum
-                continue
             c90[f] += 1
             authors[f].add(c.author)
             if f not in last or c.date > last[f]:
