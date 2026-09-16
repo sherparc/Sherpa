@@ -8,13 +8,14 @@ Plan und Architektur: `docs/plan.md`. Scanner: `docs/scan.md`. Entscheidungen: `
   ADRs besitzen Entscheidungen, Code besitzt Verhalten. Keine Duplikate in README oder Kommentaren.
 - Scanner und Applier bleiben deterministisch (kein LLM, keine Netzabhängigkeit). LLM nur in `plan`.
 - Jede erzeugte Datei trägt den `sherpa:generated`-Marker; handbearbeitete Dateien werden nie überschrieben.
-- Tests: `.venv/bin/pytest -q` aus der Repo-Wurzel; Lint `.venv/bin/ruff check . && .venv/bin/ruff format --check .` — beides muss vor jedem Commit grün sein (CI prüft Linux, Windows, macOS). Jede neue Funktion kommt mit Tests; Fixture-Repos werden
+- Tests: `.venv/bin/pytest -q` aus der Repo-Wurzel; Lint `.venv/bin/ruff check . && .venv/bin/ruff format --check .` — beides muss vor jedem Commit grün sein (CI prüft Linux und Windows; macOS ist in der Matrix auskommentiert und wird nur bei grossen Änderungen an Git-/Pfad-/Encoding-Logik nach Rückfrage zugeschaltet). Jede neue Funktion kommt mit Tests; Fixture-Repos werden
   programmatisch gebaut (`tests/conftest.py`), nie als Binärdaten eingecheckt. Coverage-Ziel ≥ 90 % (`docs/plan.md` §5).
 - Git-Messungen immer gegen `origin/<trunk>` via `sherpa.gitinfo.resolve_trunk` (ADR-0003), nie gegen `HEAD`.
 - Sprachunabhängig: T0 (Git) und T1 (Manifeste) müssen ohne Sprach-Adapter funktionieren (`docs/plan.md` §2.1).
 - Modell-Zugriff nur über `sherpa/llm/` (ADR-0004); kein LangChain/LangGraph, kein Provider-Code ausserhalb.
 - Vor jedem Commit den Diff zeigen (`git diff --stat` + Kernpunkte) und Andrei fragen; erst nach seinem Ja committen und pushen.
 - Commit-Messages: 1 bis 3 ganze Sätze, nie ein `Co-Authored-By`-Trailer.
+- README ist Marketing und Wahrheit zugleich: Sie wird bei jedem Schritt mitgezogen (Status-Tabelle, Roadmap, Zahlen) und behauptet nie etwas, das nicht läuft — Beispiele sind echte Ausgaben, Badges nur für Dinge, die existieren.
 - Sprache in Docs und Commits: Deutsch.
 
 ## Produkt, nicht Projekt
