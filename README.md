@@ -32,6 +32,7 @@ harness-plan.yaml — 3 Vorschläge, 2 begründete Neins
   + agent      Shop.Pricing        Owner-Doc vorhanden ✓ · 5 Autoren ✓
   + test-infra tests/Shop.Tests    mehr Commits als jedes Fachmodul ✓
   - librarian  Shop.Core           Rang 4/12 ✗ · Boden 100 Commits ✗
+  - agent      Shop.Reporting      1 Autor ✗ · 9 Commits/90 T ✗
 
 $ sherpa apply .           # Dry-Run: zeigt + ~ = ! je Datei
 $ sherpa apply . --yes     # legt .claude/** an, schreibt .sherpa/state.json
@@ -136,6 +137,10 @@ flowchart LR
 | M4–M7 | Auto-Evals, Outcome-Bewertung, LLM-Stufe, Librarians & Multi-Repo | ⏳ |
 
 Vollständig mit Begründungen: [docs/plan.md](docs/plan.md) · jede Entscheidung als ADR: [docs/adr/](docs/adr/README.md)
+
+## Lizenz
+
+Proprietär, alle Rechte vorbehalten ([LICENSE](LICENSE)). Alles, was Sherpa in deinem Repo erzeugt, gehört dir ohne Auflagen. Für den öffentlichen Release ist eine Source-available-Lizenz geplant (frei für Einzelne und kleine Teams, Firmenlizenz darüber) — Begründung in [ADR-0010](docs/adr/0010-lizenz-zweistufig.md).
 
 ## Entwicklung
 
