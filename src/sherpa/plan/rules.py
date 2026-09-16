@@ -7,7 +7,8 @@ Decisions (owned by this module, ADR-0006/0011/0012):
   ceil(n · agent_top). Generator-dominated units take no rank away (CodeScene excludes generated code before
   scoring hotspots).
 - **Dormant units** (0 commits/90d and 0 dependents) get no owner doc — visible as a no with a flip criterion,
-  never silently.
+  never silently. **Small units** (fewer than ``owner_doc_min_files`` files and no dependents) neither: a doc
+  nobody links to is the first to go stale; a dependent overrides the floor.
 - **Generator-dominated** (share of generator output ≥ generated_share): no agent, no librarian; the skill for the
   generator takes over (principle: generated code is regenerated, not explained).
 - **Test infrastructure**: the most active test unit is proposed when it has more commits than any business unit —
@@ -150,15 +151,23 @@ def outcome_entry(model: Model) -> Entry:
     )
 
 
-def owner_doc_entry(u: Unit) -> Entry:
+def owner_doc_entry(u: Unit, cfg: PlanConfig) -> Entry:
+    """Dormant units get no doc; small units without dependents neither — a two-file tool is explained where it is
+    used, and a doc nobody links to is the first to go stale. A dependent overrides the floor."""
     checks = [
         Check(
             f"{u.commits_90d} commits/90d, {u.dependents} dependents",
             not u.dormant,
             "commits/90d ≥ 1 or dependents ≥ 1",
-        )
+        ),
+        Check(f"{u.files} files", not small_unit(u, cfg), f"files ≥ {cfg.owner_doc_min_files} or dependents ≥ 1"),
     ]
-    return _entry("owner-doc", u, checks, reason_prefix="dormant: ")
+    prefix = "dormant: " if u.dormant else "small unit: " if small_unit(u, cfg) else ""
+    return _entry("owner-doc", u, checks, reason_prefix=prefix)
+
+
+def small_unit(u: Unit, cfg: PlanConfig) -> bool:
+    return u.files < cfg.owner_doc_min_files and u.dependents == 0
 
 
 def _generated_check(u: Unit, cfg: PlanConfig) -> Check:
@@ -287,7 +296,7 @@ def build(model: Model, cfg: PlanConfig) -> Plan:
     out_of_reach = {"agent": 0, "librarian": 0}
     for u in sorted(business, key=lambda u: (-u.commits_90d, u.id)):
         gen = by_module_gen.get(u.id)
-        entries.append(owner_doc_entry(u))
+        entries.append(owner_doc_entry(u, cfg))
         if u.dormant:
             continue  # dormant: agent/librarian would merely repeat the owner-doc no
         generated = u.generated_share >= cfg.generated_share
@@ -328,6 +337,15 @@ def build(model: Model, cfg: PlanConfig) -> Plan:
         notes.append(
             f"{len(dormant)} dormant units without owner doc (0 commits/90d, 0 dependents): "
             f"{names} — the first commit turns them into a proposal; each is listed above as a no."
+        )
+    small = sorted(u.id for u in business if not u.dormant and small_unit(u, cfg))
+    if small:
+        names = ", ".join(small[:MAX_NAMED]) + (
+            f", … (+{len(small) - MAX_NAMED} more)" if len(small) > MAX_NAMED else ""
+        )
+        notes.append(
+            f"{len(small)} small units without owner doc (< {cfg.owner_doc_min_files} files, 0 dependents): {names} — "
+            "listed above as no's; owner_doc_min_files in sherpa.toml [plan] moves the floor, a dependent overrides it."
         )
     if out_of_reach["agent"] or out_of_reach["librarian"]:
         notes.append(

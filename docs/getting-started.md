@@ -31,18 +31,19 @@ sherpa plan
 `.sherpa/harness-plan.yaml`:
 
 ```console
-harness-plan.yaml — 7 proposals, 3 reasoned no's
+harness-plan.yaml — 6 proposals, 4 reasoned no's
   + outcome     shop                          mandatory: no harness without an outcome signal (ADR-0008) ✓
-  + owner-doc   pay                           24 commits/90d, 1 dependents ✓
-  + owner-doc   core                          1 commits/90d, 2 dependents ✓
-  + owner-doc   web                           1 commits/90d, 0 dependents ✓
+  + owner-doc   pay                           24 commits/90d, 1 dependents ✓ · 40 files ✓
+  + owner-doc   core                          1 commits/90d, 2 dependents ✓ · 3 files ✓
   + agent       pay                           rank 1/4 churn ✓ · 24 commits/90d ✓ · 40 files ✓ · 2 authors ✓
   + test-infra  suite                         26 commits/90d vs. 24 (pay) ✓
   + skill       regenerate-django-migrations  svc/pay/pay/migrations · 6 generated files, 1 configs ✓
-  - owner-doc   old                           0 commits/90d, 0 dependents ✗
+  - owner-doc   web                           1 commits/90d, 0 dependents ✓ · 3 files ✗
+  - owner-doc   old                           0 commits/90d, 0 dependents ✗ · 2 files ✗
   - librarian   pay                           rank 1/4 momentum ✓ · 24 commits/30d, 24/90d ✗
   - librarian   core                          rank 2/4 momentum ✓ · 1 commits/30d, 1/90d ✗
   1 dormant units without owner doc (0 commits/90d, 0 dependents): old — the first commit turns them into a proposal; each is listed above as a no.
+  1 small units without owner doc (< 5 files, 0 dependents): web — listed above as no's; owner_doc_min_files in sherpa.toml [plan] moves the floor, a dependent overrides it.
   not listed, out of reach: 2 units for agent (rank > 1 and < 20 commits/90d), 1 for librarian (rank > 2 and below both floors).
 → .sherpa/harness-plan.yaml
 ```
@@ -72,16 +73,16 @@ Dry run first — every file with `+ new`, `~ updated`, `= unchanged` or `! skip
 question:
 
 ```console
-sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 6 selected → 11 files
+sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 10 files
   + .claude/agents/pay.md                                 agent pay                     new
   + .claude/docs/modules/core.md                          owner-doc core                new
   + .claude/docs/modules/pay.md                           owner-doc pay                 new
   …
   + CLAUDE.md                                             harness                       new
-11 to add, 0 to change, 0 unchanged, 0 skipped.
+10 to add, 0 to change, 0 unchanged, 0 skipped.
 apply? [y/N] y
 check: 0 FAIL, 0 WARN
-11 files written · harness_rev 5be9c857fd4b → .sherpa/state.json
+10 files written · harness_rev f5c1cf090666 → .sherpa/state.json
 ```
 
 Sherpa now owns exactly the marked blocks inside those files (`<!-- sherpa:begin facts -->` …

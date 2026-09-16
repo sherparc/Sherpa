@@ -102,7 +102,7 @@ criterion with ✓/✗), `cost`, `default` and, for `skip`, a `reason` with a fl
 | Building block | Scope | `propose` when | otherwise |
 |---|---|---|---|
 | Outcome channel | repo | always, **first** — the minimum comes with `apply` (M3a ✅), evaluation in M5 (§2.5) | — |
-| Owner doc | per unit (module or depth-1 directory without a module, ADR-0012) | not dormant: ≥ 1 commit/90d or ≥ 1 dependent | visible `skip` ("dormant"), count line in `notes` |
+| Owner doc | per unit (module or depth-1 directory without a module, ADR-0012) | not dormant: ≥ 1 commit/90d or ≥ 1 dependent; not small: ≥ `owner_doc_min_files` (5) files or ≥ 1 dependent (ADR-0014) | visible `skip` ("dormant", "small unit"), count lines in `notes` |
 | Agent | per business unit | top quartile by `commits_90d` **and** floors `commits_90d ≥ 20`, `files ≥ 30`, `authors_90d ≥ 2` | `skip` listed when within reach (rank or commit floor met) |
 | Librarian | per business unit | top **2** by `commits_30d`, floor `commits_30d ≥ 30` **or** `commits_90d ≥ 80` | `skip` listed when within reach |
 | Generator-dominated | unit with ≥ 50 % generator output | no agent/librarian, no rank; **skill** `regenerate-<family>` at the `home` (ADR-0011) | skill below the floor (5 files) as a count line |
@@ -270,11 +270,8 @@ Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milest
    Relevant from M6.
 4. Two manifests in the same directory: today the alphabetically first wins — is that enough in the corpus?
 5. Package index for M2b: a private index (Cloudsmith/Gemfury free tier) or a static simple index behind a token?
-6. Owner-doc floor by files (e.g. `files ≥ 5`)? Data from the local corpus (2026-09-17): on a 79-module .NET
-   repository 13 of 51 proposed owner docs are for units with fewer than five files — mostly test-project
-   templates named like `ClassLib1` that live outside a test directory; on a 122-module Java repository none.
-   Proposal: `owner_doc_min_files = 5` in `[plan]`, with dependents overriding the floor (a two-file library
-   that three modules depend on keeps its doc). Andrei decides.
+6. ~~Owner-doc floor by files?~~ Decided 2026-09-17 (ADR-0014): `owner_doc_min_files = 5`, a dependent overrides
+   the floor; small units are listed as no's and counted in a note so the reader sees them.
 7. ~~Order: M2b before M3?~~ Decided 2026-09-17: M3 first (the product truth "creates" needs `apply`); M2b after
    `adopt`.
 8. Provider-neutral output (`AGENTS.md`, Cursor rules, Copilot instructions) — the owner docs and skills are not
@@ -285,4 +282,4 @@ Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milest
 
 Decided (2026-09-16): plan format YAML and check-in of plan/state → ADR-0005; generator principle → ADR-0011;
 units, visibility, decision keeping → ADR-0012. Decided (2026-09-17): block ownership, single-source checker,
-Terraform-style selection → ADR-0013.
+Terraform-style selection → ADR-0013; owner-doc floor by files → ADR-0014.

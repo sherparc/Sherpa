@@ -70,6 +70,7 @@ librarian_min_commits_90d = 80
 dir_min_files = 10                 # a directory without a module counts as a unit from this many files
 generated_share = 0.5              # from this share of generator output: skill instead of agent/librarian
 skill_min_generated_files = 5
+owner_doc_min_files = 5            # owner doc from this many files; a dependent overrides the floor
 ```
 
 ## File format

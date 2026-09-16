@@ -32,7 +32,7 @@ The rules, the reasoning and the calibration behind them: [concepts/harness-plan
 | Kind | Proposed when | Reasoned no when |
 |---|---|---|
 | `outcome` | always — a harness without an outcome signal is not created (ADR-0008) | never |
-| `owner-doc` | the unit has ≥ 1 commit/90d **or** ≥ 1 dependent | dormant: 0 commits/90d and 0 dependents — listed, with the flip criterion |
+| `owner-doc` | the unit has ≥ 1 commit/90d **or** ≥ 1 dependent, **and** ≥ `owner_doc_min_files` files **or** ≥ 1 dependent | dormant (0 commits/90d, 0 dependents) or small (< 5 files, 0 dependents) — listed, with the flip criterion, and counted in a note |
 | `agent` | rank ≤ ⌈n · `agent_top`⌉ by commits/90d **and** ≥ 20 commits/90d, ≥ 30 files, ≥ 2 authors/90d | within reach (rank or commit floor met) but a floor missing — listed; everything else counted in a note |
 | `librarian` | top `librarian_top_n` by commits/30d **and** (≥ 30 commits/30d or ≥ 80 commits/90d) | within reach but below both floors — listed |
 | `test-infra` | the most active test unit has ≥ as many commits/90d as the most active business unit | otherwise listed with the comparison |
@@ -59,18 +59,19 @@ Console view (stdout), one line per entry: `+` proposal, `-` reasoned no, then t
 
 ```console
 $ sherpa plan .
-harness-plan.yaml — 7 proposals, 3 reasoned no's
+harness-plan.yaml — 6 proposals, 4 reasoned no's
   + outcome     shop                          mandatory: no harness without an outcome signal (ADR-0008) ✓
-  + owner-doc   pay                           24 commits/90d, 1 dependents ✓
-  + owner-doc   core                          1 commits/90d, 2 dependents ✓
-  + owner-doc   web                           1 commits/90d, 0 dependents ✓
+  + owner-doc   pay                           24 commits/90d, 1 dependents ✓ · 40 files ✓
+  + owner-doc   core                          1 commits/90d, 2 dependents ✓ · 3 files ✓
   + agent       pay                           rank 1/4 churn ✓ · 24 commits/90d ✓ · 40 files ✓ · 2 authors ✓
   + test-infra  suite                         26 commits/90d vs. 24 (pay) ✓
   + skill       regenerate-django-migrations  svc/pay/pay/migrations · 6 generated files, 1 configs ✓
-  - owner-doc   old                           0 commits/90d, 0 dependents ✗
+  - owner-doc   web                           1 commits/90d, 0 dependents ✓ · 3 files ✗
+  - owner-doc   old                           0 commits/90d, 0 dependents ✗ · 2 files ✗
   - librarian   pay                           rank 1/4 momentum ✓ · 24 commits/30d, 24/90d ✗
   - librarian   core                          rank 2/4 momentum ✓ · 1 commits/30d, 1/90d ✗
   1 dormant units without owner doc (0 commits/90d, 0 dependents): old — the first commit turns them into a proposal; each is listed above as a no.
+  1 small units without owner doc (< 5 files, 0 dependents): web — listed above as no's; owner_doc_min_files in sherpa.toml [plan] moves the floor, a dependent overrides it.
   not listed, out of reach: 2 units for agent (rank > 1 and < 20 commits/90d), 1 for librarian (rank > 2 and below both floors).
 → .sherpa/harness-plan.yaml (2 decisions kept)
 ```

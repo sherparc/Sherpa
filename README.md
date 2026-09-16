@@ -23,18 +23,19 @@ Live today — real output on a test repo with five Python modules, Django migra
 
 ```console
 $ sherpa plan .
-harness-plan.yaml — 7 proposals, 3 reasoned no's
+harness-plan.yaml — 6 proposals, 4 reasoned no's
   + outcome     shop                          mandatory: no harness without an outcome signal (ADR-0008) ✓
-  + owner-doc   pay                           24 commits/90d, 1 dependents ✓
-  + owner-doc   core                          1 commits/90d, 2 dependents ✓
-  + owner-doc   web                           1 commits/90d, 0 dependents ✓
+  + owner-doc   pay                           24 commits/90d, 1 dependents ✓ · 40 files ✓
+  + owner-doc   core                          1 commits/90d, 2 dependents ✓ · 3 files ✓
   + agent       pay                           rank 1/4 churn ✓ · 24 commits/90d ✓ · 40 files ✓ · 2 authors ✓
   + test-infra  suite                         26 commits/90d vs. 24 (pay) ✓
   + skill       regenerate-django-migrations  svc/pay/pay/migrations · 6 generated files, 1 configs ✓
-  - owner-doc   old                           0 commits/90d, 0 dependents ✗
+  - owner-doc   web                           1 commits/90d, 0 dependents ✓ · 3 files ✗
+  - owner-doc   old                           0 commits/90d, 0 dependents ✗ · 2 files ✗
   - librarian   pay                           rank 1/4 momentum ✓ · 24 commits/30d, 24/90d ✗
   - librarian   core                          rank 2/4 momentum ✓ · 1 commits/30d, 1/90d ✗
   1 dormant units without owner doc (0 commits/90d, 0 dependents): old — the first commit turns them into a proposal; each is listed above as a no.
+  1 small units without owner doc (< 5 files, 0 dependents): web — listed above as no's; owner_doc_min_files in sherpa.toml [plan] moves the floor, a dependent overrides it.
   not listed, out of reach: 2 units for agent (rank > 1 and < 20 commits/90d), 1 for librarian (rank > 2 and below both floors).
 → .sherpa/harness-plan.yaml
 ```
@@ -48,28 +49,27 @@ Then `sherpa apply` — dry run first, like `terraform plan` (golden [active-app
 
 ```console
 $ sherpa apply .
-sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 6 selected → 11 files
+sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 10 files
   + .claude/agents/pay.md                                 agent pay                     new
   + .claude/docs/modules/core.md                          owner-doc core                new
   + .claude/docs/modules/pay.md                           owner-doc pay                 new
   + .claude/docs/modules/suite.md                         test-infra suite              new
-  + .claude/docs/modules/web.md                           owner-doc web                 new
   + .claude/hooks/sherpa-outcome.py                       harness                       new
   + .claude/scripts/sherpa-check.py                       harness                       new
   + .claude/settings.json                                 harness                       new
   + .claude/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .sherpa/telemetry/.gitignore                          harness                       new
   + CLAUDE.md                                             harness                       new
-11 to add, 0 to change, 0 unchanged, 0 skipped.
+10 to add, 0 to change, 0 unchanged, 0 skipped.
 apply? [y/N] y
 check: 0 FAIL, 0 WARN
-11 files written · harness_rev 5be9c857fd4b → .sherpa/state.json
+10 files written · harness_rev f5c1cf090666 → .sherpa/state.json
 ```
 
 The owner doc gets a facts block from the scanner (path, LOC, commits, authors, dependencies, dependents, tests,
 hotspots — [golden](tests/goldens/active-owner-doc-pay.md)); the agent gets a knowledge manifest that points at it
 ([golden](tests/goldens/active-agent-pay.md)); the migrations directory gets its skill; the outcome hook labels
-every Claude Code execution with the harness version from day one. Run it again: eleven `=`, `nothing to do.`
+every Claude Code execution with the harness version from day one. Run it again: ten `=`, `nothing to do.`
 Sherpa owns only the marked blocks — write anything else into those files, it stays.
 
 - `sherpa scan` 🟢 **Live** — deterministic codebase model (git churn, hotspots, modules, dependencies, generators)

@@ -4,18 +4,18 @@
 > copying (owner principle). Keep anchor headings small and stable — links hang on them.
 
 <!-- sherpa:begin facts -->
-## facts (origin/main@29cbff09b8, as of 2026-09-16)
+## facts (origin/main@8d8f96e253, as of 2026-09-16)
 
 | field | value |
 |---|---|
 | path | `.` |
 | kind | python module (`pyproject.toml`) |
-| files / LOC | 51 / 6105 |
-| commits 90d / 30d | 9 / 9 · 2 authors |
+| files / LOC | 89 / 11060 |
+| commits 90d / 30d | 10 / 10 · 2 authors |
 | depends on | — |
 | dependents | — |
 | tested by | — |
-| hotspots | `src/sherpa/schemas/codebase-model.schema.json`, `src/sherpa/scan/t1_modules.py`, `docs/plan.md` |
+| hotspots | `docs/plan.md`, `README.md`, `src/sherpa/schemas/codebase-model.schema.json` |
 <!-- sherpa:end facts -->
 
 ## structure

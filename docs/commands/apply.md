@@ -62,22 +62,21 @@ Dry run on the five-module example repository (golden
 
 ```console
 $ sherpa apply .
-sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 6 selected → 11 files
+sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 10 files
   + .claude/agents/pay.md                                 agent pay                     new
   + .claude/docs/modules/core.md                          owner-doc core                new
   + .claude/docs/modules/pay.md                           owner-doc pay                 new
   + .claude/docs/modules/suite.md                         test-infra suite              new
-  + .claude/docs/modules/web.md                           owner-doc web                 new
   + .claude/hooks/sherpa-outcome.py                       harness                       new
   + .claude/scripts/sherpa-check.py                       harness                       new
   + .claude/settings.json                                 harness                       new
   + .claude/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
   + .sherpa/telemetry/.gitignore                          harness                       new
   + CLAUDE.md                                             harness                       new
-11 to add, 0 to change, 0 unchanged, 0 skipped.
+10 to add, 0 to change, 0 unchanged, 0 skipped.
 apply? [y/N] y
 check: 0 FAIL, 0 WARN
-11 files written · harness_rev 5be9c857fd4b → .sherpa/state.json
+10 files written · harness_rev f5c1cf090666 → .sherpa/state.json
 ```
 
 Columns: action, path, the plan entry (`kind target`, or `harness` for the always-part), detail. The detail
