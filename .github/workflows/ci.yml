@@ -1,5 +1,6 @@
-# CI: Tests + Coverage-Gate + Lint auf Linux und Windows (docs/plan.md §5).
+# CI: Tests + Coverage-Gate + Lint auf Linux, Windows und macOS (docs/plan.md §5).
 # Windows ist Pflicht: Kunden-Rechner, Git-Pfade und \r\n sind die typischen Bruchstellen von T0/T1.
+# macOS (arm64): Kunden-Laptops; zählt bei privaten Repos 10x auf das Minuten-Kontingent — die Suite braucht ~30 s.
 name: ci
 
 on:
@@ -14,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4

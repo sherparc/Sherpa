@@ -195,7 +195,7 @@ von Hand gemacht wird — der Regressionsfall aus §3 wird ausführbar.
 | M6 | `plan` Stufe 2: LLM-Anreicherung, Provider-Schicht (vLLM lokal + Anthropic) | Plan-Diff Stufe 1 vs. 2 dokumentiert; gleicher Schema-Pass mit beiden Providern; Stufe-1-Einträge unverändert |
 | M7 | Librarians, Multi-Repo, `/sherpa-plan`-Command | zweites Repo im Workspace |
 
-Jeder Meilenstein endet mit: CI grün (`.github/workflows/ci.yml`: pytest auf Linux + Windows, Coverage ≥ 90 %,
+Jeder Meilenstein endet mit: CI grün (`.github/workflows/ci.yml`: pytest auf Linux, Windows, macOS, Coverage ≥ 90 %,
 ruff), Docs aktualisiert (`plan.md`, `scan.md` bzw. neues Owner-Doc), Andrei sieht den Diff vor dem Commit.
 
 Test-Korpus: mehrere fremde Git-Repos (verschiedene Sprachen, gecloned unter `tests/corpus/`, nicht eingecheckt) plus
