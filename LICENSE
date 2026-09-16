@@ -1,0 +1,15 @@
+Sherpa — Copyright (c) 2026 Andrei Chirila. All rights reserved.
+
+This software and its source code are proprietary. No license is granted to
+use, copy, modify, distribute or create derivative works of this software
+without a separate written agreement with the copyright holder.
+
+Output exception: files that Sherpa generates in your repository (plans,
+state files, Owner-Docs, agent and skill definitions, and any other output of
+`sherpa plan` or `sherpa apply`) belong to you. They carry no obligation under
+this notice, regardless of how you obtained Sherpa.
+
+Commercial licenses and evaluation access: a.chirila87@gmail.com
+
+A source-available public license (PolyForm Small Business 1.0.0 or similar)
+is planned for the public release; see docs/adr/0010-lizenz-zweistufig.md.

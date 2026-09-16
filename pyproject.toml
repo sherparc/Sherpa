@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "sherpa-harness"  # PyPI-Name "sherpa" ist vergeben; Import-Paket und CLI bleiben "sherpa" (ADR-0009)
 version = "0.2.0"
 description = "Generischer Harness-Generator: Codebase ingestieren, Owner/Agents/Skills planen, nach Freigabe anlegen."
+license = "LicenseRef-Proprietary"  # ADR-0010: proprietär bis zum öffentlichen Release
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = []
 
