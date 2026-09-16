@@ -1,9 +1,11 @@
 # `sherpa scan` — layers T0 (git), T1 (modules) and generator families
 
 > Owner of: invocation, decisions, interpretation. Field semantics belong to the schema
-> [`src/sherpa/schemas/codebase-model.schema.json`](../src/sherpa/schemas/codebase-model.schema.json) (v3); code in
-> [`src/sherpa/scan/t0_git.py`](../src/sherpa/scan/t0_git.py), [`t1_modules.py`](../src/sherpa/scan/t1_modules.py)
-> and [`generators.py`](../src/sherpa/scan/generators.py). Status: M2, v0.3.0.
+> [`src/sherpa/schemas/codebase-model.schema.json`](../../src/sherpa/schemas/codebase-model.schema.json) (v3); code in
+> [`src/sherpa/scan/t0_git.py`](../../src/sherpa/scan/t0_git.py), [`t1_modules.py`](../../src/sherpa/scan/t1_modules.py)
+> and [`generators.py`](../../src/sherpa/scan/generators.py). Status: M2, v0.4.0.
+
+Command reference (options, exit codes, troubleshooting): [`sherpa scan`](../commands/scan.md).
 
 ## Invocation
 
@@ -99,7 +101,7 @@ directory of the outputs — the central place for a skill. Example: `ef-migrati
 
 ## Interpretation for `plan`
 
-Implemented in M2, rules in [`docs/harness-plan.md`](harness-plan.md): modules and uncovered directories are
+Implemented in M2, rules in [`docs/concepts/harness-plan.md`](harness-plan.md): modules and uncovered directories are
 units; `commits_90d`/`commits_30d`/`authors_90d`/`files` against rank and floor; `generated_files` decides skill
 instead of agent; test modules against the most active business unit. `hotspots` and `tested_by` become owner-doc
 sections and eval questions (M3/M4).

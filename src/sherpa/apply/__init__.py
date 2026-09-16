@@ -1,0 +1,313 @@
+"""``sherpa apply`` — the approved plan → files under ``.claude/`` plus ``.sherpa/state.json`` (ADR-0008, ADR-0013).
+
+Two phases, tested separately: ``plan_files()`` is pure — (targets, current files, state) → one ``Action`` per
+file with ``+ new``, ``~ updated``, ``= unchanged`` or ``! skipped`` and the exact bytes to write; ``write()``
+writes them, runs the checker and rolls back when the write introduced a FAIL. Dry run is the default.
+
+Ownership (ADR-0013): a *managed* file is sherpa's as a whole — a hash mismatch means a hand edit and the file is
+skipped. A *blocks* file is seeded once; afterwards only the marked blocks are sherpa's, each with its own hash,
+and a hand-edited block is skipped on its own. ``.claude/settings.json`` gets sherpa's hook entries merged in;
+everything else in it stays. A file that exists without a state record is never touched (``sherpa adopt``).
+
+Determinism: same plan, model and files → same actions, same bytes; the second run is all ``=``.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from sherpa import __version__
+from sherpa.apply import state as state_mod
+from sherpa.apply.render import HOOK_COMMAND, Renderer, Target
+from sherpa.apply.state import BLOCKS, JSON_HOOKS, MANAGED, FileRecord, State
+from sherpa.check import Finding, block_contents, content_hash
+from sherpa.model import Model
+from sherpa.plan import Plan
+
+NEW, UPDATED, UNCHANGED, SKIPPED = "+", "~", "=", "!"
+
+
+@dataclass(frozen=True)
+class Action:
+    target: Target
+    op: str  # + ~ = !
+    detail: str  # human line: "new", "block facts updated", "hand-edited (skipped)", …
+    new: str | None  # bytes to write; None when nothing is written
+    old: str | None  # current content for rollback; None = file did not exist
+    record: FileRecord | None  # state after this action; None = keep the previous record
+
+    @property
+    def path(self) -> str:
+        return self.target.path
+
+
+@dataclass
+class Result:
+    actions: list[Action]
+    state: State
+    findings: list[Finding] = field(default_factory=list)  # checker output after the write
+    rolled_back: bool = False
+    written: int = 0
+
+    def counts(self) -> dict[str, int]:
+        return {op: sum(a.op == op for a in self.actions) for op in (NEW, UPDATED, UNCHANGED, SKIPPED)}
+
+
+class StalePlan(ValueError):
+    pass
+
+
+# ---------------------------------------------------------------- phase 1: pure
+
+
+def targets_for(plan: Plan, model: Model, version: str = __version__) -> list[Target]:
+    if plan.model.get("rev") != model.git.trunk.rev:
+        raise StalePlan(
+            f"harness-plan.yaml was made from {plan.model.get('rev', '?')[:10]}, the model is at "
+            f"{model.git.trunk.rev[:10]} — run `sherpa plan` first"
+        )
+    if any(e.kind == "outcome" and e.decision == "reject" for e in plan.entries):
+        raise ValueError("the outcome entry is rejected — a harness without a signal is not created (ADR-0008)")
+    return Renderer(plan, model, version).targets()
+
+
+def plan_files(targets: list[Target], repo: Path, state: State) -> list[Action]:
+    return [_plan_one(t, _read(repo / t.path), state.files.get(t.path)) for t in targets]
+
+
+def _read(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
+
+
+def _plan_one(t: Target, current: str | None, rec: FileRecord | None) -> Action:
+    if t.mode == MANAGED:
+        return _plan_managed(t, current, rec)
+    if t.mode == JSON_HOOKS:
+        return _plan_hooks(t, current, rec)
+    return _plan_blocks(t, current, rec)
+
+
+def _plan_managed(t: Target, current: str | None, rec: FileRecord | None) -> Action:
+    new_rec = FileRecord(MANAGED, entry=t.entry, hash=content_hash(t.content))
+    if current is None:
+        return Action(t, NEW, "new", t.content, None, new_rec)
+    if rec is None:
+        return Action(t, SKIPPED, "exists, not managed by sherpa — `sherpa adopt` takes it over", None, current, None)
+    if content_hash(current) != rec.hash:
+        return Action(t, SKIPPED, "hand-edited (skipped)", None, current, None)
+    if current == t.content:
+        return Action(t, UNCHANGED, "unchanged", None, current, new_rec)
+    return Action(t, UPDATED, "updated", t.content, current, new_rec)
+
+
+def _plan_blocks(t: Target, current: str | None, rec: FileRecord | None) -> Action:
+    hashes = {n: content_hash(v) for n, v in t.blocks.items()}
+    if current is None:
+        return Action(t, NEW, "new", t.content, None, FileRecord(BLOCKS, entry=t.entry, blocks=hashes))
+    try:
+        have = block_contents(current)
+    except ValueError as e:
+        return Action(t, SKIPPED, f"markers broken: {e} (skipped)", None, current, None)
+    if rec is None and not have:
+        if not t.append:
+            return Action(
+                t, SKIPPED, "exists, not managed by sherpa — `sherpa adopt` takes it over", None, current, None
+            )
+        body = current if current.endswith("\n") else current + "\n"
+        merged = body + "\n" + "\n".join(_marked(t, n) for n in t.blocks) + "\n"
+        return Action(
+            t,
+            UPDATED,
+            "block " + ", ".join(t.blocks) + " appended",
+            merged,
+            current,
+            FileRecord(BLOCKS, entry=t.entry, blocks=hashes),
+        )
+    updated, skipped, kept = [], [], dict(rec.blocks if rec else {})
+    replace: dict[str, str] = {}
+    for name, inner in t.blocks.items():
+        if name not in have:
+            skipped.append(f"block {name} removed by hand")
+            kept.pop(name, None)
+            continue
+        known = rec.blocks.get(name) if rec else None
+        if known is not None and content_hash(have[name]) != known:
+            skipped.append(f"block {name} hand-edited")
+            continue
+        kept[name] = hashes[name]
+        if have[name] != inner:
+            updated.append(name)
+            replace[name] = inner
+    new_rec = FileRecord(BLOCKS, entry=t.entry, blocks=kept)
+    if updated:
+        detail = "block " + ", ".join(updated) + " updated" + (f"; {'; '.join(skipped)}" if skipped else "")
+        return Action(t, UPDATED, detail, _replace_blocks(current, replace), current, new_rec)
+    if skipped:
+        return Action(t, SKIPPED, "; ".join(skipped) + " (skipped)", None, current, new_rec)
+    return Action(t, UNCHANGED, "unchanged", None, current, new_rec)
+
+
+def _replace_blocks(text: str, replace: dict[str, str]) -> str:
+    """One pass over the lines: inside a block that is being replaced, drop the old inner lines."""
+    from sherpa.check import MARKER
+
+    out, skip = [], False
+    for line in text.split("\n"):
+        m = MARKER.match(line)
+        if m and m.group(1) == "begin" and m.group(2) in replace:
+            out.append(line)
+            out.extend(replace[m.group(2)].split("\n"))
+            skip = True
+            continue
+        if m and m.group(1) == "end" and skip:
+            skip = False
+        if not skip:
+            out.append(line)
+    return "\n".join(out)
+
+
+def _marked(t: Target, name: str) -> str:
+    style = "#" if t.path.endswith((".yml", ".yaml")) else "html"
+    inner = t.blocks[name]
+    if style == "#":
+        return f"# sherpa:begin {name}\n{inner}\n# sherpa:end {name}"
+    return f"<!-- sherpa:begin {name} -->\n{inner}\n<!-- sherpa:end {name} -->"
+
+
+def _plan_hooks(t: Target, current: str | None, rec: FileRecord | None) -> Action:
+    if current is None:
+        content = json.dumps({"hooks": t.hooks}, indent=2) + "\n"
+        return Action(t, NEW, "new", content, None, FileRecord(JSON_HOOKS, entry=t.entry, hash=content_hash(content)))
+    try:
+        data = json.loads(current)
+        if not isinstance(data, dict):
+            raise ValueError("top level is not an object")
+    except ValueError as e:
+        return Action(t, SKIPPED, f"not valid JSON: {e} (skipped)", None, current, None)
+    hooks = data.setdefault("hooks", {})
+    added = []
+    for event, groups in t.hooks.items():
+        existing = hooks.setdefault(event, [])
+        for group in groups:
+            if not any(_has_sherpa_hook(g) for g in existing):
+                existing.append(group)
+                added.append(event)
+    if not added:
+        return Action(
+            t,
+            UNCHANGED,
+            "hooks present",
+            None,
+            current,
+            FileRecord(JSON_HOOKS, entry=t.entry, hash=content_hash(current)),
+        )
+    content = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    return Action(
+        t,
+        UPDATED,
+        "hooks added: " + ", ".join(added),
+        content,
+        current,
+        FileRecord(JSON_HOOKS, entry=t.entry, hash=content_hash(content)),
+    )
+
+
+def _has_sherpa_hook(group: dict) -> bool:
+    return any("sherpa-outcome.py" in str(h.get("command", "")) for h in group.get("hooks", []) if isinstance(h, dict))
+
+
+# ---------------------------------------------------------------- phase 2: write, check, roll back
+
+
+def write(actions: list[Action], repo: Path, previous: State, plan: Plan, *, check: bool = True) -> Result:
+    from sherpa.check import FAIL
+    from sherpa.check import check as run_check
+
+    before = {f for f in run_check(repo) if f.level == FAIL} if check else set()
+    written: list[Action] = []
+    for a in actions:
+        if a.new is None:
+            continue
+        p = repo / a.path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(a.new, encoding="utf-8", newline="\n")
+        written.append(a)
+    result = Result(actions, previous, written=len(written))
+    if check:
+        result.findings = run_check(repo)
+        new_fails = {f for f in result.findings if f.level == FAIL} - before
+        if new_fails:
+            for a in written:
+                p = repo / a.path
+                if a.old is None:
+                    p.unlink(missing_ok=True)
+                else:
+                    p.write_text(a.old, encoding="utf-8", newline="\n")
+            result.rolled_back = True
+            result.written = 0
+            result.findings = sorted(new_fails, key=str)
+            return result
+    files = dict(previous.files)
+    for a in actions:
+        if a.record is not None:
+            files[a.path] = a.record
+    rev = state_mod.harness_rev(files)
+    changed = written or rev != previous.harness_rev or files != previous.files
+    result.state = State(
+        harness_rev=rev,
+        plan={k: str(v) for k, v in plan.model.items() if k in ("trunk", "rev", "as_of")},
+        applied_at=state_mod.now_iso() if changed else previous.applied_at,
+        files=files,
+    )
+    if changed:
+        result.state.write(repo / state_mod.STATE_PATH)
+    return result
+
+
+# ---------------------------------------------------------------- console
+
+
+def render_actions(actions: list[Action], plan: Plan) -> str:
+    n = len(plan.entries)
+    sel = sum(a.target.entry is not None for a in actions)
+    head = f"plan {plan.model.get('trunk', '?')}@{plan.model.get('rev', '?')[:10]}"
+    lines = [f"sherpa apply — {head}: {n} entries, {sel} selected → {len(actions)} files"]
+    w_path = min(max((len(a.path) for a in actions), default=10), 56)
+    for a in actions:
+        who = " ".join(a.target.entry.split(":")[:2]) if a.target.entry else "harness"
+        lines.append(f"  {a.op} {a.path:<{w_path}}  {who:<28}  {a.detail}")
+    c = {op: sum(a.op == op for a in actions) for op in (NEW, UPDATED, UNCHANGED, SKIPPED)}
+    lines.append(f"{c[NEW]} to add, {c[UPDATED]} to change, {c[UNCHANGED]} unchanged, {c[SKIPPED]} skipped.")
+    return "\n".join(lines) + "\n"
+
+
+def render_result(r: Result) -> str:
+    from sherpa.check import FAIL
+
+    n_fail = sum(f.level == FAIL for f in r.findings)
+    n_warn = len(r.findings) - n_fail
+    if r.rolled_back:
+        lines = [f"check: {n_fail} new FAIL — rolled back, nothing written"]
+        lines.extend(f"  {f}" for f in r.findings)
+        return "\n".join(lines) + "\n"
+    lines = [f"check: {n_fail} FAIL, {n_warn} WARN"]
+    lines.extend(f"  {f}" for f in r.findings if f.level == FAIL)
+    lines.append(f"{r.written} files written · harness_rev {r.state.harness_rev} → .sherpa/state.json")
+    return "\n".join(lines) + "\n"
+
+
+__all__ = [
+    "HOOK_COMMAND",
+    "Action",
+    "Result",
+    "StalePlan",
+    "plan_files",
+    "render_actions",
+    "render_result",
+    "targets_for",
+    "write",
+]

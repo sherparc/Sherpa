@@ -1,8 +1,11 @@
 # Sherpa
 
-Generic harness generator. CLI `sherpa` (`scan | plan | apply | status`), Python 3.12, stdlib-first.
-Plan and architecture: `docs/plan.md`. Scanner: `docs/scan.md`. Planner: `docs/harness-plan.md`. Decisions: `docs/adr/`
-(index in `docs/adr/README.md`). Field semantics: `src/sherpa/schemas/`.
+Generic harness generator. CLI `sherpa` (`scan | plan | apply | status | check`), Python 3.12, stdlib-first.
+Plan and architecture: `docs/plan.md`. Documentation: `docs/index.md` (landing), `docs/commands/` (reference per
+command), `docs/concepts/` (rules and formats), `docs/reference/` (configuration, files, exit codes). Decisions:
+`docs/adr/` (index in `docs/adr/README.md`). Field semantics: `src/sherpa/schemas/`. The repo carries its own
+harness: `.claude/agents/architect.md` (overview and reasoning), skills `milestone-step` and `sync-kb`, and the
+files `sherpa apply .` generates (owner doc, hook, checker, the block at the end of this file).
 
 ## Language
 - **English everywhere that gets pushed**: code comments, docstrings, docs, ADRs, README, CLI output, test names,
@@ -12,7 +15,9 @@ Plan and architecture: `docs/plan.md`. Scanner: `docs/scan.md`. Planner: `docs/h
 - Owner principle: every fact has exactly one place. `docs/plan.md` owns architecture and milestones, ADRs own
   decisions, code owns behaviour. No duplicates in README or comments.
 - Scanner and applier stay deterministic (no LLM, no network dependency). LLM only in `plan` (stage 2).
-- Every generated file carries the `sherpa:generated` marker; hand-edited files are never overwritten.
+- Sherpa owns only what is between `sherpa:begin`/`sherpa:end` markers (or whole files it deployed); hand-edited
+  blocks and files are never overwritten (ADR-0013). `src/sherpa/check.py` stays a single stdlib-only file — it is
+  deployed as a copy into target repos.
 - Tests: `.venv/bin/pytest -q` from the repo root; lint `.venv/bin/ruff check . && .venv/bin/ruff format --check .` —
   both must be green before every commit (CI runs Linux and Windows; macOS is commented out in the matrix and is only
   enabled, after asking, for large changes to Git/path/encoding logic). Every new function comes with tests; fixture
@@ -23,6 +28,9 @@ Plan and architecture: `docs/plan.md`. Scanner: `docs/scan.md`. Planner: `docs/h
 - Language-agnostic: T0 (Git) and T1 (manifests) must work without language adapters (`docs/plan.md` §2.1).
 - Model access only through `sherpa/llm/` (ADR-0004); no LangChain/LangGraph, no provider code elsewhere.
 - Before every commit show the diff (`git diff --stat` + key points) and ask Andrei; commit and push only after his yes.
+- Documentation moves with every command change: the reference page in `docs/commands/`, the concept doc, the
+  index. The pages are written for the web documentation: synopsis, options, inputs and outputs, exit codes, real
+  examples (from goldens), troubleshooting.
 - Never push to `main` directly: every step is branch `task/<topic>` → PR → squash merge (guard: `.githooks/pre-push`,
   enabled via `git config core.hooksPath .githooks`). Remote is `github.com/sherparc/Sherpa`.
 - Namespaces (ADR-0009): product and CLI are `sherpa`, the Python package `sherpa-harness`, the GitHub org `sherparc`.
@@ -39,6 +47,15 @@ Plan and architecture: `docs/plan.md`. Scanner: `docs/scan.md`. Planner: `docs/h
   code, no `.sherpa/` artefacts left behind there. Calibration happens locally only (`tests/corpus/` is ignored);
   docs argue with fixtures and neutral benchmark figures ("15k-file monorepo: 2.7 s") that name no source. Before
   every commit, grep the diff for "referenz", "reference repo" and customer names — it must be empty.
+- Local test corpus: open-source repositories cloned next to this repo (never named in code, docs, tests or
+  commits; the list lives in Andrei's and Claude's memory). Every feature is smoke-tested on all of them — scan,
+  plan, apply dry run, check — and the `.sherpa/` artefacts are deleted afterwards.
+
+## Knowledge base
+- `kb-sherpa/` is an Obsidian vault: a one-way projection of README, CLAUDE.md, `docs/`, the harness under
+  `.claude/` and the schemas, produced by `python3 scripts/sync-kb.py` (skill `sync-kb`, command `/sync-kb`;
+  the local Stop hook in `.claude/settings.local.json` runs it after every turn). It is ignored by git together
+  with `.claude/memory/` and `.claude/settings.local.json`. Never edit a note there — edit the source and sync.
 
 ## Collaboration
 - After every step revise `docs/plan.md` critically: against the best established market solutions (Terraform,
@@ -47,3 +64,13 @@ Plan and architecture: `docs/plan.md`. Scanner: `docs/scan.md`. Planner: `docs/h
 - After every iteration one ADR per decision taken (`docs/adr/`, keep the index). What has no ADR is not decided.
 - Teamwork: when unsure or at design decisions ask Andrei, do not decide silently. Report briefly what was done —
   he must always know what is happening.
+
+<!-- sherpa:begin harness -->
+## AI harness (managed by sherpa)
+
+Module facts live in `.claude/docs/modules/` — one owner doc per module, the single place
+for a fact. Agents in `.claude/agents/` carry a role and a knowledge manifest, never facts;
+skills in `.claude/skills/` are procedures. Blocks between `sherpa:begin` and `sherpa:end`
+markers are regenerated by `sherpa apply` — write outside them. Integrity: `sherpa status`
+or `python3 .claude/scripts/sherpa-check.py`.
+<!-- sherpa:end harness -->

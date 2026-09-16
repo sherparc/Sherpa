@@ -10,7 +10,7 @@ Sherpa analyses your codebase deterministically (like CodeScene) and plans the k
 
 [![CI](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml/badge.svg)](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
-![Status: scan and plan live, apply in progress](https://img.shields.io/badge/status-scan%20%2B%20plan%20live%20%C2%B7%20apply%20in%20progress-orange)
+![Status: scan, plan and apply live; adopt in progress](https://img.shields.io/badge/status-scan%20%2B%20plan%20%2B%20apply%20live%20%C2%B7%20adopt%20in%20progress-orange)
 
 </div>
 
@@ -34,7 +34,7 @@ harness-plan.yaml — 7 proposals, 3 reasoned no's
   - owner-doc   old                           0 commits/90d, 0 dependents ✗
   - librarian   pay                           rank 1/4 momentum ✓ · 24 commits/30d, 24/90d ✗
   - librarian   core                          rank 2/4 momentum ✓ · 1 commits/30d, 1/90d ✗
-  1 dormant units without owner doc (0 commits/90d, 0 dependents): old — the first commit turns them into a proposal.
+  1 dormant units without owner doc (0 commits/90d, 0 dependents): old — the first commit turns them into a proposal; each is listed above as a no.
   not listed, out of reach: 2 units for agent (rank > 1 and < 20 commits/90d), 1 for librarian (rank > 2 and below both floors).
 → .sherpa/harness-plan.yaml
 ```
@@ -44,20 +44,42 @@ The migrations directory gets no agent but a skill with source, config and comma
 regenerated, not explained.** Dormant modules and everything out of reach show up in the notes; nothing disappears
 silently.
 
-What comes next, once M3 is done (target picture, output not real yet):
+Then `sherpa apply` — dry run first, like `terraform plan` (golden [active-apply-console.txt](tests/goldens/active-apply-console.txt)):
 
 ```console
-$ sherpa apply .           # dry run: shows + ~ = ! per file
-$ sherpa apply . --yes     # creates .claude/**, writes .sherpa/state.json
+$ sherpa apply .
+sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 6 selected → 11 files
+  + .claude/agents/pay.md                                 agent pay                     new
+  + .claude/docs/modules/core.md                          owner-doc core                new
+  + .claude/docs/modules/pay.md                           owner-doc pay                 new
+  + .claude/docs/modules/suite.md                         test-infra suite              new
+  + .claude/docs/modules/web.md                           owner-doc web                 new
+  + .claude/hooks/sherpa-outcome.py                       harness                       new
+  + .claude/scripts/sherpa-check.py                       harness                       new
+  + .claude/settings.json                                 harness                       new
+  + .claude/skills/regenerate-django-migrations/SKILL.md  skill regenerate-django-migrations  new
+  + .sherpa/telemetry/.gitignore                          harness                       new
+  + CLAUDE.md                                             harness                       new
+11 to add, 0 to change, 0 unchanged, 0 skipped.
+apply? [y/N] y
+check: 0 FAIL, 0 WARN
+11 files written · harness_rev 5be9c857fd4b → .sherpa/state.json
 ```
+
+The owner doc gets a facts block from the scanner (path, LOC, commits, authors, dependencies, dependents, tests,
+hotspots — [golden](tests/goldens/active-owner-doc-pay.md)); the agent gets a knowledge manifest that points at it
+([golden](tests/goldens/active-agent-pay.md)); the migrations directory gets its skill; the outcome hook labels
+every Claude Code execution with the harness version from day one. Run it again: eleven `=`, `nothing to do.`
+Sherpa owns only the marked blocks — write anything else into those files, it stays.
 
 - `sherpa scan` 🟢 **Live** — deterministic codebase model (git churn, hotspots, modules, dependencies, generators)
 - `sherpa plan` 🟢 **Live** — proposals and reasoned no's with evidence as YAML; decisions survive a re-plan
-- `sherpa apply` 🟡 **In progress (M3)** — dry run first, idempotent, state file
-- `sherpa status` · `sherpa adopt` ⚪ **Planned (M3)** — detect drift, take over existing harnesses
+- `sherpa apply` 🟢 **Live** — dry run first, managed blocks, state file, outcome hook, checker with rollback
+- `sherpa status` · `sherpa check` 🟢 **Live** — drift per file and block, structural rules, outcome labels per harness version
+- `sherpa adopt` 🟡 **In progress (M3c)** — take over existing harnesses without changing a file
 - `sherpa doctor` ⚪ **Planned (M2b)** — check the environment, update hint
 
-Per command: [docs/scan.md](docs/scan.md), [docs/harness-plan.md](docs/harness-plan.md); milestones: [docs/plan.md](docs/plan.md).
+Documentation: [docs/index.md](docs/index.md) — [getting started](docs/getting-started.md), one reference page per command ([scan](docs/commands/scan.md), [plan](docs/commands/plan.md), [apply](docs/commands/apply.md), [status](docs/commands/status.md), [check](docs/commands/check.md)), [configuration](docs/reference/configuration.md); milestones: [docs/plan.md](docs/plan.md).
 
 ## Quick start
 
@@ -66,6 +88,8 @@ Straight from the repo, no clone (release wheels as the package `sherpa-harness`
 ```bash
 uv tool install git+https://github.com/sherparc/Sherpa.git     # or: pipx install git+https://github.com/sherparc/Sherpa.git
 sherpa plan /path/to/repo                                        # scans when needed → .sherpa/harness-plan.yaml
+sherpa apply /path/to/repo                                       # dry run, then asks → .claude/**, .sherpa/state.json
+sherpa status /path/to/repo                                      # drift, checks, outcome labels
 sherpa scan /path/to/repo --out -                                # model only, JSON to stdout
 ```
 
@@ -86,7 +110,7 @@ generated = ["gen/**"]        # own generator family, extends the built-in ones
 
 [plan]
 agent_top = 0.25              # top quartile by commits/90d …
-agent_min_commits_90d = 20    # … and floors; all values in docs/harness-plan.md
+agent_min_commits_90d = 20    # … and floors; all values in docs/reference/configuration.md
 ```
 
 ## What the scanner measures
@@ -96,7 +120,7 @@ agent_min_commits_90d = 20    # … and floors; all values in docs/harness-plan.
 - **Generator families** — EF/Django/Alembic migrations, protobuf, OpenAPI, GraphQL codegen, ResX, `go generate`, snapshots, bundles, lockfiles: per family output, sources, config, central place and regeneration command — by path only, in 30 ms for 15k files.
 - **T2 language adapters** (M3b) — anchors and patterns per language; T0/T1 work without them.
 
-All fields are described in the JSON schema: [codebase-model.schema.json](src/sherpa/schemas/codebase-model.schema.json). Details, decisions and interpretation: [docs/scan.md](docs/scan.md).
+All fields are described in the JSON schema: [codebase-model.schema.json](src/sherpa/schemas/codebase-model.schema.json). Details, decisions and interpretation: [docs/concepts/scan.md](docs/concepts/scan.md).
 
 ## What the planner decides
 
@@ -104,7 +128,7 @@ Thresholds are **relative with an absolute floor** — top quartile *and* at lea
 for an agent; top 2 by momentum *and* a floor for a librarian. A five-person repo gets an agent, a fifty-module
 repo does not get thirty. Every no names what is missing and when it flips. Modules and directories without a
 module (`infrastructure/`, `pipelines/`) rank on equal terms; test infrastructure is measured against the most
-active business module. Rules, format and configuration: [docs/harness-plan.md](docs/harness-plan.md).
+active business module. Rules, format and configuration: [docs/concepts/harness-plan.md](docs/concepts/harness-plan.md).
 
 ### Determinism guarantees
 
@@ -117,8 +141,9 @@ active business module. Rules, format and configuration: [docs/harness-plan.md](
 Why not just write a few `.md` files for Claude or Copilot?
 
 - **No more guessing.** Sherpa builds on hard data — commits, authors, LOC, churn — not on gut feeling. Every proposal carries its evidence, every no its reason.
-- **Infrastructure as code for knowledge.** `plan` → approval → `apply`, like Terraform. You see every file before it exists; auto-generated markers separate Sherpa's share from yours.
-- **Does not wreck your repo.** Deterministic against `origin/trunk`, local branches invisible, idempotent with a state file, existing harnesses are adopted instead of overwritten.
+- **Infrastructure as code for knowledge.** `plan` → approval → `apply`, like Terraform. You see every file before it exists; Sherpa owns only marked blocks inside the files, the rest is yours and stays yours.
+- **Does not wreck your repo.** Deterministic against `origin/trunk`, local branches invisible, idempotent with a state file, a checker that rolls back a bad write, existing files never touched (adopted instead).
+- **Measures itself.** Every `apply` installs the outcome hook first: each Claude Code execution gets a label (`success`, `failed`, `unknown`) stamped with the harness version. A harness change has a number to answer to.
 - **Grows with you.** Librarians keep owner docs current, evals come from the dependency graph, and the outcome shows which harness parts really help — nothing on the market does that.
 
 Where the patterns come from:
@@ -127,7 +152,8 @@ Where the patterns come from:
 |---|---|
 | Terraform `plan` / `apply` / `import` / state | proposal before change, approval, idempotency, `adopt` for existing harnesses |
 | CodeScene / Tornhill hotspots | churn × complexity instead of gut feeling; relative thresholds with an absolute floor |
-| Backstage catalog / scaffolder | modules as a catalogue, templates with auto-generated markers |
+| Backstage catalog / scaffolder | modules as a catalogue, templates seeded once |
+| Ansible `blockinfile` | managed blocks inside co-authored files instead of all-or-nothing ownership |
 | Renovate | librarians as bots with scope and cadence |
 | `brew doctor` | `sherpa doctor` for onboarding |
 
@@ -140,9 +166,11 @@ flowchart LR
     M --> P[sherpa plan]
     P --> Y[harness-plan.yaml<br/>proposals + reasoned no's]
     Y -->|approval| A[sherpa apply]
-    A --> H[.claude/** · owner docs · agents · skills]
-    A --> ST[.sherpa/state.json]
+    A --> H[.claude/** · owner docs · agents · skills · hooks]
+    A --> ST[.sherpa/state.json · harness_rev]
+    H -->|outcome hook| O[.sherpa/telemetry/outcomes.ndjson]
     ST --> Q[sherpa status]
+    O --> Q
     H -.->|existing| AD[sherpa adopt] -.-> ST
     P -. optional, comments only .-> L[LLM provider<br/>OpenAI-compatible · Anthropic]
 ```
@@ -157,8 +185,9 @@ flowchart LR
 |---|---|---|
 | M0–M1a | plan, ADRs, scanner T0+T1, programmatic fixture repos | ✅ |
 | M2 | `plan` stage 1: units, rank + floor, generator families → skills, reasoned no's, decision keeping | ✅ |
-| M2b | distribution: release wheels, `self-update`, `doctor` | ⏳ |
-| M3 / M3b | `apply` (dry run, markers, state), `adopt`, language adapters | 🚧 |
+| M3a | `apply`: dry run, managed blocks, state, outcome hook, checker with rollback; `status`, `check` | ✅ |
+| M3c / M2b | `adopt`; distribution: release wheels, `self-update`, `doctor` | 🚧 |
+| M3b | language adapters (anchors, patterns) | ⏳ |
 | M4–M7 | auto-evals, outcome evaluation, LLM stage, librarians & multi-repo | ⏳ |
 
 Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an ADR: [docs/adr/](docs/adr/README.md)
@@ -170,11 +199,11 @@ Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generat
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 173 tests, ~99 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 213 tests, ~98 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
-CI runs on Linux and Windows with Python 3.12 and 3.13; macOS is prepared in the matrix and enabled for large changes. Test repos are built programmatically (no corpus in the repo). Working rules for humans and agents: [CLAUDE.md](CLAUDE.md).
+CI runs on Linux and Windows with Python 3.12 and 3.13; macOS is prepared in the matrix and enabled for large changes. Test repos are built programmatically (no corpus in the repo). The repository carries its own harness — `sherpa status .` must be clean before a commit — and an architect agent under [.claude/agents/](.claude/agents/architect.md). Working rules for humans and agents: [CLAUDE.md](CLAUDE.md).
 
 `main` changes only through pull requests with squash merge. Once per clone, enable the guard that refuses direct pushes to `main`:
 

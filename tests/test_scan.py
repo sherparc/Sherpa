@@ -120,6 +120,5 @@ def test_cli_scan_bad_trunk_exit_1(clone: Path, capsys):
     assert "does not exist" in capsys.readouterr().err
 
 
-def test_cli_other_commands_unimplemented(tmp_path: Path):
-    for cmd in ("apply", "status"):
-        assert main([cmd, str(tmp_path)]) == EXIT_NOT_IMPLEMENTED  # never run inside the sherpa repo itself
+def test_cli_adopt_unimplemented(tmp_path: Path):
+    assert main(["adopt", str(tmp_path)]) == EXIT_NOT_IMPLEMENTED  # never run inside the sherpa repo itself

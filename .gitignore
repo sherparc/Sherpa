@@ -6,7 +6,8 @@ build/
 *.egg-info/
 .pytest_cache/
 .idea/
-.sherpa/
+# sherpa on itself: plan and state are checked in (ADR-0005), the model is regenerated, telemetry ignores itself
+.sherpa/codebase-model.json
 tests/corpus/
 .coverage
 
@@ -15,8 +16,11 @@ htmlcov/
 coverage.xml
 .mypy_cache/
 .ruff_cache/
-# local Claude Code settings (shared ones live in .claude/)
+# local Claude Code settings and memory (shared harness files live in .claude/ and are tracked)
 .claude/settings.local.json
+.claude/memory/
+# Obsidian projection of the docs (scripts/sync-kb.py) — personal, regenerated, never a source
+kb-sherpa/
 # secrets / environment
 .env
 .env.*

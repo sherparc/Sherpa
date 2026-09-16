@@ -3,10 +3,11 @@
 Three stages, three artefacts (see docs/plan.md):
   scan   -> .sherpa/codebase-model.json   (deterministic, no LLM)
   plan   -> .sherpa/harness-plan.yaml     (rules over the model; proposals and reasoned no's with evidence)
-  apply  -> harness files + state         (deterministic, idempotent)
-  status -> drift between state and file system
+  apply  -> .claude/** + .sherpa/state.json (dry run by default; deterministic, idempotent)
+  status -> drift between state and file system, checker findings, outcome labels
+  check  -> structural rules only (the same file is deployed as .claude/scripts/sherpa-check.py)
 
-Exit codes: 0 ok · 1 error (git, config, plan file) · 2 command not implemented yet.
+Exit codes: 0 ok · 1 error (git, config, plan file, checker FAIL) · 2 command not implemented yet.
 """
 
 from __future__ import annotations
@@ -42,12 +43,22 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--no-fetch", action="store_true", help="skip 'git fetch origin' when (re)scanning")
     pl.add_argument("--out", help=f"output file; '-' = YAML to stdout (default: <repo>/{PLAN_OUT})")
 
-    for name, help_ in (
-        ("apply", "create the approved plan (idempotent, state file)"),
-        ("status", "compare state with the file system"),
-    ):
-        sp = sub.add_parser(name, help=help_)
-        sp.add_argument("repo", nargs="?", default=".")
+    ap = sub.add_parser("apply", help="create the approved plan -> .claude/** and .sherpa/state.json (dry run first)")
+    ap.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
+    ap.add_argument("--yes", "-y", action="store_true", help="write without asking (CI)")
+    ap.add_argument("--dry-run", action="store_true", help="only list the files, never ask")
+    ap.add_argument("--no-check", action="store_true", help="skip the checker after writing (no rollback)")
+
+    st = sub.add_parser("status", help="drift between state and files, checker findings, outcome labels")
+    st.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
+
+    ck = sub.add_parser("check", help="structural rules for .claude/** (exit 1 on FAIL)")
+    ck.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
+    ck.add_argument("--json", action="store_true", help="findings as JSON")
+
+    sub.add_parser("adopt", help="take over an existing harness into the state (M3, not implemented yet)").add_argument(
+        "repo", nargs="?", default="."
+    )
     return p
 
 
@@ -83,7 +94,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
 def cmd_plan(args: argparse.Namespace) -> int:
     """Load the model (or scan), apply the rules, keep decisions from the previous plan, write."""
-    from sherpa import config
+    from sherpa import config, gitinfo
     from sherpa import model as model_mod
     from sherpa.plan import build_plan, render_console, yamlio
     from sherpa.scan import scan
@@ -96,6 +107,11 @@ def cmd_plan(args: argparse.Namespace) -> int:
             model = model_mod.load(model_path)
         except (ValueError, KeyError, TypeError) as e:
             print(f"sherpa plan: rebuilding the model ({e})", file=sys.stderr)
+    if model is not None and not args.no_fetch:
+        gitinfo.fetch_origin(repo)
+    if model is not None and gitinfo.rev(repo, model.git.trunk.ref) != model.git.trunk.rev:
+        print(f"sherpa plan: {model.git.trunk.ref} moved since the last scan — rescanning", file=sys.stderr)
+        model = None
     if model is None:
         model = scan(repo, fetch=not args.no_fetch)
         model.write(model_path)
@@ -117,6 +133,84 @@ def cmd_plan(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _load_plan_and_model(repo: Path):
+    from sherpa import model as model_mod
+    from sherpa.plan import yamlio
+
+    plan_path, model_path = repo / PLAN_OUT, repo / MODEL_OUT
+    if not plan_path.exists():
+        raise ValueError(f"{plan_path} not found — run `sherpa plan` first")
+    if not model_path.exists():
+        raise ValueError(f"{model_path} not found — run `sherpa plan` first")
+    return yamlio.plan_from_dict(yamlio.load(plan_path)), model_mod.load(model_path)
+
+
+def _load_state(repo: Path):
+    from sherpa.apply import state as state_mod
+
+    path = repo / state_mod.STATE_PATH
+    return state_mod.load(path) if path.exists() else state_mod.State()
+
+
+def cmd_apply(args: argparse.Namespace) -> int:
+    """Dry run always; then ask (or ``--yes``), write, check, roll back on new FAILs, write the state."""
+    from sherpa import apply
+
+    repo = Path(args.repo).resolve()
+    plan, model = _load_plan_and_model(repo)
+    _refuse_stale(repo, plan)
+    state = _load_state(repo)
+    actions = apply.plan_files(apply.targets_for(plan, model), repo, state)
+    sys.stdout.write(apply.render_actions(actions, plan))
+    if not any(a.new is not None for a in actions):
+        print("nothing to do.", file=sys.stdout)
+        return EXIT_OK
+    if args.dry_run:
+        return EXIT_OK
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("dry run only — pass --yes to write (no terminal to ask).", file=sys.stdout)
+            return EXIT_OK
+        answer = input("apply? [y/N] ").strip().lower()
+        if answer not in ("y", "yes"):
+            print("aborted, nothing written.", file=sys.stdout)
+            return EXIT_OK
+    result = apply.write(actions, repo, state, plan, check=not args.no_check)
+    sys.stdout.write(apply.render_result(result))
+    return EXIT_ERROR if result.rolled_back else EXIT_OK
+
+
+def _refuse_stale(repo: Path, plan) -> None:
+    """Like a saved Terraform plan: the trunk moved since the plan was made → plan again (no fetch here)."""
+    from sherpa import gitinfo
+
+    trunk, rev = plan.model.get("trunk", ""), plan.model.get("rev", "")
+    if trunk and gitinfo.ref_exists(repo, trunk) and (now := gitinfo.rev(repo, trunk)) != rev:
+        raise ValueError(
+            f"harness-plan.yaml is from {trunk}@{rev[:10]}, {trunk} is now at {now[:10]} — run `sherpa plan` first"
+        )
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """What ``apply`` would do now (drift), checker findings, and the outcome labels per harness_rev."""
+    from sherpa import apply
+    from sherpa.apply import status as status_mod
+
+    repo = Path(args.repo).resolve()
+    state = _load_state(repo)
+    plan, model = _load_plan_and_model(repo)
+    actions = apply.plan_files(apply.targets_for(plan, model), repo, state)
+    report = status_mod.report(repo, state, actions)
+    sys.stdout.write(status_mod.render(report))
+    return EXIT_ERROR if report.fails else EXIT_OK
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    from sherpa import check
+
+    return check.main([args.repo] + (["--json"] if args.json else []))
+
+
 def _console_utf8() -> None:
     """Windows consoles and pipes are often cp1252: ✓/✗ must never crash the command."""
     for stream in (sys.stdout, sys.stderr):
@@ -132,6 +226,12 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_scan(args)
         if args.cmd == "plan":
             return cmd_plan(args)
+        if args.cmd == "apply":
+            return cmd_apply(args)
+        if args.cmd == "status":
+            return cmd_status(args)
+        if args.cmd == "check":
+            return cmd_check(args)
     except (GitError, ValueError, OSError) as e:
         print(f"sherpa {args.cmd}: {e}", file=sys.stderr)
         return EXIT_ERROR
