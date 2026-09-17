@@ -16,7 +16,7 @@ from pathlib import Path
 from sherpa import __version__
 from sherpa.apply.state import BLOCKS, JSON_HOOKS, MANAGED
 from sherpa.config import TARGETS
-from sherpa.model import DirStat, Model, ModuleStat
+from sherpa.model import DirStat, Model, ModuleStat, SubDir
 from sherpa.plan import PROPOSE, Entry, Plan
 
 ASSETS = Path(__file__).parent / "assets"
@@ -66,6 +66,9 @@ def modernize_stamp(text: str) -> str:
     for pattern, repl in LEGACY_STAMPS:
         text = pattern.sub(repl, text)
     return text
+
+
+INDEX_MAX = 20  # units named in the root AGENTS.md index; the rest are counted
 
 
 def entry_key(e: Entry) -> str:
@@ -125,6 +128,7 @@ class Renderer:
         self.home, self.runtime_targets = home, tuple(targets)
         self.modules = {m.id: m for m in model.modules}
         self.dirs = {d.path: d for d in model.git.dirs}
+        self.sub_dirs = {(s.path, m.id): s for m in model.modules for s in m.sub_dirs}  # sub-units (ADR-0020)
         # The stamp is the window end only (ADR-0019): neither the sherpa version nor the trunk rev — an upgrade
         # or a merge with no activity in a unit must not rewrite its block. The rev lives in the state and the plan.
         self.stamp = f"as of {model.git.windows.as_of[:10]}"
@@ -297,8 +301,18 @@ class Renderer:
             f"`python3 {check_script(self.home)}`.",
         ]
         if nested:
-            lines += ["", "Nearest AGENTS.md per module (loaded when you work there):", ""]
-            lines += [f"- `{e.scope}/AGENTS.md` — {e.target}" for e in sorted(nested, key=lambda e: e.scope)]
+            # The root file is loaded on every turn: the index names the top units by churn and counts the rest —
+            # runtimes find the nearest AGENTS.md by themselves, the index is for discovery (plan §7.1 G3).
+            rank = {uid: i for i, uid in enumerate(self.plan.ranking.get("commits_90d", []))}
+            ordered = sorted(nested, key=lambda e: (rank.get(e.target, len(rank)), e.scope))
+            shown, rest = ordered[:INDEX_MAX], ordered[INDEX_MAX:]
+            lines += ["", "Nearest AGENTS.md per module (loaded when you work there), most active first:", ""]
+            lines += [f"- `{e.scope}/AGENTS.md` — {e.target}" for e in shown]
+            if rest:
+                lines.append(
+                    f"- … and {len(rest)} more, each with its own AGENTS.md; every unit is listed in "
+                    f"`{self.home}/docs/modules/`"
+                )
         for e in root_units:
             lines += ["", self.proximity_block(e)]
         out = [self.root_file("AGENTS.md", "\n".join(lines))]
@@ -323,6 +337,10 @@ class Renderer:
                 ("tested by", _list(u.tested_by, "no test module found")),
                 ("hotspots", _list(u.hotspots[:3])),
             ]
+            if row := self.coupling_row(u):
+                rows.append(row)
+        elif isinstance(u, SubDir):
+            rows.append(("part of", f"`{self.parent_module(e)}` — {u.files} files, {u.commits_90d} commits/90d"))
         gens = self.generator_skills(e)
         if gens:
             rows.append(("generated code", ", ".join(f"{fam} → `{p}` (never edit the output)" for fam, p in gens)))
@@ -336,8 +354,21 @@ class Renderer:
 
     # ------------------------------------------------------------ facts
 
-    def unit(self, e: Entry) -> ModuleStat | DirStat | None:
-        return self.modules.get(e.target) or self.dirs.get(e.scope)
+    def unit(self, e: Entry) -> ModuleStat | DirStat | SubDir | None:
+        if u := self.modules.get(e.target) or self.dirs.get(e.scope):
+            return u
+        return next((s for (path, _), s in self.sub_dirs.items() if path == e.scope), None)
+
+    def parent_module(self, e: Entry) -> str | None:
+        return next((mid for (path, mid) in self.sub_dirs if path == e.scope), None)
+
+    @staticmethod
+    def coupling_row(u: ModuleStat) -> tuple[str, str] | None:
+        """Tornhill's temporal coupling as one line: the fact an agent needs first when it lands in a module."""
+        if not u.coupling:
+            return None
+        parts = [f"`{c.module}` ({c.shared} of {u.commits_90d} commits, {round(c.share * 100)} %)" for c in u.coupling]
+        return ("changes together with", ", ".join(parts))
 
     def generator_skills(self, e: Entry) -> list[tuple[str, str]]:
         """(family, skill path) for generators owned by this unit that the plan turns into skills."""
@@ -365,6 +396,14 @@ class Renderer:
                 ("dependents", _list(u.dependents)),
                 ("tested by", _list(u.tested_by)),
                 ("hotspots", _list(u.hotspots[:3])),
+            ]
+            if row := self.coupling_row(u):
+                rows.append(row)
+        elif isinstance(u, SubDir):
+            rows += [
+                ("kind", f"directory inside module `{self.parent_module(e)}`" + (" (package)" if u.package else "")),
+                ("files / LOC", f"{u.files} / {u.loc} ({u.source_files} source files)"),
+                ("commits 90d / 30d", f"{u.commits_90d} / {u.commits_30d} · {u.authors_90d} authors"),
             ]
         elif isinstance(u, DirStat):
             rows += [

@@ -213,6 +213,52 @@ def test_directory_unit_and_accepted_librarian():
     assert lib.content.startswith("---\nname: pay-sync\ndescription: ")
 
 
+def test_coupling_row_and_sub_unit_facts():
+    from sherpa.model import Coupling
+    from tests.test_plan import sub
+
+    subs = [sub("src/app/pay", 3, files=6, c90=12, c30=4, authors=2), sub("src/app/core", 3, files=5, c90=3)]
+    m = model(
+        [
+            mod(
+                "app",
+                "",
+                kind="python",
+                files=60,
+                c90=30,
+                c30=10,
+                authors=3,
+                sub_dirs=subs,
+                coupling=[Coupling("shared-lib", 15, 0.5), Coupling("web", 9, 0.3)],
+            ),
+        ]
+    )
+    p = build_plan(m)
+    by_path = {t.path: t for t in targets_for(p, m)}
+    facts = by_path[".agents/docs/modules/app.md"].blocks["facts"]
+    assert "| changes together with | `shared-lib` (15 of 30 commits, 50 %), `web` (9 of 30 commits, 30 %) |" in facts
+    assert "changes together with" in by_path["AGENTS.md"].blocks["harness"]  # the root proximity block too
+    pay = by_path[".agents/docs/modules/src-app-pay.md"].blocks["facts"]
+    assert "| kind | directory inside module `app` (package) |" in pay
+    assert "| files / LOC | 6 / 60 (6 source files) |" in pay and "| commits 90d / 30d | 12 / 4 · 2 authors |" in pay
+    nested = by_path["src/app/pay/AGENTS.md"].blocks["facts"]
+    assert "| part of | `app` — 6 files, 12 commits/90d |" in nested
+    assert "changes together with" not in nested  # coupling is measured per module, not per sub-unit
+
+
+def test_root_index_is_capped_and_ordered_by_rank():
+    from sherpa.apply.render import INDEX_MAX
+
+    mods = [mod(f"m{i:02d}", f"svc/m{i:02d}", c90=i + 1, files=10) for i in range(INDEX_MAX + 6)]
+    m = model(mods)
+    p = build_plan(m)
+    root = {t.path: t for t in targets_for(p, m)}["AGENTS.md"].blocks["harness"]
+    lines = [ln for ln in root.splitlines() if ln.startswith("- `svc/")]
+    assert len(lines) == INDEX_MAX and lines[0] == "- `svc/m25/AGENTS.md` — m25" and lines[-1].endswith("m06")
+    assert "- … and 6 more, each with its own AGENTS.md; every unit is listed in `.agents/docs/modules/`" in root
+    assert "most active first" in root
+
+
 # ---------------------------------------------------------------- plan_files: ownership modes
 
 
