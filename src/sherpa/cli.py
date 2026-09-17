@@ -285,8 +285,8 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     plan, covered = yamlio.mark_covered(plan, new_state)
     yamlio.write(plan, repo / PLAN_OUT)
     print(
-        f"state: {a.counts()} · harness_rev {new_state.harness_rev} → {state_mod.STATE_PATH} · "
-        f"{covered} plan entries covered → {PLAN_OUT}",
+        f"state: {a.counts()} · harness_rev {new_state.harness_rev} → {state_mod.STATE_PATH.as_posix()} · "
+        f"{covered} plan entries covered → {PLAN_OUT.as_posix()}",
         file=sys.stdout,
     )
     return EXIT_OK
