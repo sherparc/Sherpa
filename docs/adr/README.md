@@ -39,3 +39,4 @@ no ADR is not decided.
 | [0031](0031-never-write-through-a-symlink.md) | `apply` never writes through a symlink, in or out of the repository (`symlink in the path — never written through`), as `git apply` does | accepted |
 | [0032](0032-atomic-file-writes-and-rollback-on-error.md) | Harness files are written whole or not at all (`sherpa.atomic`), and an `OSError` half-way rolls the written files back and names what a failed rollback left | accepted |
 | [0033](0033-differing-base-files-are-yours-after-adopt.md) | A base file (checker copy, hook, ignore file) that differs from sherpa's copy is yours after `adopt` and listed as a gap with the way to a fresh one — amends ADR-0017 §2 | accepted |
+| [0034](0034-adopt-ignores-a-stale-plan.md) | `adopt` ignores a stale plan (`terraform import` needs the resource, not a fresh plan) and `plan`, `status`, `adopt` run on a torn state with the way out on stderr — only `apply` refuses both; amends ADR-0017/0019 | accepted |

@@ -142,9 +142,10 @@ touched by `apply`, never drift in `status`, no C8. Adopted agents and docs are 
 mentions) and **cover** the plan entries they fill; `selected()` leaves a covered entry out unless a human
 accepts it. The rules, the console marks and the gaps are in [commands/adopt.md](../commands/adopt.md).
 
-Index files (`state.json`, `harness-plan.yaml`) are written atomically (temp file + `os.replace`); a torn or
-foreign state fails every reader with the way out in the message, and `adopt` rebuilds it — after an unchanged
-`apply`, with the same `harness_rev`.
+Index files (`state.json`, `harness-plan.yaml`) are written atomically (temp file + `os.replace`). A torn or
+foreign state stops only `apply`; `plan`, `status` and `adopt` name the way out on stderr and run on an empty
+index, and `adopt` rebuilds it — after an unchanged `apply`, with the same `harness_rev`. `adopt` also takes a
+stale plan (ADR-0034): the way out of a broken index must not depend on the trunk standing still.
 
 ## Outcome minimum — the hook (ADR-0008)
 
