@@ -28,3 +28,5 @@ no ADR is not decided.
 | [0020](0020-sub-units-for-single-manifest-repos.md) | Sub-units for single-manifest repositories by a depth rule, `[plan] units` overrides it (M3d) | accepted |
 | [0021](0021-change-coupling-with-size-cap.md) | Change coupling per module with floors, measured only on commits below a size cap (max(5, half the modules)); the model records what it skipped | accepted |
 | [0022](0022-adopt-recognises-older-renderings.md) | `adopt` recognises older stamp formats as sherpa's rendering (`LEGACY_STAMPS`), so a rebuilt state after an upgrade keeps ownership | accepted |
+| [0023](0023-hermes-target.md) | Hermes Agent as the third target (thin adapter on `agents-md`, `version` in skill front matter, hook wiring as a `doctor` check); independence through open runtimes before any runtime of Sherpa's own | accepted |
+| [0024](0024-runtime-plugins.md) | Runtime plugins (M7a): a Claude Code plugin and a Hermes bundle from one source, thin — commands call the CLI, the hook stays with `apply` | accepted |

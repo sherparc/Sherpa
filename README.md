@@ -226,6 +226,8 @@ flowchart LR
 | M3c | `adopt`: existing harnesses taken over unchanged, covered entries, rebuildable state | ✅ |
 | M2b | distribution: release wheel per tag, `doctor`, `self-update`, daily hint | ✅ |
 | M3d | retro fruit: stamp without rev, sub-units for single-manifest repos, change coupling with a size cap, `plan --accept/--reject`, capped root index | ✅ |
+| M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
+| M7a | runtime plugins: Sherpa installable inside Claude Code (plugin) and Hermes (bundle) — `/sherpa-plan` with per-entry approval, `/sherpa-apply`, `/sherpa-status`; thin, the CLI does the work | ⏳ |
 | M5 · M6-lite · M4 · M6 | outcome evaluation, provider layer, auto-evals, LLM enrichment | ⏳ |
 | M3b · M7 | language adapters (anchors, patterns), librarians & multi-repo | ⏳ |
 
