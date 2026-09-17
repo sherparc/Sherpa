@@ -30,3 +30,8 @@ no ADR is not decided.
 | [0022](0022-adopt-recognises-older-renderings.md) | `adopt` recognises older stamp formats as sherpa's rendering (`LEGACY_STAMPS`), so a rebuilt state after an upgrade keeps ownership | accepted |
 | [0023](0023-hermes-target.md) | Hermes Agent as the third target (thin adapter on `agents-md`, `version` in skill front matter, hook wiring as a `doctor` check); independence through open runtimes before any runtime of Sherpa's own | accepted |
 | [0024](0024-runtime-plugins.md) | Runtime plugins (M7a): a Claude Code plugin and a Hermes bundle from one source, thin — commands call the CLI, the hook stays with `apply` | accepted |
+| [0025](0025-manifest-tie-break-by-language-share.md) | Two manifests in one directory: the kind with more source files under it wins, a tie by manifest name | accepted |
+| [0026](0026-coupling-excludes-the-root-module.md) | Change coupling leaves out the root module next to other modules (a catch-all is not a unit); `coupling.excluded` records it | accepted |
+| [0027](0027-sub-units-for-a-dominant-root-module.md) | The depth rule also runs on a root module holding ≥ `root_share` (0.5) of the files next to other modules | accepted |
+| [0028](0028-outcome-evaluation-needs-a-denominator.md) | Outcome evaluation (M5) shows `n` and the `unknown` share per revision; a comparison only from 30 labelled executions per revision | accepted |
+| [0029](0029-proximity-file-budget.md) | C7 budgets for proximity files: nested `CLAUDE.md`/`AGENTS.md` ≤ 8 KiB, root ≤ 32 KiB (Hermes' ceiling) | accepted |

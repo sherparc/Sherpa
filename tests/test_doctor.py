@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -166,6 +167,20 @@ def test_render_marks_fix_and_hint():
         f"sherpa doctor — {__version__}\n  ✓ a   fine\n  ! bb  meh\n    hint: do x\n"
         "  ✗ c   bad\n    fix: do y\n1 problems, 1 hints.\n"
     )
+
+
+def test_render_json_is_the_same_report():
+    checks = [doctor.Check("a", "ok", "fine"), doctor.Check("c", "fail", "bad", "do y")]
+    j = json.loads(doctor.render_json(checks))
+    assert j["sherpa"] == __version__ and j["problems"] == 1 and j["hints"] == 0
+    assert j["checks"][1] == {"name": "c", "level": "fail", "detail": "bad", "fix": "do y"}
+
+
+def test_cli_doctor_json(tmp_path: Path, capsys, make_origin, make_clone):
+    origin, _ = make_origin()
+    assert cli.main(["doctor", str(make_clone(origin)), "--offline", "--json"]) == 0
+    j = json.loads(capsys.readouterr().out)
+    assert j["problems"] == 0 and {c["name"] for c in j["checks"]} >= {"python", "git", "repository", "trunk"}
 
 
 @pytest.mark.parametrize("args,code", [([], 1), (["--offline"], 1)])

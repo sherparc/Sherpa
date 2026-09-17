@@ -1,7 +1,7 @@
 # Sherpa — Plan
 
-> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 10: the market position against Claude Code and Hermes Agent in §9, the `hermes` target as M3h and the entry point to runtime independence (ADR-0023), runtime plugins as M7a — Sherpa installable inside Claude Code and Hermes (ADR-0024), the §0 direction reordered — open runtimes first, an executor of Sherpa's own last) · **Author:** Claude (Opus 5) with Andrei
-> **Status:** v0.6.0 — M0, M1, M1a, M2, M2b, M3a, M3t, M3c, M3d done; order from here: M3h → M7a → M5 → M6-lite → M4 → M6 → M3b → M7 (§7.3, §9)
+> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 11: the retro of the whole product after M3d in §10 — eleven findings, six built as M3e (ADR-0025 to 0029), M5 moved before M7a, the plan-file churn recorded as Q23 with its flip criterion) · **Author:** Claude (Opus 5) with Andrei
+> **Status:** v0.7.0 — M0, M1, M1a, M2, M2b, M3a, M3t, M3c, M3d, M3e done; order from here: M3h → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (§7.3, §9, §10)
 > **Origin of the patterns:** production Claude Code harnesses built and analysed in practice (owner docs, agents with
 > knowledge manifests, librarians, deterministic checkers) plus the industry patterns in §2. Sherpa is a generic
 > product; no customer project is named anywhere in this repo.
@@ -257,9 +257,10 @@ the status line), one or two sentences per row there, the full reasoning and the
 | M3c ✅ | `sherpa adopt` (§2.6) — reads `.claude/`, `.agents/` and AGENTS.md hierarchies; covered entries; rebuildable state (ADR-0017) | existing-harness fixture: 6 files adopted, 0 bytes changed, 2 entries covered, gaps listed; torn state rebuilt with the same `harness_rev`; a 16-module corpus repo with 12 hand-written AGENTS.md: 0.22 s, 32 files rebuilt after a lost state; 230 tests, 98 % |
 | M2b ✅ | distribution + onboarding: `sherpa doctor`, `release.yml` (tag → wheel → GitHub release), `sherpa self-update`, daily update hint (`SHERPA_NO_UPDATE_CHECK`), GitHub Releases as the index (ADR-0018) | `doctor`: nine checks with a fix each, exit 1 only on a fail; `self-update` through the owning installer (uv/pipx/pip), git-tag fallback without a token, clones refused; the hint is a background thread plus cache — zero wait; 282 tests, 98 % |
 | M3d ✅ | low-hanging fruit from the retro (§7) plus the two preconditions the review found (§8): stamp without rev (ADR-0019) with legacy-stamp recognition in `adopt` (ADR-0022), model v4 with `sub_dirs` and sub-units by the depth rule (ADR-0020), change coupling with a size cap (ADR-0021), `plan --accept/--reject` by address, root index capped at 20 by rank, privacy note for the hook, session-built fixtures | `test_trunk_move_without_activity_changes_no_block`: two revs, no activity → `nothing to do.`; `test_adopt_recognises_an_older_stamp…`: 0.5.0 bytes → lost state → adopt → apply → `nothing to do.`; Sherpa's own plan lists `src/sherpa/apply`, `plan`, `scan` as units; `test_root_index_is_capped_and_ordered_by_rank`; suite 12 s → 7 s on Linux; 296 tests, 98 % |
-| M3h | `hermes` target (ADR-0023): third entry of `TARGETS`, detected by `hermes` on the `PATH`, `~/.hermes/` or `.hermes.md`; thin on top of `agents-md` — appends the root block to `.hermes.md`/`HERMES.md` when it exists (first match wins there), `version: 1` in every skill's front matter (neutral core), one outcome hook script for both payload shapes (`PostToolUse`/`Stop` and `post_tool_call`/`on_session_end`), `apply` prints the `~/.hermes/config.yaml` hook snippet once, `doctor` checks `hermes-hook` and `hermes-trust` (`hermes skills trust`), `status` counts labels from both runtimes per `harness_rev` | five-module fixture with targets `claude, agents-md, hermes`: same files as before plus `version:` (goldens on purpose), a fixture with `.hermes.md` gets the block appended and `AGENTS.md` untouched; hook test with a Hermes payload → label with the same `harness_rev`; `doctor` on a machine without Hermes: no new line; corpus: `hermes` launched in one repo loads the nested `AGENTS.md` and lists the skills after `trust` |
+| M3e ✅ | fruit of the whole-product review (§10): `status` names a stale plan and has `--json`, `doctor --json`; two manifests in one directory decided by language share (ADR-0025, closes Q4); coupling without the root catch-all (ADR-0026); the depth rule on a dominant root module (ADR-0027); proximity-file budgets in C7 (ADR-0029); the M5 denominator decided (ADR-0028); the architect agent's stale facts removed | `test_status_reports_a_stale_plan_and_json`; `test_find_modules_two_manifests_the_language_with_more_files_wins`; `test_coupling_excludes_the_root_catch_all`; `test_sub_units_for_a_root_module_only_when_alone_or_dominant`; `test_c7_proximity_file_budgets_in_bytes`; `test_status_names_adopt_on_a_foreign_state_schema`; corpus: the polyglot root is `python` now, coupling rows 21 → 11 and 15 → 13, 9 sub-units on the dominant root, C7 fires on a 9.9 KB nested file; 305 tests, 98 % |
+| M3h | `hermes` target (ADR-0023): third entry of `TARGETS`, detected by `hermes` on the `PATH`, `~/.hermes/` or `.hermes.md`; thin on top of `agents-md` — appends the root block to `.hermes.md`/`HERMES.md` when it exists (first match wins there), `version: 1` in every skill's front matter (neutral core), one outcome hook script for both payload shapes (`PostToolUse`/`Stop` and `post_tool_call`/`on_session_end`), `apply` prints the `~/.hermes/config.yaml` hook snippet once, `doctor` checks `hermes-hook` and `hermes-trust` (`hermes skills trust`), `status` counts labels from both runtimes per `harness_rev` | five-module fixture with targets `claude, agents-md, hermes`: same files as before plus `version:` (goldens on purpose), a fixture with `.hermes.md` gets the block appended and `AGENTS.md` untouched; hook test with a Hermes payload → label with the same `harness_rev`; `doctor` on a machine without Hermes: no new line; corpus: `hermes` launched in one repo loads the nested `AGENTS.md` and lists the skills after `trust`; C7 (ADR-0029) fires on the corpus repository with an oversized nested file. Verified in Hermes' source (§10): the skill loader does not require `version` in the front matter — keep `version: 1` only if the skills hub needs it, verify before building |
+| M5 | outcome evaluation (ADR-0028): `status` shows labels per `harness_rev` with `n` and the share of `unknown`; a comparison between two revisions only from `outcome_min_n` (30) labelled executions each; Q14's fruit (test and build commands per unit, a `status` line for adopted files changed since adopt) | first 10 executions on a corpus repo with a label ≠ `unknown`; the `unknown` share visible from the first label; the comparison line appears at 30 per revision and names the missing count below; `status --json` carries the counts |
 | M7a | runtime plugins (ADR-0024): a Claude Code plugin (`.claude-plugin/`, marketplace) and a Hermes bundle (`hermes bundles`, tap) generated from one source under `plugins/`, released with every tag; commands `/sherpa-doctor`, `/sherpa-plan` (reads the plan entry by entry, asks, writes the answer with `--accept/--reject`), `/sherpa-apply` (dry run shown, then `--yes` after the user's yes), `/sherpa-status`; thin — the CLI does the work, no hook in the plugin | plugin manifests validated in a test; `claude plugin install` from the release and `/sherpa-plan` on the five-module fixture ends with the same `harness-plan.yaml` as the CLI with `--accept/--reject`; Hermes: `hermes skills install` of the bundle lists the four commands; a missing CLI produces the install line, nothing else |
-| M5 | outcome evaluation: `status` shows labels per `harness_rev`, trend, share of `unknown` | first 10 executions on a corpus repo with a label ≠ `unknown`; regression between two harness versions visible |
 | M6-lite | provider layer (ADR-0004): thin, framework-free — bring your own key, local models through the OpenAI API (vLLM, Ollama, OpenRouter), Anthropic natively; no LangChain, no agent framework; used by M4 evals and M6 first | the same schema pass through a local OpenAI-compatible model and through Anthropic; a missing key produces one line and the stage-1 plan unchanged |
 | M4 | auto-evals from the graph, `status` with baseline | eval run on the fixture ≥ 90 %; regression is reported |
 | M6 | `plan` stage 2: LLM enrichment on top of M6-lite — comments only, stage-1 entries never change | plan diff stage 1 vs. 2 documented; the same schema pass with both providers; stage-1 entries unchanged |
@@ -303,7 +304,7 @@ Many tests, small units, everything reproducible:
 | Corpus | real repos under `tests/corpus/` (ignored) | smoke: scan runs through, schema valid, runtime < 60 s; never in CI |
 | Schema | `codebase-model`, `harness-plan`, `harness-state` | JSON Schema under `src/sherpa/schemas/`; validation in tests always, at runtime when `jsonschema` is installed (dev extra) |
 
-Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M2b: 282 tests, 98 %.
+Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M3e: 305 tests, 98 %.
 The conftest sets `SHERPA_NO_UPDATE_CHECK` and a temporary cache directory for every test, in-process and in
 subprocesses: no test reaches the network.
 
@@ -315,7 +316,9 @@ subprocesses: no test reaches the network.
    anchors and owner-move directives are adapter/M3b material.
 3. Structured output: which providers enforce JSON Schema natively (vLLM: `guided_json`; Anthropic: tool use)?
    Relevant from M6.
-4. Two manifests in the same directory: today the alphabetically first wins — is that enough in the corpus?
+4. ~~Two manifests in the same directory: today the alphabetically first wins — is that enough in the corpus?~~
+   Decided 2026-09-17 (ADR-0025): it was not — the corpus root with 6.5k Python and 2.3k TypeScript files was
+   `node`; the kind with more source files under the directory wins, a tie by manifest name.
 5. ~~Package index for M2b?~~ Decided 2026-09-17 (ADR-0018): GitHub Releases through the API with the user's
    token, git-tag URL as the fallback; PyPI at the public release. No third service.
 6. ~~Owner-doc floor by files?~~ Decided 2026-09-17 (ADR-0014): `owner_doc_min_files = 5`, a dependent overrides
@@ -333,7 +336,8 @@ subprocesses: no test reaches the network.
     stays in the state and the plan header. Implemented in M3d.
 11. ~~Sub-units for single-manifest repositories (§7.1 G2)?~~ Decided 2026-09-17 (ADR-0020): the depth rule, with
     `[plan] units = […]` in `sherpa.toml` as the override. Implemented in M3d.
-12. ~~Milestone order (§7.3)?~~ Decided 2026-09-17: M2b → M3d → M5 → M6-lite → M4 → M6 → M3b → M7. Tree-sitter
+12. ~~Milestone order (§7.3)?~~ Decided 2026-09-17: M2b → M3d → M5 → M6-lite → M4 → M6 → M3b → M7; revision 10
+    inserted M3h and M7a before M5, revision 11 (§10 F6) put M5 back before M7a: M3h → M5 → M7a → …. Tree-sitter
     (M3b) stays an optional extra (`sherpa[adapters]`), never a core dependency; it moves forward only if M4
     evals from the graph score < 90 % on the corpus or a customer needs skills from code patterns.
 13. Coupling between sub-units of a single-manifest repository (ADR-0021 measures modules only): worth a model
@@ -360,8 +364,26 @@ subprocesses: no test reaches the network.
     that lands in the plan's `decision_note`? Recommendation: that order, and yes to the note — it is the
     evidence the next re-plan shows next to the struck entry.
 
+19. ~~Order M3h → M7a → M5, or M5 before the plugins (§10 F6)?~~ Decided 2026-09-17: M3h → M5 → M7a — the plugins
+    distribute a claim M5 has to prove first (§9).
+20. ~~Manifest tie-break by language share (§10 F2)?~~ Decided 2026-09-17 → ADR-0025.
+21. ~~Root module excluded from coupling partners (§10 F3)?~~ Decided 2026-09-17 → ADR-0026.
+22. ~~Depth rule for a dominant root module (§10 F4)?~~ Decided 2026-09-17 → ADR-0027 (`root_share = 0.5`); Q15's
+    LOC floor stays open and now matters for more repositories.
+23. **The checked-in plan churns on every trunk move — the harness no longer does.** Measured on this repository
+    between two merges: `harness-plan.yaml` 37 +/38 − lines (header rev, `as_of`, every evidence number) while
+    `apply` would write zero lines (ADR-0019). Terraform never checks a saved plan in; the durable part is the
+    decisions. Options: keep ADR-0005 (the diff is the audit trail of what the numbers were), or split the
+    decisions into a small checked-in `harness-decisions.yaml` and let the full plan join the model as an
+    ignored artefact (touches `yamlio`, `adopt`'s covered marks, the docs; M). Recommendation: keep, with this
+    flip criterion — a corpus team reviews the plan diff as noise.
+24. ~~M5 denominator (§10 F8)?~~ Decided 2026-09-17 → ADR-0028: `n` and the `unknown` share per revision from the
+    first label, a comparison only from 30 per revision.
+
 Decided (2026-09-17): the `hermes` target and the reordered direction → ADR-0023; runtime plugins from one
-source, thin, no hook in the plugin → ADR-0024.
+source, thin, no hook in the plugin → ADR-0024; manifest tie-break → ADR-0025; coupling without the root
+catch-all → ADR-0026; sub-units for a dominant root module → ADR-0027; the M5 denominator → ADR-0028;
+proximity-file budgets → ADR-0029.
 
 Decided (2026-09-16): plan format YAML and check-in of plan/state → ADR-0005; generator principle → ADR-0011;
 units, visibility, decision keeping → ADR-0012. Decided (2026-09-17): state as a rebuildable index, atomic
@@ -503,3 +525,48 @@ discovered progressively, reads `<root>/.agents/skills/*/SKILL.md` in the agents
 hooks with the same JSON-on-stdin shape as Claude Code's — three of the four things the `agents-md` target and
 `home: .agents` already produce. The gaps (skill `version`, the `.hermes.md` precedence trap, global hook wiring,
 `doctor`) are M3h; the corpus smoke test with a real `hermes` launch is its acceptance.
+
+## 10. Retro after M3d (2026-09-17) — the whole product, before M3h
+
+Method: `architect-review` without a focus (§7 method): the suite, `ruff`, `status`/`apply --dry-run` on this
+repository, a scratch clone re-scanned and re-planned, the four corpus repositories through `scan`, `plan`,
+`apply --dry-run`, `check`, `doctor`, and Hermes Agent's public source read for the premises of ADR-0023.
+Eleven findings; six built as M3e in the same day, one decided as an order change, one recorded as Q23.
+
+### 10.1 Gaps
+
+| # | Finding | Evidence | Consequence |
+|---|---|---|---|
+| F1 | **`status` was silent on a stale plan; `apply` refuses on it.** | `cli.py` called `_refuse_stale` for `apply` and `adopt`, not for `status`. On this repository `status` said `drift: none` while `apply` refused — through two merges, and the milestone-step gate "status clean" passed. | Built: `plan: current` / `plan: stale — origin/main moved a → b since \`sherpa plan\`` as the second line, a warning, never an exit code; `test_status_reports_a_stale_plan_and_json`. |
+| F2 | **Two manifests in one directory: the alphabet decided, wrongly** (Q4). | Corpus polyglot root: 6.5k `.py`, 2.3k `.ts`, kind `node`; `sub_dirs.source_files` counted node extensions → a 4.5k-file directory showed 6 source files. | Built: ADR-0025, the kind with more source files under the directory wins. |
+| F3 | **Coupling with the root catch-all was tautological.** | Same repository: three of the four most active modules named the root module (64 % of the files) as first partner, shares 0.45–0.74, `skipped_commits: 0`. | Built: ADR-0026 — the root module next to others is excluded and named in `coupling.excluded`; rows 21 → 11 there, 15 → 13 on the 122-module repository. |
+| F4 | **ADR-0020's trigger missed "root package + a few sub-packages".** | Same repository: 16 modules, root module 8.8k of 13.6k files, `sub_dirs` 797 entries with depth-1 directories of 4.5k, 1.2k, 788 files — one owner doc, one agent. | Built: ADR-0027 — the depth rule runs on a root module holding ≥ `root_share` (0.5) of the files; 9 sub-units at depth 1 there. |
+| F5 | **The repository's own architect agent contradicted the ADRs.** | `architect.md` promised "an agent in its own right (a runtime like Claude Code or Hermes)" against ADR-0023 §5, listed exit codes 0/1/2 (`cli.py`: 0/1) and model v3 (v4). | Built: the direction paragraph points at §0, the map carries no version numbers. Invariant 3 restored where it is stated. |
+| F6 | **M7a before M5 delayed the central claim.** | §9: "M3d → M3h → M5 is right: prove the central claim before the market asks"; the rev-10 status line put M7a between. | Decided (Q19): M3h → M5 → M7a. |
+| F7 | **The checked-in plan churns on every trunk move.** | 37 +/38 − lines in `harness-plan.yaml` between two merges, zero harness lines. | Recorded as Q23 with the flip criterion; ADR-0005 stands. |
+| F8 | **M5's metric had no denominator rule.** | Acceptance "first 10 executions … regression visible" against §2.5's "≥ 30 labelled executions"; labels depend on the task mix. | Decided: ADR-0028 — `n` and the `unknown` share from the first label, a comparison only from 30 per revision. |
+| F9 | **Hermes injects a nested file whole into a tool result, with a ceiling.** | `agent/subdirectory_hints.py`: first match per directory, 32 KiB ceiling, "~8k" recommended; also verified there: `.hermes.md` nearest-up precedence, `.agents/skills` behind `trusted_project_dirs`, shell hooks with `hook_event_name` on stdin, wiring in `~/.hermes/config.yaml`. Not found: a `version` requirement in the skill loader. | Built: ADR-0029, C7 budgets 8 KiB nested / 32 KiB root; fires on a 9.9 KB nested file in the corpus. M3h's `version: 1` is to be verified before it is built. |
+| F10 | **State schema tolerance was only manually verified.** | §8.2 left it; no test for a foreign `schema_version`. | Built: `test_status_names_adopt_on_a_foreign_state_schema`. |
+| F11 | **`--json` existed for `check` only.** | `status`, `doctor` printed prose for CI to parse. | Built: `status --json`, `doctor --json`, same exit codes. |
+
+### 10.2 What holds
+
+- Suite 296 → 305 tests, 98 %, 11 s on Linux; `ruff` clean; goldens changed by exactly one line (`root_share` in
+  the poly plan header), on purpose.
+- Determinism per rev: `as_of` is the trunk rev's committer date, so a re-plan differs only where the rev did.
+- The upgrade path: a v3 model on disk → `plan` rebuilds it; a foreign state → `status` names `adopt`.
+- Never overwrite on the corpus: a hand-written nested `AGENTS.md` gets its block appended, the root file
+  untouched; `check` 0 FAIL on all four repositories before and after M3e.
+- Speed on the corpus (54 files → 20.6k files, 1 → 122 modules): scan 0.6 / 1.7 / 3.5 / 6.4 s — the slowest
+  repository carries 22.4k non-merge commits in 90 days and 1 839 authors, and the rank rule still yields four
+  agents at ranks 1–4; plan ≤ 1 s; `doctor --offline` "ready" on all four.
+- ADR-0023's premises about Hermes hold in its source (F9), with one correction for M3h.
+
+### 10.3 Innovation candidates confirmed
+
+1. **Change coupling as a harness fact** — quotable now that the catch-all is out (F3); the next proof is a
+   golden on a fixture with a root bucket showing the partner row without it.
+2. **One outcome table across two runtimes per `harness_rev`** (M3h + ADR-0028): nobody measures whether the
+   same harness helps Claude Code and Hermes users differently; the hook already accepts both payload shapes.
+3. **Stale-plan awareness with zero churn** (F1 + F7): `plan: stale` next to `drift: none` is Terraform's
+   "no changes" for documentation, one level up.

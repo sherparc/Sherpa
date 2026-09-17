@@ -140,6 +140,24 @@ def test_c7_budgets_warn(tmp_path: Path):
     assert (f.level, f.rule) == (WARN, "C7") and "> budget 150 (agent)" in f.message
 
 
+def test_c7_proximity_file_budgets_in_bytes(tmp_path: Path):
+    """ADR-0029: a nested CLAUDE.md/AGENTS.md over 8 KiB and a root one over 32 KiB are WARNs — runtimes inject
+    them whole (Hermes: a tool result on the first touch of the directory, ceiling 32 KiB)."""
+    harness(
+        tmp_path,
+        {
+            "AGENTS.md": "r\n" * (16 * 1024 + 1),  # 32 KiB + 2 bytes at the root
+            "svc/pay/AGENTS.md": "n\n" * (4 * 1024 + 1),  # 8 KiB + 2 bytes nested
+            "svc/core/CLAUDE.md": "n\n" * (4 * 1024),  # exactly 8 KiB: within budget
+            "CLAUDE.md": "r\n" * (4 * 1024 + 1),  # over 8 KiB but at the root: within the 32 KiB budget
+        },
+    )
+    fs = check.check(tmp_path)
+    assert [(f.level, f.rule, f.path) for f in fs] == [(WARN, "C7", "AGENTS.md"), (WARN, "C7", "svc/pay/AGENTS.md")]
+    assert fs[0].message == "32770 bytes > budget 32 KiB (root proximity file)"
+    assert fs[1].message == "8194 bytes > budget 8 KiB (nested proximity file)"
+
+
 def test_c8_drift_against_state(tmp_path: Path):
     doc = "# m\n<!-- sherpa:begin facts -->\nv1\n<!-- sherpa:end facts -->\n"
     harness(

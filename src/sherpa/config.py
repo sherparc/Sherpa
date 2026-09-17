@@ -20,6 +20,7 @@
     skill_min_generated_files = 5      # skill proposal from this many generated files (or config, see rules)
     owner_doc_min_files = 5            # owner doc from this many files, unless something depends on the unit
     units = ["src/sherpa/*"]           # single-manifest repos: sub-units by glob instead of the depth rule (ADR-0020)
+    root_share = 0.5                   # a root module holding this share of the files gets sub-units too (ADR-0027)
 
     [apply]                            # target layer (ADR-0015); both default to detection, see docs/commands/apply.md
     home = ".agents"                   # where owner docs, skills and the checker copy live: ".agents" or ".claude"
@@ -63,6 +64,7 @@ class PlanConfig:
     generated_share: float = 0.5
     skill_min_generated_files: int = 5
     owner_doc_min_files: int = 5
+    root_share: float = 0.5  # the depth rule also runs on a root module with ≥ this share of the repo's files
     units: tuple[str, ...] | None = None  # None = depth rule; a list = these globs (empty = no sub-units)
 
     def thresholds(self) -> dict[str, float]:

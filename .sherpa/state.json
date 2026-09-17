@@ -1,22 +1,27 @@
 {
   "schema_version": 1,
-  "sherpa": "0.6.0",
-  "harness_rev": "570710a36733",
+  "sherpa": "0.7.0",
+  "harness_rev": "9800ac6557c2",
   "home": ".claude",
   "targets": [
     "claude"
   ],
   "plan": {
     "trunk": "origin/main",
-    "rev": "2c22d796e31428d45cdcf64b087b13fdfce9f87b",
-    "as_of": "2026-09-17T08:08:06Z"
+    "rev": "a9a46a0da75cf33e0c5691196a1e06f79932161d",
+    "as_of": "2026-09-17T09:27:17Z"
   },
-  "applied_at": "2026-09-17T08:48:39Z",
+  "applied_at": "2026-09-17T09:47:05Z",
   "files": {
     ".claude/agents/architect.md": {
       "mode": "managed",
       "origin": "adopted",
-      "hash": "2ef03f4ee8d8203e"
+      "hash": "24a16d6345d283f8"
+    },
+    ".claude/commands/architect-review.md": {
+      "mode": "managed",
+      "origin": "adopted",
+      "hash": "c47fbac94f1c5db2"
     },
     ".claude/commands/sync-kb.md": {
       "mode": "managed",
@@ -28,7 +33,7 @@
       "origin": "generated",
       "entry": "owner-doc:sherpa-harness:",
       "blocks": {
-        "facts": "226513b3f4c20c79"
+        "facts": "3c10269001c09d2d"
       }
     },
     ".claude/docs/modules/src-sherpa-apply.md": {
@@ -36,28 +41,33 @@
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
       "blocks": {
-        "facts": "e5978adb3f2c0fa3"
+        "facts": "b928e34fd0fad0c9"
       }
     },
     ".claude/hooks/sherpa-outcome.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "47821d911a89af0f"
+      "hash": "1c695d49e788e477"
     },
     ".claude/scripts/sherpa-check.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "f70e0bf668fc80c3"
+      "hash": "ef115816cca3bc9d"
     },
     ".claude/settings.json": {
       "mode": "json-hooks",
       "origin": "generated",
       "hash": "23ef47bc78d3cdd0"
     },
+    ".claude/skills/architect-review/SKILL.md": {
+      "mode": "managed",
+      "origin": "adopted",
+      "hash": "77a74ed4d0e259af"
+    },
     ".claude/skills/milestone-step/SKILL.md": {
       "mode": "managed",
       "origin": "adopted",
-      "hash": "98389a3e75146b3e"
+      "hash": "beef64217dd2affe"
     },
     ".claude/skills/sync-kb/SKILL.md": {
       "mode": "managed",
@@ -81,7 +91,7 @@
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
       "blocks": {
-        "harness": "bd54b6c58e76bcd2"
+        "harness": "072fbd166ec8ff3a"
       }
     }
   }

@@ -470,6 +470,64 @@ def test_trunk_move_without_activity_changes_no_block(active_repo: Path, capsys)
     assert "nothing to do." in out and "~" not in out.split("\n", 2)[2]
 
 
+def test_status_reports_a_stale_plan_and_json(active_repo: Path, capsys):
+    """The daily command says what ``apply`` would refuse: the trunk moved since the plan was made. Same report
+    as JSON for scripts — a stale plan is a warning, never an exit code."""
+    applied(active_repo)
+    capsys.readouterr()
+    assert main(["status", str(active_repo)]) == 0
+    assert "\nplan: current\n" in capsys.readouterr().out
+    seed = active_repo.parent / "seed"
+    commit(seed, "docs only", {"README.md": "# shop\n"}, date="2026-03-01T12:00:00Z", author="A")
+    subprocess.run(["git", "push", "-q", str(active_repo.parent / "origin.git"), "main"], cwd=seed, check=True)
+    subprocess.run(["git", "fetch", "-q", "origin"], cwd=active_repo, check=True)
+    assert main(["status", str(active_repo)]) == 0
+    out = capsys.readouterr().out
+    assert "\nplan: stale — origin/main moved " in out and "since `sherpa plan`; run `sherpa plan`\n" in out
+    assert "drift: none" in out  # the harness itself is current (ADR-0019) — the two facts are separate lines
+    assert main(["status", str(active_repo), "--json"]) == 0
+    j = json.loads(capsys.readouterr().out)
+    assert j["plan"]["stale"] is True and j["plan"]["trunk"] == "origin/main" and len(j["plan"]["current_rev"]) == 40
+    assert j["plan"]["plan_rev"] != j["plan"]["current_rev"]
+    assert j["drift"] == [] and j["findings"] == [] and j["outcomes"] == {} and len(j["harness_rev"]) == 12
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0  # re-plan: current again
+    capsys.readouterr()
+    assert main(["status", str(active_repo), "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["plan"] == {"stale": False}
+
+
+def test_status_names_adopt_on_a_foreign_state_schema(active_repo: Path, capsys):
+    """ADR-0017: a state from another schema version is unreadable, and the message names the way out."""
+    applied(active_repo)
+    path = active_repo / ".sherpa" / "state.json"
+    d = json.loads(path.read_text(encoding="utf-8"))
+    d["schema_version"] = 2
+    path.write_text(json.dumps(d), encoding="utf-8")
+    capsys.readouterr()
+    assert main(["status", str(active_repo)]) == 1
+    err = capsys.readouterr().err
+    assert "state has schema_version 2, expected 1" in err and "`sherpa adopt` rebuilds it" in err
+
+
+def test_status_names_adopt_for_a_gone_file_the_plan_no_longer_wants(active_repo: Path, capsys):
+    """Reject an entry, delete its file: apply has nothing to do, and status says how the record goes away."""
+    applied(active_repo)
+    assert main(["plan", str(active_repo), "--no-fetch", "--reject", "agent:pay"]) == 0
+    (active_repo / ".claude" / "agents" / "pay.md").unlink()
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    assert "nothing to do." in capsys.readouterr().out
+    assert main(["status", str(active_repo)]) == 0
+    assert (
+        "  - .claude/agents/pay.md  in the state, not on disk — `sherpa adopt` drops the record"
+        in capsys.readouterr().out
+    )
+    assert main(["adopt", str(active_repo)]) == 0
+    assert "dropped from the state (file gone): .claude/agents/pay.md" in capsys.readouterr().out
+    assert main(["status", str(active_repo)]) == 0
+    assert "drift: none" in capsys.readouterr().out
+
+
 def test_rescan_updates_the_facts_block_and_keeps_human_text(active_repo: Path, capsys):
     applied(active_repo)
     doc = active_repo / ".agents" / "docs" / "modules" / "pay.md"

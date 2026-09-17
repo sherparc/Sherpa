@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from sherpa import __version__
@@ -34,16 +34,17 @@ class Report:
     outcomes: dict[str, Counter] = field(default_factory=dict)  # harness_rev → label counts
     corrections: int = 0
     notes: list[str] = field(default_factory=list)
+    stale: tuple[str, str, str] | None = None  # (trunk, plan rev, current rev) when the trunk moved since the plan
 
     @property
     def fails(self) -> int:
         return sum(f.level == FAIL for f in self.findings)
 
 
-def report(repo: Path, state: State, actions: list) -> Report:
+def report(repo: Path, state: State, actions: list, *, stale: tuple[str, str, str] | None = None) -> Report:
     from sherpa.apply import NEW, SKIPPED, UPDATED
 
-    r = Report(state.harness_rev or "none", state.applied_at or "never")
+    r = Report(state.harness_rev or "none", state.applied_at or "never", stale=stale)
     targeted = {a.path for a in actions}
     adopted = {path for path, rec in state.files.items() if rec.origin == ADOPTED}
     missing = {path for path in state.files if not (repo / path).is_file()}
@@ -59,7 +60,7 @@ def report(repo: Path, state: State, actions: list) -> Report:
             if path in missing:
                 r.drift.append((MISSING, path, "adopted file is gone — `sherpa adopt` drops the record"))
         elif path in missing and path not in targeted:
-            r.drift.append((MISSING, path, "in the state, not on disk"))
+            r.drift.append((MISSING, path, "in the state, not on disk — `sherpa adopt` drops the record"))
         elif path not in targeted:
             r.drift.append((ORPHAN, path, "in the state, no longer in the plan"))
     if adopted:
@@ -100,6 +101,11 @@ def _outcomes(path: Path) -> tuple[dict[str, Counter], int]:
 
 def render(r: Report) -> str:
     lines = [f"sherpa status — harness_rev {r.harness_rev}, applied {r.applied_at}"]
+    if r.stale:
+        trunk, rev, now = r.stale
+        lines.append(f"plan: stale — {trunk} moved {rev[:10]} → {now[:10]} since `sherpa plan`; run `sherpa plan`")
+    else:
+        lines.append("plan: current")
     if r.drift:
         w = min(max(len(p) for _, p, _ in r.drift), 56)
         lines.append(f"drift: {len(r.drift)} files")
@@ -122,3 +128,20 @@ def render(r: Report) -> str:
         lines.append("outcomes: none yet — labels appear once Claude Code runs with the hook installed")
     lines.extend(f"  note: {n}" for n in r.notes)
     return "\n".join(lines) + "\n"
+
+
+def render_json(r: Report) -> str:
+    """The same report for scripts (``sherpa status --json``); exit code unchanged."""
+    out = {
+        "sherpa": __version__,
+        "harness_rev": r.harness_rev,
+        "applied_at": r.applied_at,
+        "plan": {"stale": r.stale is not None}
+        | ({"trunk": r.stale[0], "plan_rev": r.stale[1], "current_rev": r.stale[2]} if r.stale else {}),
+        "drift": [{"op": op, "path": path, "detail": detail} for op, path, detail in r.drift],
+        "findings": [asdict(f) for f in r.findings],
+        "outcomes": {rev: dict(c) for rev, c in sorted(r.outcomes.items())},
+        "corrections": r.corrections,
+        "notes": list(r.notes),
+    }
+    return json.dumps(out, indent=2, ensure_ascii=False) + "\n"

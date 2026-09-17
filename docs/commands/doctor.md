@@ -31,6 +31,7 @@ Levels: `✓` ok, `!` hint (sherpa works, you should know), `✗` fail (blocks `
 |---|---|
 | `REPO` | repository root (default `.`) |
 | `--offline` | skip the `update` check — no network at all |
+| `--json` | the checks as JSON: `{"sherpa", "checks": [{"name", "level", "detail", "fix"}], "problems", "hints"}` — the exit code is unchanged |
 
 `SHERPA_NO_UPDATE_CHECK=1` has the same effect as `--offline` and also silences the daily hint of the other
 commands ([self-update](self-update.md)).

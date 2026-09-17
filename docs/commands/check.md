@@ -21,7 +21,7 @@ python3 .agents/scripts/sherpa-check.py [REPO] [--json]      # the deployed copy
 | C4 | FAIL | relative **file** links (`[x](../docs/modules/pay.md)`) in `.claude/**`, `.agents/**` and every `CLAUDE.md`/`AGENTS.md` (root and nested) resolve. Skipped: URLs, `mailto:`, anchors, absolute paths, targets without a file extension (wiki pages), and anything under `archive/` (history may tell the old state) | `link target ../nope.md does not exist` |
 | C5 | FAIL | `sherpa:begin <name>` / `sherpa:end <name>` markers are balanced, correctly nested (none) and unique per file | `managed block markers: line 12: end facts without matching begin` |
 | C6 | FAIL | `.claude/settings.json` parses as JSON; every hook command that references `$CLAUDE_PROJECT_DIR/<path>` points to an existing file | `Stop hook references missing file .claude/hooks/sherpa-outcome.py` |
-| C7 | WARN | size budgets: agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate (facts belong in the owner doc) | `162 lines > budget 150 (agent)` |
+| C7 | WARN | size budgets: agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate (facts belong in the owner doc); a nested `CLAUDE.md`/`AGENTS.md` > 8 KiB, the root one > 32 KiB — runtimes inject them whole (ADR-0029) | `162 lines > budget 150 (agent)`, `9886 bytes > budget 8 KiB (nested proximity file)` |
 | C8 | WARN | with `.sherpa/state.json`: managed files or blocks whose hash differs from the state, blocks removed, files missing | `block facts hand-edited` |
 
 Findings are sorted FAIL first, then by rule and path. Exit 1 when at least one FAIL.

@@ -43,7 +43,7 @@ generated = ["gen/**"]                 # own generator family "custom"; extends 
 | `modules[]` | one module per manifest: `id`, `path`, `kind`, files/LOC/test files/generator outputs, `deps`/`dependents`/`tested_by` (in-repo only), churn per module, up to 3 hotspots | manifest parsers (T1) |
 | `modules[].sub_dirs[]` | directories inside the module, depths 1–4 below its path: files, files in the module's language (`source_files`), Python package flag, LOC, commits and authors — the raw material for sub-units of single-manifest repositories | ADR-0020 |
 | `modules[].coupling[]` | temporal coupling: up to 3 partner modules that changed in the same commits, with the shared count and the share of this module's commits; floors 5 shared and 30 %, commits touching more than `coupling.cap` modules excluded | Tornhill, ADR-0021 |
-| `coupling` | how coupling was measured: `cap` = max(5, ⌈modules/2⌉), `skipped_commits` above the cap (squash merges, mass renames), `measured_commits`, the floors | ADR-0021 |
+| `coupling` | how coupling was measured: `cap` = max(5, ⌈modules/2⌉), `skipped_commits` above the cap (squash merges, mass renames), `measured_commits`, the floors, `excluded` = the root module left out as a catch-all when other modules exist (ADR-0026), else `null` | ADR-0021, ADR-0026 |
 | `generators[]` | one entry per (generator family, owning module): `home`, generated files/LOC, up to 5 sources and configs (closest to `home` first), regeneration command, `skill` | `scan/generators.py` |
 | `conventions` | languages by LOC, CI files, container files | file tree |
 
@@ -59,8 +59,9 @@ generated = ["gen/**"]                 # own generator family "custom"; extends 
 | `java` | `pom.xml` `build.gradle(.kts)` | `<artifactId>` (Gradle: directory name) | `<dependency><artifactId>` against other modules | `*Test.java`, `src/test/` |
 
 Manifests under `node_modules/`, `vendor/`, `target/`, `bin/`, `obj/`, `dist/`, `build/`, `.venv/`, `packages/`
-are not modules. Two manifests in the same directory (e.g. `package.json` next to `pyproject.toml`): the
-alphabetically first wins — deliberately simple, becomes a flip criterion if a corpus repo needs it.
+are not modules. Two manifests in the same directory (e.g. `package.json` next to `pyproject.toml`): the kind
+with more source files under the directory wins (ADR-0025 — the ecosystem of the files, not of the alphabet; a
+Python service with a `package.json` for its front-end tooling is `python`); a tie falls back to the manifest name.
 
 External packages (`requests`, `serde`, `react`) do **not** appear in `deps`: for owner boundaries only what lives
 in the repo counts. Test files = path contains `tests/`, `test/`, `__tests__/`, `spec/` or the name matches
@@ -101,7 +102,10 @@ directory of the outputs — the central place for a skill. Example: `ef-migrati
 12. **Change coupling excludes big commits** (ADR-0021). On a squash-merge trunk every commit is one PR that
     touches docs, tests and several modules — measured naively, everything is coupled to everything at 100 %.
     CodeScene and code-maat exclude large changesets for the same reason; sherpa's cap is max(5, half the
-    modules), and the model records how many commits it skipped so the number stays honest.
+    modules), and the model records how many commits it skipped so the number stays honest. A root module next
+    to other modules is left out as a partner (ADR-0026): it owns everything no other manifest claims — docs,
+    tests, scripts — so "changes together with `<root>` 74 %" would only say "touches the rest"; the model
+    names it in `coupling.excluded`.
 13. **Glob classification in constant time per path** (`GlobSet`): exact names via dict, `*<suffix>` via
     `endswith`, the rest via anchored regex, path globs only when their literal occurs. A naive regex alternation
     cost 0.8 s on 15k paths, `GlobSet` 0.05 s — the scan is not slower with generators than without (2.75 s).

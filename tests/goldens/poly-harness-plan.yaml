@@ -22,6 +22,7 @@ thresholds:
   generated_share: 0.5
   skill_min_generated_files: 5
   owner_doc_min_files: 5
+  root_share: 0.5
 ranking:
   commits_90d:
   - Shop.Pricing

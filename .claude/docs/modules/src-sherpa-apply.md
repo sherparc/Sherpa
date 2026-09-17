@@ -10,9 +10,9 @@
 |---|---|
 | path | `src/sherpa/apply` |
 | kind | directory inside module `sherpa-harness` (package) |
-| files / LOC | 6 / 1750 (6 source files) |
-| commits 90d / 30d | 3 / 3 · 1 authors |
-| hotspots | `src/sherpa/apply/render.py`, `src/sherpa/apply/__init__.py`, `src/sherpa/apply/state.py` |
+| files / LOC | 7 / 1887 (6 source files) |
+| commits 90d / 30d | 4 / 4 · 1 authors |
+| hotspots | `src/sherpa/apply/render.py`, `src/sherpa/apply/__init__.py`, `src/sherpa/apply/adopt.py` |
 | tests naming it | `tests/test_apply.py` |
 <!-- sherpa:end facts -->
 

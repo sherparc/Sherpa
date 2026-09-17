@@ -15,7 +15,8 @@ Rules (FAIL = exit 1, WARN informational):
   C4 links               relative file links in .claude/**, .agents/**, CLAUDE.md and AGENTS.md files resolve
   C5 blocks              sherpa:begin/end markers are balanced, named and unique per file
   C6 hooks               .claude/settings.json is valid JSON and every hook command under $CLAUDE_PROJECT_DIR exists
-  C7 budgets (WARN)      agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate
+  C7 budgets (WARN)      agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate;
+                         a nested CLAUDE.md/AGENTS.md > 8 KiB, the root one > 32 KiB — runtimes inject them whole
   C8 drift (WARN)        with .sherpa/state.json: managed files/blocks whose hash differs, or that are missing
 
 Usage: ``python3 sherpa-check.py [repo] [--json]``; from sherpa: ``sherpa check [repo]``.
@@ -31,10 +32,13 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-SHERPA_VERSION = "0.6.0"  # replaced with the real version when the file is deployed into a repo
+SHERPA_VERSION = "0.7.0"  # replaced with the real version when the file is deployed into a repo
 
 FAIL, WARN = "FAIL", "WARN"
 BUDGETS = {"agent": 150, "owner-doc": 600, "skill": 250}  # lines; from harness practice, generic numbers
+# Proximity files in bytes (ADR-0029): a nested CLAUDE.md/AGENTS.md lands whole in the context (Hermes: in a tool
+# result on the first touch of the directory, ceiling 32 KiB, ~8 KiB recommended); the root file on every turn.
+PROXIMITY_BUDGETS = {"nested": 8 * 1024, "root": 32 * 1024}
 
 # A managed block: everything between two marker lines. Markdown uses HTML comments, YAML front matter uses "#".
 MARKER = re.compile(r"^[ \t]*(?:<!--|#)[ \t]*sherpa:(begin|end)[ \t]+([A-Za-z0-9_-]+)[ \t]*(?:-->)?[ \t]*$")
@@ -223,6 +227,11 @@ def check(root: Path) -> list[Finding]:
             findings.append(Finding(FAIL, "C5", rel, f"managed block markers: {e}"))
         if kind and (n := text.count("\n") + 1) > BUDGETS[kind]:
             findings.append(Finding(WARN, "C7", rel, f"{n} lines > budget {BUDGETS[kind]} ({kind})"))
+        if p.name in ("CLAUDE.md", "AGENTS.md"):
+            where = "root" if "/" not in rel else "nested"
+            if (size := len(text.encode("utf-8"))) > PROXIMITY_BUDGETS[where]:
+                msg = f"{size} bytes > budget {PROXIMITY_BUDGETS[where] // 1024} KiB ({where} proximity file)"
+                findings.append(Finding(WARN, "C7", rel, msg))
     findings.extend(_check_hooks(root))
     findings.extend(_check_drift(root))
     findings.sort(key=lambda f: (f.level != FAIL, f.rule, f.path, f.message))

@@ -7,11 +7,12 @@ by one; the update check is the only network access and honours ``SHERPA_NO_UPDA
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from sherpa import __version__, config, gitinfo, update
@@ -172,3 +173,14 @@ def render(checks: list[Check]) -> str:
     warns = sum(c.level == "warn" for c in checks)
     lines.append(f"{fails} problems, {warns} hints." if fails or warns else "ready — `sherpa plan` is the next step.")
     return "\n".join(lines) + "\n"
+
+
+def render_json(checks: list[Check]) -> str:
+    """The same report for scripts: ``{"sherpa", "checks": [{name, level, detail, fix}], "problems", "hints"}``."""
+    out = {
+        "sherpa": __version__,
+        "checks": [asdict(c) for c in checks],
+        "problems": sum(c.level == "fail" for c in checks),
+        "hints": sum(c.level == "warn" for c in checks),
+    }
+    return json.dumps(out, indent=2, ensure_ascii=False) + "\n"

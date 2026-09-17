@@ -98,7 +98,7 @@ sherpa adopt — home .claude · targets claude: 7 harness files
 gaps:
   - .claude/agents/pay-expert.md: 175 lines, no knowledge manifest — rotation candidate, facts belong in an owner doc
   - .claude/docs/modules/legacy.md: no unit matches by name or path mentions — moved, renamed or not a module doc
-state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 0d2bdd9cfe6a → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
+state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 223215100f49 → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
 ```
 
 The next `sherpa plan` shows `[covered by .claude/agents/pay-expert.md]` on the agent entry and `apply` creates
@@ -232,16 +232,17 @@ flowchart LR
 | M3c | `adopt`: existing harnesses taken over unchanged, covered entries, rebuildable state | ✅ |
 | M2b | distribution: release wheel per tag, `doctor`, `self-update`, daily hint | ✅ |
 | M3d | retro fruit: stamp without rev, sub-units for single-manifest repos, change coupling with a size cap, `plan --accept/--reject`, capped root index | ✅ |
+| M3e | review fruit: `status` names a stale plan, `status --json` and `doctor --json`, manifest tie-break by language share, coupling without the root catch-all, sub-units for a dominant root module, proximity-file budgets in the checker | ✅ |
 | M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
+| M5 | outcome evaluation: `status` shows labels per `harness_rev` with `n` and the share of `unknown`; a comparison between revisions from 30 labelled executions each | ⏳ |
 | M7a | runtime plugins: Sherpa installable inside Claude Code (plugin) and Hermes (bundle) — `/sherpa-plan` with per-entry approval, `/sherpa-apply`, `/sherpa-status`; thin, the CLI does the work | ⏳ |
-| M5 | outcome evaluation: `status` shows labels per `harness_rev`, trend, share of `unknown` | ⏳ |
 | M6-lite | provider layer: thin, framework-free — bring your own key, local models via the OpenAI API, Anthropic natively | ⏳ |
 | M4 | auto-evals from the dependency graph, `status` with a baseline | ⏳ |
 | M6 | `plan` stage 2: LLM enrichment on top of the provider layer | ⏳ |
 | M3b | language adapters `dotnet` + `python` (T2: anchors, patterns) | ⏳ |
 | M7 | librarians, multi-repo | ⏳ |
 
-Order from here: M3h → M7a → M5 → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9).
+Order from here: M3h → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §10).
 
 Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an ADR: [docs/adr/](docs/adr/README.md)
 
@@ -252,7 +253,7 @@ Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generat
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 296 tests, ~98 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 305 tests, ~98 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
