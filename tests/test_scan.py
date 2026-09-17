@@ -42,7 +42,7 @@ def test_scan_validates_against_schema(clone: Path):
 
 def test_scan_model_header(clone: Path):
     m = scan(clone, fetch=False)
-    assert (m.sherpa, m.schema_version, m.repo) == (__version__, 4, "clone")
+    assert (m.sherpa, m.schema_version, m.repo) == (__version__, 5, "clone")
     assert m.origin.endswith("origin.git")
     assert m.git.trunk.ref == "origin/main"
 
@@ -123,3 +123,41 @@ def test_cli_scan_bad_trunk_exit_1(clone: Path, capsys):
 def test_cli_adopt_needs_a_plan(tmp_path: Path, capsys):
     assert main(["adopt", str(tmp_path)]) == 1
     assert "run `sherpa plan` first" in capsys.readouterr().err
+
+
+def test_scan_counts_churn_on_non_ascii_tab_and_newline_paths(tmp_path: Path):
+    """ADR-0038: ``git log --name-only`` C-quotes unusual paths (``"\\303\\274ber.py"``) unless ``-z`` — such a
+    path never matched ``ls-tree -z`` and lost its churn, so hotspots and authors were wrong wherever a file name
+    holds an umlaut, CJK or a control character."""
+    from datetime import UTC, datetime
+
+    from sherpa.scan.t0_git import Trunk, collect, log_since
+
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    git(seed, "init", "-q", "-b", "main")
+    names = {
+        "normal.py": "x = 1\n",
+        "über.py": "y = 1\n",
+        "日本.py": "z = 1\n",
+        "tab\tname.py": "t = 1\n",
+        "new\nline.py": "n = 1\n",
+    }
+    commit(seed, "one", names, date="2026-03-01T00:00:00Z", author="A")
+    commit(seed, "two", {k: v + "# more\n" for k, v in names.items()}, date="2026-03-02T00:00:00Z", author="B")
+    origin = tmp_path / "origin.git"
+    git(tmp_path, "clone", "-q", "--bare", str(seed), str(origin))
+    clone = tmp_path / "clone"
+    git(tmp_path, "clone", "-q", str(origin), str(clone))
+
+    commits = log_since(clone, "origin/main", datetime(2026, 1, 1, tzinfo=UTC))
+    assert len(commits) == 2 and all(c.files == tuple(sorted(names)) for c in commits)
+    rev = git(clone, "rev-parse", "origin/main")
+    data = collect(clone, Trunk("origin/main", "origin/HEAD", rev))
+    per_file = {f: sum(1 for c in data.commits if f in c.files) for f in names}
+    assert per_file == dict.fromkeys(names, 2)
+    model = scan(clone, fetch=False)
+    hot = {h.path: h.commits_90d for h in model.git.hotspots}
+    assert hot["über.py"] == 2 and hot["日本.py"] == 2 and hot["tab\tname.py"] == 2
+    assert "new\nline.py" not in hot, "no LOC for a path with a newline (cat-file --batch is line-based), no hotspot"
+    assert hot["normal.py"] == 2, "the answers after the newline path are not shifted"

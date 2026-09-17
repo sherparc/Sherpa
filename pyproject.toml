@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sherpa-harness"  # the PyPI name "sherpa" is taken; import package and CLI stay "sherpa" (ADR-0009)
-version = "0.7.3"
+version = "0.7.4"
 description = "Generic AI-harness generator: scan the codebase, plan owner docs, agents and skills, create them after approval."
 license = "LicenseRef-Proprietary"  # ADR-0010: proprietary until the public release
 license-files = ["LICENSE"]
@@ -15,7 +15,7 @@ dependencies = ["pyyaml>=6"]  # the only runtime dependency (ADR-0005)
 sherpa = "sherpa.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-cov>=5", "jsonschema>=4", "ruff>=0.6"]
+dev = ["pytest>=8", "pytest-cov>=5", "jsonschema>=4", "ruff>=0.6"]  # jsonschema: the reference the stdlib validator is tested against (ADR-0036), never a runtime dependency
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -52,6 +52,12 @@ One page per command: synopsis, every option, inputs and outputs, exit codes, re
 - [Apply](concepts/harness-apply.md) — what each entry becomes, ownership modes, state, outcome hook, checker rules,
   adopt and the rebuildable state.
 
+## Architecture diagrams
+
+- [Diagrams](architecture/README.md) — the mechanics as Mermaid: the pipeline, scan and model, plan entries,
+  ownership per file, the write path, state and recovery, the outcome hook, runtimes. A second view; each one
+  links to the page that owns the rule.
+
 ## Project
 
 - [Plan and roadmap](plan.md) — architecture, milestones, open questions, what is deliberately not built.

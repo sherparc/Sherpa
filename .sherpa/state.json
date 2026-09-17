@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
   "sherpa": "0.7.3",
-  "harness_rev": "c85617a5bc83",
+  "harness_rev": "ed0717176365",
   "home": ".claude",
   "targets": [
     "claude"
   ],
   "plan": {
     "trunk": "origin/main",
-    "rev": "a8eef17d7ead09bd4b0a7ad561f68ef23b9f8d70",
-    "as_of": "2026-09-17T13:06:34Z"
+    "rev": "8572a26a10e45b71d477527c3892ebd094d5a65a",
+    "as_of": "2026-09-17T13:37:22Z"
   },
-  "applied_at": "2026-09-17T13:21:29Z",
+  "applied_at": "2026-09-17T13:46:43Z",
   "files": {
     ".claude/agents/architect.md": {
       "mode": "managed",
@@ -33,7 +33,7 @@
       "origin": "generated",
       "entry": "owner-doc:sherpa-harness:",
       "blocks": {
-        "facts": "3348fa24fe7ceda5"
+        "facts": "b120c0dd2ff853ff"
       }
     },
     ".claude/docs/modules/src-sherpa-apply.md": {
@@ -41,13 +41,13 @@
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
       "blocks": {
-        "facts": "5b82ac8ccb601044"
+        "facts": "91f682a1bbc772e0"
       }
     },
     ".claude/hooks/sherpa-outcome.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "60955c0849c3109c"
+      "hash": "89d6319cafd48aca"
     },
     ".claude/scripts/sherpa-check.py": {
       "mode": "managed",
@@ -91,7 +91,7 @@
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
       "blocks": {
-        "harness": "8e7d85ff42986406"
+        "harness": "3e187f2badbcfcab"
       }
     }
   }

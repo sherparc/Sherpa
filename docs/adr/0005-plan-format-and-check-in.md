@@ -28,6 +28,6 @@ live in the target repo under `.sherpa/`.
 ## Consequences
 - `pyproject.toml`: `dependencies = ["pyyaml>=6"]`.
 - Plan schema as JSON Schema (`src/sherpa/schemas/harness-plan.schema.json`); YAML is validated against it after
-  loading — the format changes nothing about the check.
+  loading — the format changes nothing about the check (since ADR-0036 with the stdlib validator on every install).
 - Determinism: fixed field order (`kind` first, `reason` last), `allow_unicode=True`, `width=120` — two runs,
   same bytes (refined in ADR-0012: order instead of `sort_keys`).

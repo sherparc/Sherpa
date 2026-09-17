@@ -23,7 +23,7 @@
     },
     "schema_version": {
       "type": "integer",
-      "const": 4
+      "const": 5
     },
     "repo": {
       "type": "string",
@@ -445,7 +445,8 @@
               "required": [
                 "module",
                 "shared",
-                "share"
+                "share",
+                "of"
               ],
               "properties": {
                 "module": {
@@ -459,7 +460,12 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1,
-                  "description": "shared / this module's commits_90d, rounded to 2 decimals"
+                  "description": "shared / of, rounded to 2 decimals"
+                },
+                "of": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "This module's measured commits: below coupling.cap, the excluded root left out — the denominator of share, and what the owner doc prints (ADR-0039). Less than or equal to commits_90d."
                 }
               }
             }

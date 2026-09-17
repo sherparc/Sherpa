@@ -163,7 +163,11 @@ def _load_plan_and_model(repo: Path):
         raise ValueError(f"{plan_path} not found — run `sherpa plan` first")
     if not model_path.exists():
         raise ValueError(f"{model_path} not found — run `sherpa plan` first")
-    return yamlio.plan_from_dict(yamlio.load(plan_path)), model_mod.load(model_path)
+    try:
+        model = model_mod.load(model_path)
+    except (ValueError, KeyError, TypeError) as e:  # an older sherpa's model after an upgrade: plan rescans it
+        raise ValueError(f"{model_path}: {e} — run `sherpa plan` (it rescans)") from None
+    return yamlio.plan_from_dict(yamlio.load(plan_path)), model
 
 
 def _load_state(repo: Path):

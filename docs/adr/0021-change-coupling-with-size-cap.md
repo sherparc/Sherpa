@@ -21,7 +21,8 @@ row where it is right.
    for the same reason, code-maat has `--max-changeset-size`. Churn and hotspots still count every commit.
 3. **The model says what it skipped**: `coupling.cap`, `skipped_commits`, `measured_commits` and the floors are
    in the model header, so a reader can tell "no coupling" from "no measurable commits".
-4. **One row per facts block and proximity block**: `changes together with: core (15 of 24 commits, 62 %)`.
+4. **One row per facts block and proximity block**: `changes together with: core (15 of 24 measured commits, 62 %)`
+   (the denominator printed is the one the share was computed with — ADR-0039).
    Sub-units (ADR-0020) carry no coupling row — coupling is measured between modules, where the manifest draws
    the boundary.
 

@@ -23,8 +23,8 @@ sherpa scan [REPO] [--trunk BRANCH] [--no-fetch] [--as-of DATE] [--top N] [--out
    test modules and `tested_by`.
 5. Classifies generator families by path (migrations, protobuf, OpenAPI, codegen, snapshots, bundles, lockfiles,
    your own globs) and excludes generated files from hotspots.
-6. Writes the model (schema v3, sorted keys) and validates it against the JSON schema when `jsonschema` is
-   installed.
+6. Writes the model (schema v5, sorted keys) and validates it against the JSON schema (stdlib validator,
+   ADR-0036).
 
 Rules and the reasoning behind every measurement: [concepts/scan.md](../concepts/scan.md).
 

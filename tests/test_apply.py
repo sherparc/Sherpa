@@ -229,7 +229,7 @@ def test_coupling_row_and_sub_unit_facts():
                 c30=10,
                 authors=3,
                 sub_dirs=subs,
-                coupling=[Coupling("shared-lib", 15, 0.5), Coupling("web", 9, 0.3)],
+                coupling=[Coupling("shared-lib", 15, 0.5, 30), Coupling("web", 9, 0.3, 30)],
             ),
         ]
     )
@@ -247,7 +247,10 @@ def test_coupling_row_and_sub_unit_facts():
     p = build_plan(m)
     by_path = {t.path: t for t in targets_for(p, m)}
     facts = by_path[".agents/docs/modules/app.md"].blocks["facts"]
-    assert "| changes together with | `shared-lib` (15 of 30 commits, 50 %), `web` (9 of 30 commits, 30 %) |" in facts
+    assert (
+        "| changes together with | `shared-lib` (15 of 30 measured commits, 50 %), `web` (9 of 30 measured commits, 30 %) |"
+        in facts
+    )  # ADR-0039: the denominator printed is the one share was computed with, not commits_90d
     assert "changes together with" in by_path["AGENTS.md"].blocks["harness"]  # the root proximity block too
     # the root doc knows its sub-units and says where their files are described (one owner per fact)
     assert "| files / LOC | 60 / 600 — 11 files in 2 sub-units, described in their own owner docs |" in facts
@@ -1186,3 +1189,90 @@ def test_write_is_atomic_per_file(tmp_path: Path, monkeypatch):
     apply.atomic.write_text(doc, "# new\n")
     assert seen == [(f".a.md.{os.getpid()}.tmp", "# old\n")]  # the old file was intact right before the swap
     assert doc.read_text(encoding="utf-8") == "# new\n" and sorted(p.name for p in doc.parent.iterdir()) == ["a.md"]
+
+
+@pytest.mark.parametrize(
+    "command,expected",
+    [
+        # runs
+        ("pytest -q tests", True),
+        (".venv/bin/pytest -q", True),
+        ("python -m pytest -x", True),
+        ("cd svc && FOO=1 python3 -m pytest", True),
+        ("uv run pytest", True),
+        ("poetry run pytest tests/", True),
+        ("npx jest --ci", True),
+        ("npm test", True),
+        ("npm run test:unit", True),
+        ("pnpm run test", True),
+        ("dotnet test Shop.sln", True),
+        ("sudo dotnet test", True),
+        ("go test ./...", True),
+        ("cargo test --workspace", True),
+        ("make test", True),
+        ("git pull && pytest", True),
+        ("ls | pytest", True),
+        ("C:\\venv\\Scripts\\pytest.exe -q", True),
+        # not runs — the finding: the word somewhere in the line
+        ("cat pytest.ini", False),
+        ("pip install pytest", False),
+        ("uv add --dev pytest", False),
+        ("grep -rn pytest README.md", False),
+        ("echo jest", False),
+        ("git commit -m 'add pytest config'", False),
+        ("python pytest.py", False),
+        ("pytest_helper.py", False),
+        ("cat docs/go test.md", False),
+        ("npm run build", False),
+        ("git push && gh pr create", False),
+    ],
+)
+def test_outcome_hook_recognises_a_test_run_only_as_the_command_word(command, expected):
+    """ADR-0040: the fixed input matrix for the classifier — a test run is a runner as the command word of a
+    shell segment, never the word somewhere in the line. Both sides of the matrix grow with every new runner."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("sherpa_outcome", HOOK)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.is_test_run(command) is expected
+
+
+def test_outcome_hook_stamps_the_revision_the_execution_started_with(tmp_path: Path):
+    """ADR-0040: `sherpa apply` inside an execution changes the state; the label belongs to the harness the agent
+    worked with, and the end revision is kept next to it so the evaluation can leave such runs out."""
+    state = tmp_path / ".sherpa" / "state.json"
+    state.parent.mkdir()
+    state.write_text(json.dumps({"harness_rev": "aaaaaaaaaaaa"}), encoding="utf-8")
+    s = "s2"
+    fire(tmp_path, {"hook_event_name": "UserPromptSubmit", "session_id": s, "prompt": "apply the harness"})
+    fire(
+        tmp_path,
+        {
+            "hook_event_name": "PostToolUse",
+            "session_id": s,
+            "tool_name": "Bash",
+            "tool_input": {"command": "cat pytest.ini"},
+        },
+    )
+    state.write_text(json.dumps({"harness_rev": "bbbbbbbbbbbb"}), encoding="utf-8")  # sherpa apply ran
+    fire(tmp_path, {"hook_event_name": "Stop", "session_id": s})
+    rec = labels(tmp_path)[0]
+    assert rec["harness_rev"] == "aaaaaaaaaaaa" and rec["harness_rev_at_stop"] == "bbbbbbbbbbbb"
+    assert rec["label"] == "unknown" and rec["signals"]["tests_run"] == 0, "`cat pytest.ini` is not a green test"
+    fire(tmp_path, {"hook_event_name": "UserPromptSubmit", "session_id": s, "prompt": "next"})
+    fire(tmp_path, {"hook_event_name": "Stop", "session_id": s})
+    rec = labels(tmp_path)[1]
+    assert rec["harness_rev"] == "bbbbbbbbbbbb" and "harness_rev_at_stop" not in rec
+
+
+def test_status_names_plan_for_a_model_from_another_schema(active_repo: Path, capsys):
+    """After an upgrade that bumps the model schema, every reader says what rebuilds it — `plan` rescans."""
+    applied(active_repo)
+    mp = active_repo / ".sherpa" / "codebase-model.json"
+    d = json.loads(mp.read_text(encoding="utf-8"))
+    d["schema_version"] = 4
+    mp.write_text(json.dumps(d), encoding="utf-8")
+    assert main(["status", str(active_repo)]) == 1
+    assert "model has schema_version 4, expected 5 — run `sherpa plan` (it rescans)" in capsys.readouterr().err
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0 and main(["status", str(active_repo)]) == 0

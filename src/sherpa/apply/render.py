@@ -406,7 +406,7 @@ class Renderer:
         """Tornhill's temporal coupling as one line: the fact an agent needs first when it lands in a module."""
         if not u.coupling:
             return None
-        parts = [f"`{c.module}` ({c.shared} of {u.commits_90d} commits, {round(c.share * 100)} %)" for c in u.coupling]
+        parts = [f"`{c.module}` ({c.shared} of {c.of} measured commits, {round(c.share * 100)} %)" for c in u.coupling]
         return ("changes together with", ", ".join(parts))
 
     def generator_skills(self, e: Entry) -> list[tuple[str, str]]:
