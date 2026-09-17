@@ -1,22 +1,36 @@
-# CI: tests + coverage gate + lint on Linux, Windows and macOS (docs/plan.md §5).
-# Windows is mandatory: customer machines, git paths and \r\n are the typical breaking points of T0/T1.
-# macOS (arm64): customer laptops; counts 10x against the minutes quota on private repos. Off by default,
-# enable only for large changes (git/path/encoding logic): uncomment macos-latest in the matrix.
+# CI: tests + coverage gate + lint (docs/plan.md §5). Minutes on a private repository count 1x Linux, 2x Windows,
+# 10x macOS (ADR-0037), so the matrix follows the event:
+#   pull request            → Linux only (the fast signal for every commit on a branch)
+#   push to main            → Linux + Windows (customer machines, git paths and \r\n break T0/T1 first)
+#   Monday 06:00 UTC        → macOS only (arm64 customer laptops, once a week on main)
+#   workflow_dispatch       → all three, for a large change to git/path/encoding logic before it merges
+# Docs-only changes do not run it; a newer push to the same branch cancels the older run; every job has a cap.
 name: ci
 
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**", "kb-sherpa/**", ".claude/**", ".githooks/**", "LICENSE"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**", "kb-sherpa/**", ".claude/**", ".githooks/**", "LICENSE"]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     name: pytest (${{ matrix.os }}, py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]  # , macos-latest
+        # schedule → macOS; dispatch → all; push (main) → Linux + Windows; pull request → Linux
+        os: ${{ fromJSON(github.event_name == 'schedule' && '["macos-latest"]' || github.event_name == 'workflow_dispatch' && '["ubuntu-latest", "windows-latest", "macos-latest"]' || github.event_name == 'push' && '["ubuntu-latest", "windows-latest"]' || '["ubuntu-latest"]') }}
         python: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v5
@@ -31,11 +45,14 @@ jobs:
   lint:
     name: ruff
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: pip
       - run: python -m pip install ruff
       - run: ruff check .
       - run: ruff format --check .

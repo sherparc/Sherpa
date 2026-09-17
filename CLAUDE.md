@@ -23,8 +23,10 @@ harness: `.claude/agents/architect.md` (overview and reasoning), skills `archite
   rebuildable index over them (ADR-0017): index files are written through `sherpa.atomic`, and `adopt` rebuilds a
   lost state — never add a second way to recover.
 - Tests: `.venv/bin/pytest -q` from the repo root; lint `.venv/bin/ruff check . && .venv/bin/ruff format --check .` —
-  both must be green before every commit (CI runs Linux and Windows; macOS is commented out in the matrix and is only
-  enabled, after asking, for large changes to Git/path/encoding logic). Every new function comes with tests; fixture
+  both must be green before every commit. CI (ADR-0037): Linux on every pull request, Linux + Windows on `main`,
+  macOS once a week on `main`; a manual run (`gh workflow run ci.yml --ref <branch>`) covers all three and is the
+  way, after asking, to check a large change to Git/path/encoding logic before it merges. Docs-only changes do
+  not run CI. Every new function comes with tests; fixture
   repos are built programmatically (`tests/conftest.py`), never checked in as binaries. Coverage target ≥ 90 %
   (`docs/plan.md` §5). Plan goldens live in `tests/goldens/`; `SHERPA_UPDATE_GOLDENS=1` refreshes them after an
   intended rule change.
