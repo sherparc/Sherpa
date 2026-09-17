@@ -1,4 +1,4 @@
-# ADR-0036 — A stdlib validator for the shipped schemas: production checks what the tests check
+# ADR-0042 — A stdlib validator for the shipped schemas: production checks what the tests check
 
 **Status:** accepted · **Date:** 2026-09-17 · **Deciders:** Andrei · **Amends:** ADR-0005 (plan validation
 "when `jsonschema` is installed")

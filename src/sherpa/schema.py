@@ -1,5 +1,5 @@
 """A stdlib validator for the JSON schemas sherpa ships (``sherpa/schemas/*.json``), so a production install checks
-its own files the way the test suite does (ADR-0036). It interprets the keyword subset the three schemas use —
+its own files the way the test suite does (ADR-0042). It interprets the keyword subset the three schemas use —
 ``type``, ``enum``, ``const``, ``required``, ``properties``, ``additionalProperties``, ``items``, ``pattern``,
 ``minimum``, ``maximum`` — and raises ``SchemaError`` with the path and a message shaped like jsonschema's.
 ``format`` is descriptive here as it is in jsonschema's default validator. The dev extra ``jsonschema`` cross-checks

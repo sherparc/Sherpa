@@ -1,4 +1,4 @@
-# ADR-0037 — The CI matrix follows the event: Linux per pull request, Windows on `main`, macOS weekly
+# ADR-0043 — The CI matrix follows the event: Linux per pull request, Windows on `main`, macOS weekly
 
 **Status:** accepted · **Date:** 2026-09-17 · **Deciders:** Andrei
 

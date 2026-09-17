@@ -1,4 +1,4 @@
-"""The stdlib validator (ADR-0036) against the dev-extra ``jsonschema`` on one input matrix: both must accept the
+"""The stdlib validator (ADR-0042) against the dev-extra ``jsonschema`` on one input matrix: both must accept the
 same documents and reject the same ones at the same location. ``jsonschema`` is the reference, never the runtime."""
 
 from __future__ import annotations

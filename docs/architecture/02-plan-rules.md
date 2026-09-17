@@ -44,5 +44,5 @@ flowchart LR
 What to remember:
 
 - **Every no has a reason** in the file; a plan a human cannot argue with is not a plan.
-- **A typo is refused, not interpreted**: `decision: rejcet` fails validation on every reader (ADR-0036).
+- **A typo is refused, not interpreted**: `decision: rejcet` fails validation on every reader (ADR-0042).
 - **`apply` refuses a stale plan; `adopt` does not** (ADR-0034) — import needs the resource, not a fresh plan.

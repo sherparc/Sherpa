@@ -220,7 +220,7 @@ def load(path: Path) -> Model:
 
 
 def validate(data: dict) -> None:
-    """Against the shipped schema with the stdlib validator (ADR-0036); raises ``ValueError`` with the location."""
+    """Against the shipped schema with the stdlib validator (ADR-0042); raises ``ValueError`` with the location."""
     from sherpa import schema
 
     try:

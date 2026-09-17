@@ -19,7 +19,7 @@ never a CI cost.
 2. Mermaid, as recommended in Q25: MIT, rendered by GitHub, Obsidian and MkDocs without a tool, readable by an
    agent as text, diffable. No Graphviz, PlantUML, D2, no rendered PNG/SVG.
 3. `scripts/sync-kb.py` projects the folder as note type `architecture`, between concepts and reference.
-4. CI: `docs/**` is in `paths-ignore` (ADR-0037), so a diagram change runs nothing. Locally,
+4. CI: `docs/**` is in `paths-ignore` (ADR-0043), so a diagram change runs nothing. Locally,
    `tests/test_architecture_docs.py` (stdlib) keeps every fence a known diagram type, refuses `;` inside a
    sequence message (a statement separator in Mermaid — the one syntax trap hit while writing these), and
    checks that every ADR number and relative link resolves and that the index lists every page. Rendering is

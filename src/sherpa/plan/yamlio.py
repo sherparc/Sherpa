@@ -100,7 +100,7 @@ def load(path: Path) -> dict[str, Any]:
 
 
 def validate(data: dict[str, Any]) -> None:
-    """Against the shipped schema with the stdlib validator (ADR-0036) — in production as in the tests, so a typo
+    """Against the shipped schema with the stdlib validator (ADR-0042) — in production as in the tests, so a typo
     like ``decision: rejcet`` or a foreign ``schema_version`` never reaches ``selected()``."""
     try:
         schema.validate(data, schema.load(SCHEMA_PATH.name))
