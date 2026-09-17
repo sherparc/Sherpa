@@ -43,7 +43,9 @@ harness: `.claude/agents/architect.md` (overview and reasoning), skills `archite
   `git tag v<version> && git push origin v<version>` — `release.yml` builds the wheel and creates the GitHub
   release; it refuses a tag that does not match both versions. Only `src/sherpa/` ships.
 - README is marketing and truth at once: it moves with every step (status, roadmap, numbers) and never claims what
-  does not run — examples are real outputs, badges only for things that exist.
+  does not run — examples are real outputs, badges only for things that exist. The README roadmap and plan §3 are
+  the same table: same rows, same order; the README says it in one or two sentences, the plan explains and
+  carries the acceptance. Whoever touches one touches the other.
 
 ## Product, not project
 - Sherpa is generic. Docs, code, tests and examples name **no** customer project; examples use neutral names

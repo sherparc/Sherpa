@@ -223,7 +223,9 @@ flowchart LR
 
 | Milestone | Content | Status |
 |---|---|---|
-| M0–M1a | plan, ADRs, scanner T0+T1, programmatic fixture repos | ✅ |
+| M0 | skeleton, ADRs, the plan | ✅ |
+| M1 | scanner T0 for every language: trunk, churn, hotspots, file tree, generated files, JSON schema | ✅ |
+| M1a | scanner T1: modules from manifests (6 ecosystems), in-repo deps, `tested_by`, churn per module | ✅ |
 | M2 | `plan` stage 1: units, rank + floor, generator families → skills, reasoned no's, decision keeping | ✅ |
 | M3a | `apply`: dry run, managed blocks, state, outcome hook, checker with rollback; `status`, `check` | ✅ |
 | M3t | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files | ✅ |
