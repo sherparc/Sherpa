@@ -45,7 +45,7 @@ generated = ["gen/**"]                 # own generator family "custom"; extends 
 | `modules[].coupling[]` | temporal coupling: up to 3 partner modules that changed in the same commits, with the shared count, the share and its denominator `of` — this module's measured commits (ADR-0039); floors 5 shared and 30 %, commits touching more than `coupling.cap` modules excluded | Tornhill, ADR-0021 |
 | `coupling` | how coupling was measured: `cap` = max(5, ⌈modules/2⌉), `skipped_commits` above the cap (squash merges, mass renames), `measured_commits`, the floors, `excluded` = the root module left out as a catch-all when other modules exist (ADR-0026), else `null` | ADR-0021, ADR-0026 |
 | `generators[]` | one entry per (generator family, owning module): `home`, generated files/LOC, up to 5 sources and configs (closest to `home` first), regeneration command, `skill` | `scan/generators.py` |
-| `conventions` | languages by LOC, CI files, container files | file tree |
+| `conventions` | languages by LOC, CI files (`.github/workflows/*`, `.gitlab-ci.yml`, `azure-pipelines*.yml`, YAML under `pipelines/`, `.pipelines/`, `.azure-pipelines/` or `.azuredevops/`, `Jenkinsfile`, `.circleci/config.yml`, …), container files (`Dockerfile`, `docker-compose*.yml`, `compose*.yml`) | file tree, ADR-0044 |
 
 ### T1 — which manifests, how dependencies are resolved
 

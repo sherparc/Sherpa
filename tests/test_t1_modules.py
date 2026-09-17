@@ -390,6 +390,29 @@ def test_detect_conventions_counts_loc_per_language():
     assert ci == ["Jenkinsfile"] and containers == ["ops/docker-compose.prod.yml", "x.Dockerfile"]
 
 
+def test_detect_conventions_finds_azure_pipelines_by_directory():
+    """ADR-0044: Azure DevOps registers a pipeline under any file name, so the directory is the convention."""
+    paths = [
+        "pipelines/build_artifacts.yml",
+        "pipelines/scripts/notify.ps1",
+        "docs/pipelines/deploy.yaml",
+        ".azuredevops/pr.yml",
+        ".azure-pipelines/nightly.yml",
+        "src/Shop.Pricing/azure-pipelines.yml",
+        "tests/docker-compose-scenario.yml",
+        "src/Shop.Pricing/Pipeline/Request.cs",
+    ]
+    _, ci, containers = detect_conventions(paths, dict.fromkeys(paths, 1))
+    assert ci == [
+        "pipelines/build_artifacts.yml",
+        "docs/pipelines/deploy.yaml",
+        ".azuredevops/pr.yml",
+        ".azure-pipelines/nightly.yml",
+        "src/Shop.Pricing/azure-pipelines.yml",
+    ]
+    assert containers == ["tests/docker-compose-scenario.yml"]
+
+
 def test_scan_stays_deterministic_with_modules(poly_repo: Path):
     assert scan(poly_repo, fetch=False).to_json() == scan(poly_repo, fetch=False).to_json()
 

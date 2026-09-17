@@ -63,7 +63,7 @@ The model (`.sherpa/codebase-model.json`), top level:
 | `git.hotspots[]` | top N by `commits_90d × loc`, hand-written text files only |
 | `modules[]` | one per manifest — see below |
 | `generators[]` | one per (family, owning module) — see below |
-| `conventions` | `languages` (LOC per language, descending), `ci` files, `containers` files |
+| `conventions` | `languages` (LOC per language, descending), `ci` files (by file name — `.github/workflows/*`, `.gitlab-ci.yml`, `Jenkinsfile`, … — or by directory where the platform fixes no name: YAML under `pipelines/`, `.pipelines/`, `.azure-pipelines/`, `.azuredevops/`, ADR-0044), `containers` files |
 
 A module, exactly as written:
 

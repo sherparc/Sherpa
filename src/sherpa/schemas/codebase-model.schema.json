@@ -566,7 +566,7 @@
           "items": {
             "type": "string"
           },
-          "description": "CI definitions (.github/workflows/*, .gitlab-ci.yml, azure-pipelines*.yml, Jenkinsfile, .circleci/config.yml, …)."
+          "description": "CI definitions (.github/workflows/*, .gitlab-ci.yml, azure-pipelines*.yml, YAML under a pipelines/, .pipelines/, .azure-pipelines/ or .azuredevops/ directory, Jenkinsfile, .circleci/config.yml, …)."
         },
         "containers": {
           "type": "array",

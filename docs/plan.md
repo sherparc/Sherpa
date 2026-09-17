@@ -1,7 +1,7 @@
 # Sherpa — Plan
 
-> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 17: the manager review (§11) — Sherpa creates and updates but cannot remove: a rejected entry or a vanished unit stays live in the runtime and a state rebuild adopts sherpa's own leftovers as yours, F24 to F33, Q26 to Q29, M3i proposed before M3h; revision 16: F20 to F23 closed — stdlib schema validation on every reader (ADR-0042), NUL-separated git paths (ADR-0038), the coupling denominator in the row (ADR-0039), test runs as command words and the start revision on outcome labels (ADR-0040); the mechanics drawn as Mermaid under `docs/architecture/` (ADR-0041, Q25) and the CI matrix by event (ADR-0043); revision 15: two findings from a first run on a large repository with two homes, F18/F19 — a preview never refuses (assumes `.agents` and says so, ADR-0036) and a target directory that is a repository of its own is named (ADR-0037); revision 14: F17 closed — `self-update` saves the wheel under its PEP 427 name and finds the tag with `git ls-remote` without a token, verified with pip itself, ADR-0035; revision 13: the review's F16 closed — `adopt` no longer refuses a stale plan and `plan`/`status`/`adopt` run on a torn state, ADR-0034, so a broken index plus a moved trunk has a way out; revision 12: an external review of v0.7.0 found the write path overwriting a file that moved between the preview and the confirmation — writing through symlinks, a torn harness after a write error, and `adopt` lifting the hand-edit guard on base files — closed as M3f with compare-and-swap, a symlink guard, atomic writes with rollback and base files as yours, ADR-0030 to 0033, §10.4) · **Author:** Claude (Opus 5) with Andrei
-> **Status:** v0.7.4 — M0, M1, M1a, M2, M2b, M3a, M3t, M3c, M3d, M3e, M3f done; order from here: M3h → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (§7.3, §9, §10)
+> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 18: the field test on a grown harness (§12) — a nested harness repository is invisible to `adopt`, hand-named owner docs stay unlinked, the checker fails on files sherpa never wrote, three files per module — F34 to F38, Q30 to Q33; CI definitions found by directory (ADR-0044); revision 17: the manager review (§11) — Sherpa creates and updates but cannot remove: a rejected entry or a vanished unit stays live in the runtime and a state rebuild adopts sherpa's own leftovers as yours, F24 to F33, Q26 to Q29, M3i proposed before M3h; revision 16: F20 to F23 closed — stdlib schema validation on every reader (ADR-0042), NUL-separated git paths (ADR-0038), the coupling denominator in the row (ADR-0039), test runs as command words and the start revision on outcome labels (ADR-0040); the mechanics drawn as Mermaid under `docs/architecture/` (ADR-0041, Q25) and the CI matrix by event (ADR-0043); revision 15: two findings from a first run on a large repository with two homes, F18/F19 — a preview never refuses (assumes `.agents` and says so, ADR-0036) and a target directory that is a repository of its own is named (ADR-0037); revision 14: F17 closed — `self-update` saves the wheel under its PEP 427 name and finds the tag with `git ls-remote` without a token, verified with pip itself, ADR-0035; revision 13: the review's F16 closed — `adopt` no longer refuses a stale plan and `plan`/`status`/`adopt` run on a torn state, ADR-0034, so a broken index plus a moved trunk has a way out; revision 12: an external review of v0.7.0 found the write path overwriting a file that moved between the preview and the confirmation — writing through symlinks, a torn harness after a write error, and `adopt` lifting the hand-edit guard on base files — closed as M3f with compare-and-swap, a symlink guard, atomic writes with rollback and base files as yours, ADR-0030 to 0033, §10.4) · **Author:** Claude (Opus 5) with Andrei
+> **Status:** v0.7.5 — M0, M1, M1a, M2, M2b, M3a, M3t, M3c, M3d, M3e, M3f done; order from here: M3h → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (§7.3, §9, §10)
 > **Origin of the patterns:** production Claude Code harnesses built and analysed in practice (owner docs, agents with
 > knowledge manifests, librarians, deterministic checkers) plus the industry patterns in §2. Sherpa is a generic
 > product; no customer project is named anywhere in this repo.
@@ -305,7 +305,7 @@ Many tests, small units, everything reproducible:
 | Corpus | real repos under `tests/corpus/` (ignored) | smoke: scan runs through, schema valid, runtime < 60 s; never in CI |
 | Schema | `codebase-model`, `harness-plan`, `harness-state` | JSON Schema under `src/sherpa/schemas/`; validated on every read and write by the stdlib validator `sherpa/schema.py` (ADR-0042); `jsonschema` (dev extra) is the reference the tests compare it with on one input matrix |
 
-Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M3f: 400 tests, 98 %.
+Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M3f: 401 tests, 98 %.
 The conftest sets `SHERPA_NO_UPDATE_CHECK` and a temporary cache directory for every test, in-process and in
 subprocesses: no test reaches the network.
 
@@ -416,6 +416,38 @@ subprocesses: no test reaches the network.
 29. **`status --exit-code` (§11 F31).** Recommendation: yes — exit 2 on drift or a stale plan, as `terraform plan
     -detailed-exitcode` and `git diff --exit-code` do; it is the CI gate the milestone-step ritual already
     assumes ("status clean"). With "no", a gate needs `status --json` plus a JSON tool.
+30. **Which repository's ignore rules decide what is harness (§12 F34, amends ADR-0037).** `adopt` drops
+    git-ignored files ("personal files are not the harness") and asks the outer repository — so a `.claude/`
+    that is a repository of its own and excluded there (`.git/info/exclude`, a common way to keep a nested
+    clone out of the outer status) is dropped whole: 0 of its 51 files were seen, `apply` then wrote 39 owner
+    docs and 11 agents next to the existing ones. Recommendation: for a directory ADR-0037 already recognises
+    as a nested repository, ask **that** repository (`git -C .claude ls-files` decides; its own ignore rules
+    apply), and `_nested_repositories` says so in its note. Alternative: treat a nested repository as fully
+    foreign and refuse `apply` into it without `home` — then a team with a shared harness clone cannot use
+    Sherpa at all.
+31. **The owner-doc link is a human decision, not a heuristic (§12 F35).** `adopt.link` matches by slug or by
+    ≥ 2 unambiguous mentions of the unit path; on a harness that grew by hand it linked 22 of 51 files, put up
+    to four files on one unit (analysis notes next to the owner doc) and left every abbreviated name (`kes.md`, `wsh.md`, `fev.md`) unlinked.
+    Recommendation: a plan-side field `owner_doc: <path>` on the entry (and `agent: <path>`), set by the human
+    or proposed by `adopt` with its reason, that `apply` honours instead of rendering a second doc — the
+    Backstage `catalog-info.yaml` pattern: the team names the owner, the tool checks it. With "heuristic
+    only": every abbreviation needs an alias table in `sherpa.toml`, which is the same decision in a worse
+    place.
+32. **Checker scope on a grown harness (§12 F36).** C4 walks every `.md` under both homes, so files sherpa never
+    wrote — refinement notes, a vendored skill with broken relative links — fail `apply`'s post-check and
+    `status` with 42 FAIL before the first sherpa file exists. Recommendation: FAIL for managed and adopted
+    files, WARN for the rest (`C4 … (not managed)`), and `check --strict` for the old behaviour; the exit code
+    then says something about sherpa's harness, not about the repository's history. Alternative: keep FAIL
+    everywhere and let `apply` roll back only on **new** FAILs (it does) — then `status` stays red forever
+    on such a repository and the team learns to ignore it.
+33. **How many files may a first `apply` add (§12 F37).** 133 on a 48-module repository: the owner-doc floor
+    (ADR-0014) accepts 39 units and each becomes three files under `claude` + `agents-md` (`.claude/docs/modules/x.md`,
+    `x/AGENTS.md`, `x/CLAUDE.md` holding `@AGENTS.md`). Recommendation: keep the floor, but make the two
+    proximity files one — `agents-md` writes `x/AGENTS.md`, the `claude` target adds the one-line `CLAUDE.md`
+    only where the runtime is Claude Code **and** the team asked for it (`[apply] claude_proximity = true`),
+    default off — and print the file count per kind in the dry run's last line so the team sees `39 owner
+    docs · 11 agents · …` before it says yes. Alternative: a `--top N` on `plan` for owner docs — but a
+    reasoned no per unit exists already, and a limit hides the reasoning.
 
 Decided (2026-09-17): the `hermes` target and the reordered direction → ADR-0023; runtime plugins from one
 source, thin, no hook in the plugin → ADR-0024; manifest tie-break → ADR-0025; coupling without the root
@@ -678,3 +710,43 @@ unchanged bytes), F26 (content-only `harness_rev`), F32 (dropped decisions named
 fruit in the same PR. It displaces M3h by one slice because every new target multiplies the files that can
 orphan, and M5 builds on `harness_rev` — fixing its identity after M5 would invalidate the first samples. The
 milestone table and the status line change once Q26 to Q29 are decided.
+
+## 12. Field test on a grown harness (2026-09-17) — Sherpa meets a hand-built `.claude/`
+
+Method: `doctor`, `scan`, `plan`, `apply --dry-run`, `apply --yes`, `status`, `check` and `adopt --dry-run` on a
+15k-file .NET monorepo (48 modules, 1016 commits/90d) whose harness had grown by hand for months: 17 agents, 30
+owner docs and 12 skills under a `.claude/` that is a repository of its own (`.claude/.git`, excluded in the
+outer repository's `.git/info/exclude`), plus `.agents/` with skills and an `AGENTS.md` at the root. The first
+real target for the manager role §11 describes; every artefact removed afterwards, the repository byte-identical
+to before. Five findings, none of them in §10 or §11.
+
+### 12.1 Gaps
+
+| # | Finding | Evidence | Consequence |
+|---|---|---|---|
+| F34 | **A nested harness repository is invisible to `adopt`.** `inventory` asks the outer repository which files are ignored and drops them as personal; a `.claude/` clone excluded there is dropped whole. `adopt --dry-run` listed 34 harness files — all under `.agents/` — and 0 of the 51 agents and owner docs under `.claude/`; its gap line said `39 proposed owner docs without an existing doc`. `apply` then wrote 39 owner docs and 11 agents next to the existing ones; only one collided by name (the agent whose file name equalled the module slug, skipped with the `adopt` hint). | `apply/adopt.py` `inventory`: `paths -= gitinfo.ignored(repo, …)`; `cli.py` `_nested_repositories` notes the nested repository but `inventory` does not use it. Measured: `git check-ignore -v .claude/agents/x.md` → `.git/info/exclude:7:.claude/*`. | The owner principle breaks on the first repository that already has an owner doc per module — the case Sherpa was built for. ADR-0037 sees the nested repository and says "not tracked by this repository"; the same knowledge must reach `adopt`. → Q30. |
+| F35 | **Hand-named owner docs stay unlinked, or link to the wrong file.** With the ignore filter lifted, `adopt.link` mapped 22 of the 51 files: by slug only where the file name equals the module id; by mentions it put four files on one unit (two `discover-*.md` notes, a dated analysis and the owner doc) and four on another (three notes and the owner doc), and left every abbreviated name (`kes.md`, `wsh.md`, `fev.md`, `pabi.md`) at `no unit matches`; two were `ambiguous`. | `adopt.link`: slug, front-matter name, then `≥ 2` unambiguous path mentions. Measured with `link()` over the 51 files against the model's units. | Even a visible harness gets a second owner doc for a third of its units, and `covered:` would land on an analysis note rather than the owner doc. The link is a decision the team makes once; Sherpa should record and check it, not guess it (Backstage: `catalog-info.yaml` names the owner). → Q31. |
+| F36 | **The checker fails on files sherpa never wrote.** C4 walks every `.md` under both homes; a refinement note and a vendored skill with dead relative links produced 42 FAIL — `apply --yes` printed them all, `status` said `check: 42 FAIL, 9 WARN`, `check` exits 1. None of the 42 is in a managed or adopted file. | `check.py` docstring C4: "relative file links in `.claude/**`, `.agents/**`, CLAUDE.md and AGENTS.md"; `run()` collects `d.rglob("*.md")`. `apply` rolls back only on **new** FAILs (ADR-0032), so it wrote. | On a grown harness `sherpa check` is red before Sherpa's first file exists, and stays red; the exit code stops meaning "Sherpa's harness is consistent". → Q32. |
+| F37 | **A first `apply` adds 133 files; every module gets three.** 39 owner docs pass the floor (ADR-0014: ≥ 1 commit or dependent, ≥ 5 files), and under `claude` + `agents-md` each is `.claude/docs/modules/x.md` + `x/AGENTS.md` + `x/CLAUDE.md` (one line, `@AGENTS.md`); plus 11 agents, 2 librarians, 2 skills, hook, checker, ignore file, 3 blocks. | Dry run: `133 to add, 3 to change, 0 unchanged, 1 skipped.` The last line counts files, not kinds. | A reviewer sees a 133-file pull request, most of it skeletons (F29), and declines. The count per kind belongs in the dry run's last line; the proximity `CLAUDE.md` doubles the file count for one import line. → Q33. |
+| F38 | **Small things seen on the same run.** (a) A top-level `yml/` holding Azure Pipelines templates (`_deploy.yml`, `_build_test_binaries.yml`) is a unit of its own and got an owner doc; its files are not CI definitions under ADR-0044 either — a second real convention next to `pipelines/`. (b) `.claude/settings.json` was tracked by the outer repository although `.claude/.git` exists; the ADR-0037 note "files written there are not tracked by this repository" is then half true — `git ls-files` of the outer repository, not the presence of `.git`, decides per file. (c) `apply --dry-run` refused because `.agents/` and `.claude/` both exist and asked for `[apply] home` — right (ADR-0036), and the run needed a `sherpa.toml` in the repository for it. (d) The outcome hook ran on a `Stop` event with a missing transcript and exited 0. | Plan output: `+ owner-doc yml … 14 files ✓`; `git status`: `M .claude/settings.json`; `git -C .claude ls-files` lists it too. | (a) a `yml/` directory is too generic for a path rule; content detection (top-level `steps:`/`parameters:` in a template) is the next step if it recurs. (b) the note should say `files written there are tracked by .claude/.git, not by this repository, unless the outer repository tracks them` — one sentence, no code. (c) documented; the dry run could accept `--home` so a look needs no file in the repository. (d) nothing to do. |
+
+### 12.2 What holds
+
+- `doctor` on the repository: 9 ✓, `ready`; `scan` 3.6 s for 15 205 files (4.9 MB model), byte-identical on
+  the second run; `plan` 6.3 s, 71 entries, 17 reasoned no's with their floors named; `apply --yes` 1.1 s.
+- No overwrite anywhere: the three existing files (`AGENTS.md`, `CLAUDE.md`, `settings.json`) got a block or
+  hooks appended, the one name collision was skipped and named, the nested repository was noticed (ADR-0037).
+- The removal was exact: the state's 136 records were enough to take every sherpa file out and restore the
+  three appended ones; `git status` of both repositories identical to the snapshot before the run — ADR-0017's
+  "state is an index over the files" held in the direction it was not designed for.
+- Owner-doc facts were right where checked: dependencies, dependents, `tested by`, coupling with its
+  denominator (`76 of 137 measured commits, 55 %`), hotspots.
+- ADR-0044 (this revision): CI definitions under `pipelines/`, `.pipelines/`, `.azure-pipelines/`,
+  `.azuredevops/` — 15 pipeline files found where `ci: []` stood before.
+
+### 12.3 Proposed next step
+
+F34 and F35 go into **M3i** before F24: a removal path is only safe when `adopt` sees what exists, and a
+harness that grew by hand is the first thing a removal touches. F36 and F37 are fruit in the same slice. F38(a)
+waits for a second occurrence; F38(b) and (c) are one sentence and one flag.
+

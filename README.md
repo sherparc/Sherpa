@@ -254,7 +254,7 @@ Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generat
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 400 tests, ~98 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 401 tests, ~98 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
