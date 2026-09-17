@@ -120,9 +120,10 @@ def now_iso() -> str:
 
 
 def validate(data: dict) -> None:
-    """JSON-schema validation when ``jsonschema`` is installed (dev extra); otherwise no-op."""
+    """Against the shipped schema with the stdlib validator (ADR-0042); raises ``ValueError`` with the location."""
+    from sherpa import schema
+
     try:
-        import jsonschema  # type: ignore
-    except ImportError:  # pragma: no cover
-        return
-    jsonschema.validate(data, json.loads(SCHEMA_PATH.read_text(encoding="utf-8")))
+        schema.validate(data, schema.load(SCHEMA_PATH.name))
+    except schema.SchemaError as e:
+        raise ValueError(f"state invalid at {e.path or 'root'}: {e.message}") from None

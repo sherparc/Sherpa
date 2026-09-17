@@ -58,9 +58,12 @@ def blob_contents(repo: Path, ref: str, paths: list[str]) -> dict[str, bytes | N
     """Blob contents via ONE ``git cat-file --batch``. None = missing or not a blob (submodules)."""
     if not paths:
         return {}
+    # The request is newline-delimited (``-z`` needs git ≥ 2.43); a path holding a newline would split into two
+    # requests and shift every answer after it, so it is answered None without being asked (ADR-0038).
+    contents: dict[str, bytes | None] = {p: None for p in paths if "\n" in p}
+    paths = [p for p in paths if "\n" not in p]
     stdin = "".join(f"{ref}:{p}\n" for p in paths).encode("utf-8", errors="surrogateescape")
-    out = _run(repo, "cat-file", "--batch", stdin=stdin)
-    contents: dict[str, bytes | None] = {}
+    out = _run(repo, "cat-file", "--batch", stdin=stdin) if paths else b""
     pos = 0
     for p in paths:
         nl = out.index(b"\n", pos)
@@ -101,11 +104,14 @@ def count_commits(repo: Path, ref: str) -> int:
 
 
 def log_since(repo: Path, ref: str, since: datetime) -> list[Commit]:
-    """Non-merge commits since ``since`` with touched files. One process, fixed separators."""
+    """Non-merge commits since ``since`` with touched files. One process, fixed separators, ``-z`` so that a path
+    with non-ASCII bytes, a tab or a newline arrives as bytes instead of C-quoted (``"\\303\\274ber.py"``) and
+    matches ``ls-tree -z`` (ADR-0038)."""
     out = _run(
         repo,
         "log",
         ref,
+        "-z",
         "--no-merges",
         f"--since={_iso(since)}",
         f"--format={_REC}%H{_UNIT}%an{_UNIT}%cI",
@@ -113,11 +119,13 @@ def log_since(repo: Path, ref: str, since: datetime) -> list[Commit]:
     ).decode("utf-8", errors="surrogateescape")
     commits: list[Commit] = []
     for rec in out.split(_REC):
-        if not rec.strip():
+        if not rec:
             continue
-        head, _, body = rec.partition("\n")
+        head, *names = rec.split("\0")  # with -z: header NUL, then "\n" + the first path, NUL-separated paths
         sha, author, date = head.split(_UNIT)
-        files = tuple(sorted({ln for ln in body.splitlines() if ln}))
+        if names and names[0].startswith("\n"):
+            names[0] = names[0][1:]
+        files = tuple(sorted({n for n in names if n}))
         commits.append(Commit(sha, author, _parse_date(date), files))
     return commits
 

@@ -11,7 +11,7 @@
 | path | `src/sherpa/apply` |
 | kind | directory inside module `sherpa-harness` (package) |
 | files / LOC | 7 / 1992 (6 source files) |
-| commits 90d / 30d | 7 / 7 · 1 authors |
+| commits 90d / 30d | 8 / 8 · 1 authors |
 | hotspots | `src/sherpa/apply/render.py`, `src/sherpa/apply/__init__.py`, `src/sherpa/apply/adopt.py` |
 | tests naming it | `tests/test_apply.py` |
 <!-- sherpa:end facts -->

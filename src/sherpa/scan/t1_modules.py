@@ -439,7 +439,7 @@ def compute_coupling(
         for me, other in ((a, b), (b, a)):
             share = n / per_module[me] if per_module[me] else 0.0
             if n >= COUPLING_MIN_SHARED and share >= COUPLING_MIN_SHARE:
-                partners[me].append(Coupling(other, n, round(share, 2)))
+                partners[me].append(Coupling(other, n, round(share, 2), per_module[me]))
     out = {m: sorted(partners[m], key=lambda c: (-c.shared, c.module))[:COUPLING_TOP] for m in module_ids}
     return out, CouplingStats(cap, skipped, measured, COUPLING_MIN_SHARED, COUPLING_MIN_SHARE, exclude)
 

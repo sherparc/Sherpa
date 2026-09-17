@@ -73,7 +73,7 @@ def dir_(path: str, *, files=20, c90=0, c30=0, authors=0, gen=0):
 def model(modules=(), dirs=(), generators=(), repo="Shop"):
     return Model(
         sherpa=__version__,
-        schema_version=4,
+        schema_version=5,
         repo=repo,
         origin="x",
         git=GitLayer(

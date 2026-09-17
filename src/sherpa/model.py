@@ -9,7 +9,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-SCHEMA_VERSION = 4  # v4: sub_dirs and coupling per module (ADR-0020, ADR-0021)
+SCHEMA_VERSION = 5  # v5: coupling carries its denominator (ADR-0039); v4: sub_dirs and coupling per module
 SCHEMA_PATH = Path(__file__).parent / "schemas" / "codebase-model.schema.json"
 
 
@@ -81,7 +81,8 @@ class Coupling:
 
     module: str
     shared: int
-    share: float  # 0.0–1.0, of this module's commits_90d
+    share: float  # 0.0–1.0 = shared / of
+    of: int  # this module's measured commits — below the cap, root excluded — the denominator of share (ADR-0039)
 
 
 @dataclass(frozen=True)
@@ -219,10 +220,10 @@ def load(path: Path) -> Model:
 
 
 def validate(data: dict) -> None:
-    """Validate against the JSON schema. Needs ``jsonschema`` (dev extra); without it: no-op."""
+    """Against the shipped schema with the stdlib validator (ADR-0042); raises ``ValueError`` with the location."""
+    from sherpa import schema
+
     try:
-        import jsonschema  # type: ignore
-    except ImportError:  # pragma: no cover
-        return
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    jsonschema.validate(data, schema)
+        schema.validate(data, schema.load(SCHEMA_PATH.name))
+    except schema.SchemaError as e:
+        raise ValueError(f"model invalid at {e.path or 'root'}: {e.message}") from None

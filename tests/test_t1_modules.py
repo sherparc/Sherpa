@@ -420,8 +420,8 @@ def test_coupling_cap_and_floors():
     commits += [("u", 5, ["n/x"])]  # no module: ignored, not counted
     per, stats = compute_coupling(_data(commits), owner, list("ABCDEFG"))
     assert stats == CouplingStats(cap=5, skipped_commits=3, measured_commits=12, min_shared=5, min_share=0.3)
-    assert per["A"] == [Coupling("B", 6, 0.5)]  # 6 of A's 12 measured commits
-    assert per["B"] == [Coupling("A", 6, 1.0)] and per["C"] == [] and per["G"] == []
+    assert per["A"] == [Coupling("B", 6, 0.5, 12)]  # 6 of A's 12 measured commits — the 3 skipped are not in `of`
+    assert per["B"] == [Coupling("A", 6, 1.0, 6)] and per["C"] == [] and per["G"] == []
 
 
 def test_coupling_excludes_the_root_catch_all(poly_repo: Path):
@@ -430,9 +430,9 @@ def test_coupling_excludes_the_root_catch_all(poly_repo: Path):
     owner = {"a/x": "A", "b/x": "B", "README.md": "ROOT", "docs/y": "ROOT"}
     commits = [("u", 1, ["a/x", "b/x", "README.md"])] * 6 + [("u", 2, ["a/x", "docs/y"])] * 4
     per, stats = compute_coupling(_data(commits), owner, ["ROOT", "A", "B"])
-    assert per["A"] == [Coupling("ROOT", 10, 1.0), Coupling("B", 6, 0.6)]  # without the exclusion
+    assert per["A"] == [Coupling("ROOT", 10, 1.0, 10), Coupling("B", 6, 0.6, 10)]  # without the exclusion
     per, stats = compute_coupling(_data(commits), owner, ["ROOT", "A", "B"], exclude="ROOT")
-    assert per["A"] == [Coupling("B", 6, 0.6)] and per["ROOT"] == [] and stats.excluded == "ROOT"
+    assert per["A"] == [Coupling("B", 6, 0.6, 10)] and per["ROOT"] == [] and stats.excluded == "ROOT"
     assert scan(poly_repo, fetch=False).coupling.excluded is None  # no root manifest there: nothing to exclude
 
 

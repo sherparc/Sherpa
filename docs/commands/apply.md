@@ -158,7 +158,11 @@ Installed with every apply (ADR-0008): `.claude/hooks/sherpa-outcome.py`, wired 
 `UserPromptSubmit`, `PostToolUse` (`Bash|Edit|Write|MultiEdit`), `PostToolUseFailure` (`Bash`) and `Stop`.
 It is stdlib-only, fail-open and never prints. Per execution it appends one line to
 `.sherpa/telemetry/outcomes.ndjson` with a label — `success` (last test run green, or a PR created), `failed`
-(last test run red), `unknown` (no signal) — the tool signals, and the `harness_rev`. A follow-up prompt that
+(last test run red), `unknown` (no signal) — the tool signals, and the `harness_rev` the execution started
+with (`harness_rev_at_stop` is added when `sherpa apply` changed it during the execution). A test run is a
+runner as the command word of a shell segment — `pytest`, `python -m pytest`, `uv run pytest`, `npm test`,
+`dotnet test`, `go test`, `cargo test`, … — never the word elsewhere in the line (`cat pytest.ini`, `pip install
+pytest` are not runs; ADR-0040). A follow-up prompt that
 starts with a correction ("no, that's wrong", "doesn't work", …) records a `correction` for the previous
 execution. **Privacy:** each record also stores the first 160 characters of the prompt, so a label can be read
 next to what was asked; everything stays on the machine — `.sherpa/telemetry/` is ignored by git through the

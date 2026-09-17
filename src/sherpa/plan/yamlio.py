@@ -9,14 +9,13 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from sherpa import atomic
+from sherpa import atomic, schema
 from sherpa.apply.state import ADOPTED, State
 from sherpa.plan import DECISIONS, Check, Entry, Plan
 
@@ -101,16 +100,12 @@ def load(path: Path) -> dict[str, Any]:
 
 
 def validate(data: dict[str, Any]) -> None:
-    """Validate against the JSON schema when ``jsonschema`` is installed (dev extra); otherwise no-op."""
+    """Against the shipped schema with the stdlib validator (ADR-0042) — in production as in the tests, so a typo
+    like ``decision: rejcet`` or a foreign ``schema_version`` never reaches ``selected()``."""
     try:
-        import jsonschema  # type: ignore
-    except ImportError:  # pragma: no cover
-        return
-    try:
-        jsonschema.validate(data, json.loads(SCHEMA_PATH.read_text(encoding="utf-8")))
-    except jsonschema.ValidationError as e:
-        where = "/".join(str(x) for x in e.absolute_path)
-        raise ValueError(f"harness-plan.yaml invalid at {where or 'root'}: {e.message}") from None
+        schema.validate(data, schema.load(SCHEMA_PATH.name))
+    except schema.SchemaError as e:
+        raise ValueError(f"harness-plan.yaml invalid at {e.path or 'root'}: {e.message}") from None
 
 
 def decisions_of(data: dict[str, Any]) -> dict[tuple[str, str, str], str]:

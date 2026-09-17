@@ -60,6 +60,8 @@ def note_type(rel: str) -> str:
         return "concept"
     if rel.startswith("docs/reference/"):
         return "reference"
+    if rel.startswith("docs/architecture/"):
+        return "architecture"
     if rel.startswith("docs/"):
         return "doc"
     if rel.startswith(".claude/agents/"):
@@ -151,6 +153,7 @@ def home(notes: list[tuple[str, str]]) -> str:
         "doc",
         "command",
         "concept",
+        "architecture",
         "reference",
         "adr",
         "agent",
