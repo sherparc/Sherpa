@@ -1,7 +1,7 @@
 # Sherpa — Plan
 
-> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 9: M3d done — stamp without rev, sub-units, coupling with a size cap, `--accept/--reject`, capped index, privacy note; §8 retro after M2b with the two gaps the review caught before they shipped) · **Author:** Claude (Opus 5) with Andrei
-> **Status:** v0.6.0 — M0, M1, M1a, M2, M2b, M3a, M3t, M3c, M3d done; order from here: M5 → M6-lite → M4 → M6 → M3b → M7 (§7.3)
+> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 10: the market position against Claude Code and Hermes Agent in §9, the `hermes` target as M3h and the entry point to runtime independence (ADR-0023), runtime plugins as M7a — Sherpa installable inside Claude Code and Hermes (ADR-0024), the §0 direction reordered — open runtimes first, an executor of Sherpa's own last) · **Author:** Claude (Opus 5) with Andrei
+> **Status:** v0.6.0 — M0, M1, M1a, M2, M2b, M3a, M3t, M3c, M3d done; order from here: M3h → M7a → M5 → M6-lite → M4 → M6 → M3b → M7 (§7.3, §9)
 > **Origin of the patterns:** production Claude Code harnesses built and analysed in practice (owner docs, agents with
 > knowledge manifests, librarians, deterministic checkers) plus the industry patterns in §2. Sherpa is a generic
 > product; no customer project is named anywhere in this repo.
@@ -12,12 +12,17 @@ Sherpa stands **above** one or more repos, ingests the codebase deterministicall
 infrastructure (owner docs, agents, skills, commands, librarians, evals, outcome channel) **with evidence and
 cost**, and after approval creates exactly that — idempotently, with state, without overwriting manual work.
 
-**Direction beyond the milestone table (2026-09-17):** Sherpa grows into an agent in its own right — a runtime
-in the family of Claude Code and Hermes, not only a generator of files for one — with pluggable model bindings:
-bring your own key, local models through OpenAI-compatible servers, Anthropic, OpenAI, Chinese providers. The
-provider layer is already decided thin and framework-free (ADR-0004). Until then every design choice keeps that
-door open: runtime-neutral formats where possible (owner docs, skills), runtime-specific parts (agent front
-matter, hooks, `CLAUDE.md`) isolated in `apply/render.py`. The milestones below are executed in order first.
+**Direction beyond the milestone table (2026-09-17, reordered with ADR-0023):** independence from any single
+agent runtime — reached in this order. First through the **open runtimes**: Hermes Agent reads the nested
+`AGENTS.md` chain and `.agents/skills` Sherpa already writes, so a thin `hermes` target (M3h) puts the harness in
+front of its users with a day of work; Codex, Cursor and Copilot follow as adapters when a corpus repository uses
+them, and Sherpa itself is installed **inside** those runtimes as a thin plugin or bundle (M7a, ADR-0024) — one
+command where the user already works. Second, the **provider layer** (M6-lite, ADR-0004: thin, framework-free — bring your own key, local models
+through OpenAI-compatible servers, Anthropic, OpenAI, Chinese providers) for evals and enrichment. Last, and only
+if the evals and librarians need it, an **executor of Sherpa's own** for those two jobs — never a chat runtime
+that competes with Claude Code or Hermes (§9). Every design choice keeps that door open: runtime-neutral formats
+where possible (owner docs, skills), runtime-specific parts (agent front matter, hooks, `CLAUDE.md`) isolated in
+`apply/render.py`. The milestones below are executed in order first.
 
 Noted for the runtime (2026-09-17, from an agent runtime's session-store recovery design): sessions get the
 same split as the harness state (ADR-0017) — the transcript is canonical and append-only with a spool file when
@@ -249,11 +254,13 @@ cached: it can never slow or fail a command. Test corpus check: `doctor` on all 
 | M3t ✅ | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files, `[apply]` config, ask when both homes exist | five-module fixture with both targets: 18 files, second run all `=`; existing root and nested `AGENTS.md` get the block appended; a 122-module corpus repo: 243 files in 0.2 s; 222 tests |
 | M3c ✅ | `sherpa adopt` (§2.6) — reads `.claude/`, `.agents/` and AGENTS.md hierarchies; covered entries; rebuildable state (ADR-0017) | existing-harness fixture: 6 files adopted, 0 bytes changed, 2 entries covered, gaps listed; torn state rebuilt with the same `harness_rev`; a 16-module corpus repo with 12 hand-written AGENTS.md: 0.22 s, 32 files rebuilt after a lost state; 230 tests, 98 % |
 | M3d ✅ | low-hanging fruit from the retro (§7) plus the two preconditions the review found (§8): stamp without rev (ADR-0019) with legacy-stamp recognition in `adopt` (ADR-0022), model v4 with `sub_dirs` and sub-units by the depth rule (ADR-0020), change coupling with a size cap (ADR-0021), `plan --accept/--reject` by address, root index capped at 20 by rank, privacy note for the hook, session-built fixtures | `test_trunk_move_without_activity_changes_no_block`: two revs, no activity → `nothing to do.`; `test_adopt_recognises_an_older_stamp…`: 0.5.0 bytes → lost state → adopt → apply → `nothing to do.`; Sherpa's own plan lists `src/sherpa/apply`, `plan`, `scan` as units; `test_root_index_is_capped_and_ordered_by_rank`; suite 12 s → 7 s on Linux; 296 tests, 98 % |
+| M3h | `hermes` target (ADR-0023): third entry of `TARGETS`, detected by `hermes` on the `PATH`, `~/.hermes/` or `.hermes.md`; thin on top of `agents-md` — appends the root block to `.hermes.md`/`HERMES.md` when it exists (first match wins there), `version: 1` in every skill's front matter (neutral core), one outcome hook script for both payload shapes (`PostToolUse`/`Stop` and `post_tool_call`/`on_session_end`), `apply` prints the `~/.hermes/config.yaml` hook snippet once, `doctor` checks `hermes-hook` and `hermes-trust` (`hermes skills trust`), `status` counts labels from both runtimes per `harness_rev` | five-module fixture with targets `claude, agents-md, hermes`: same files as before plus `version:` (goldens on purpose), a fixture with `.hermes.md` gets the block appended and `AGENTS.md` untouched; hook test with a Hermes payload → label with the same `harness_rev`; `doctor` on a machine without Hermes: no new line; corpus: `hermes` launched in one repo loads the nested `AGENTS.md` and lists the skills after `trust` |
+| M7a | runtime plugins (ADR-0024): a Claude Code plugin (`.claude-plugin/`, marketplace) and a Hermes bundle (`hermes bundles`, tap) generated from one source under `plugins/`, released with every tag; commands `/sherpa-doctor`, `/sherpa-plan` (reads the plan entry by entry, asks, writes the answer with `--accept/--reject`), `/sherpa-apply` (dry run shown, then `--yes` after the user's yes), `/sherpa-status`; thin — the CLI does the work, no hook in the plugin | plugin manifests validated in a test; `claude plugin install` from the release and `/sherpa-plan` on the five-module fixture ends with the same `harness-plan.yaml` as the CLI with `--accept/--reject`; Hermes: `hermes skills install` of the bundle lists the four commands; a missing CLI produces the install line, nothing else |
 | M3b | adapters `dotnet` + `python` (T2: anchors, patterns) — **proposed after M6-lite** (§7.3) | a scan yields the anchors a harness checker verifies today; owner docs get anchors |
 | M4 | auto-evals from the graph, `status` with baseline | eval run on the fixture ≥ 90 %; regression is reported |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev`, trend, share of `unknown` | first 10 executions on a corpus repo with a label ≠ `unknown`; regression between two harness versions visible |
 | M6 | `plan` stage 2: LLM enrichment, provider layer (local vLLM + Anthropic) | plan diff stage 1 vs. 2 documented; the same schema pass with both providers; stage-1 entries unchanged |
-| M7 | librarians, multi-repo, `/sherpa-plan` command | a second repo in the workspace |
+| M7 | librarians, multi-repo (`/sherpa-plan` moved to M7a) | a second repo in the workspace |
 
 Every milestone ends with: CI green (`.github/workflows/ci.yml`: pytest on Linux and Windows, coverage ≥ 90 %,
 ruff), docs updated (`plan.md`, the concept doc in `docs/concepts/`, the command reference in `docs/commands/`,
@@ -314,8 +321,10 @@ subprocesses: no test reaches the network.
 8. ~~Provider-neutral output?~~ Decided 2026-09-17 (ADR-0015): neutral core + targets `claude`, `agents-md`;
    Cursor (`.cursor/rules/*.mdc`, `globs`) and Copilot (`.github/instructions/*.instructions.md`, `applyTo`)
    are the next adapters once a corpus repo uses them.
-9. Interactive per-entry approval in the CLI was rejected for M3a (ADR-0013); `/sherpa-plan` in Claude Code (M7)
-   is the better place. Reopen if the YAML editing turns out to be the friction point in customer tests.
+9. ~~Interactive per-entry approval in the CLI was rejected for M3a (ADR-0013); `/sherpa-plan` in Claude Code (M7)
+   is the better place. Reopen if the YAML editing turns out to be the friction point in customer tests.~~
+   Decided 2026-09-17 (ADR-0024): the per-entry approval is the plugin's `/sherpa-plan` in M7a; the CLI keeps
+   `--accept/--reject` for scripts and CI.
 10. ~~Stamp without the rev (§7.1 G1)?~~ Decided 2026-09-17 (ADR-0019): the stamp is `as of <date>` only; the rev
     stays in the state and the plan header. Implemented in M3d.
 11. ~~Sub-units for single-manifest repositories (§7.1 G2)?~~ Decided 2026-09-17 (ADR-0020): the depth rule, with
@@ -333,6 +342,22 @@ subprocesses: no test reaches the network.
     calibrated on modules (a three-file module is a tool), not on packages with few large files. Proposal: a
     second way over the floor for sub-units only — ≥ 5 files **or** ≥ 500 LOC — as an amendment to ADR-0014,
     with the LOC value in `sherpa.toml`. Decide after one more corpus repository with sub-units (Q13).
+
+16. **Hermes hook wiring is global, not per repository** (`~/.hermes/config.yaml`; ADR-0023 makes it a `doctor`
+    check with the snippet as the fix). Is a hint enough for the outcome minimum (ADR-0008), or should `status`
+    show `outcome channel: hermes not wired` as a warning until the first Hermes label arrives? Recommendation:
+    the `status` warning — it is the one place a team looks after `apply`, and it disappears by itself.
+17. When a repository carries both `.hermes.md` and `AGENTS.md`, Hermes loads only the first. Append the block
+    to `.hermes.md` (ADR-0023) or print a hint that `AGENTS.md` is shadowed? Recommendation: append, and say
+    so in the dry run — never overwrite, but never let the harness be invisible either.
+
+18. The plugin's `/sherpa-plan` asks per entry — the interaction Q9 rejected for the CLI. Which order: proposals
+    first, then no's within reach, dormant last? And should a `reject` on a proposal ask for a one-line reason
+    that lands in the plan's `decision_note`? Recommendation: that order, and yes to the note — it is the
+    evidence the next re-plan shows next to the struck entry.
+
+Decided (2026-09-17): the `hermes` target and the reordered direction → ADR-0023; runtime plugins from one
+source, thin, no hook in the plugin → ADR-0024.
 
 Decided (2026-09-16): plan format YAML and check-in of plan/state → ADR-0005; generator principle → ADR-0011;
 units, visibility, decision keeping → ADR-0012. Decided (2026-09-17): state as a rebuildable index, atomic
@@ -445,3 +470,32 @@ docs` plus a `contains` row with links. What stays open is the floor (§6 Q15).
    `test_trunk_move_without_activity_changes_no_block` is the proof, the README shows the line.
 3. **`adopt` as config migration** (ADR-0022) — Renovate migrates config in place; Sherpa understands its own
    older renderings instead. The pattern list is the contract for every future block change.
+
+## 9. Market position (2026-09-17) — Claude Code, Hermes Agent, and what neither builds
+
+Question asked: can Sherpa be better than Claude Code or Hermes Agent? As a runtime: no — Claude Code has the
+model vendor behind it, Hermes Agent (Nous Research, open source since 2026-02) crossed 175k GitHub stars in four
+months with a self-improving loop, three-layer memory, self-written skills and multi-provider bindings. A
+one-person product does not win that race, and §1 already lists a runtime of its own as a non-goal for v1.
+
+As the layer underneath both: yes, and neither builds it.
+
+| The runtimes | Sherpa |
+|---|---|
+| **consume** `CLAUDE.md`/`AGENTS.md`/skills; neither measures whether the harness helps | outcome labels per `harness_rev` — "does version X succeed more often than Y" is a number (M5) |
+| Hermes learns from experience: LLM prose, per person, not reviewable | facts from `git log`, deterministic, reviewed in the PR like code, per team and repository — the "plausible-but-wrong drift" §1 rejects |
+| each runtime binds the harness to itself | neutral core plus one adapter per runtime (ADR-0015); teams run mixed runtimes |
+| no plan, no state, no adopt | Terraform's model: diff before effect, never overwrite, a rebuildable state |
+| no evals from the dependency graph | M4 — the part the market does not have (§2.4) |
+
+Terraform's position, not the cloud's. The threat is real and cheap: both runtimes could ship "plan from git"
+in a sprint (`/init` and auto-memory exist). What is expensive to copy is the discipline — state, adopt without
+overwrite, managed blocks, the outcome channel, neutrality — so the order M3d → M3h → **M5** is right: prove the
+central claim (the harness helps, measured) before the market asks.
+
+Consequence taken (ADR-0023): independence is entered through Hermes, not against it. Measured on 2026-09-17
+against Hermes' documentation: it loads the merged `AGENTS.md` chain from the git root down with nested files
+discovered progressively, reads `<root>/.agents/skills/*/SKILL.md` in the agentskills.io layout, and runs shell
+hooks with the same JSON-on-stdin shape as Claude Code's — three of the four things the `agents-md` target and
+`home: .agents` already produce. The gaps (skill `version`, the `.hermes.md` precedence trap, global hook wiring,
+`doctor`) are M3h; the corpus smoke test with a real `hermes` launch is its acceptance.
