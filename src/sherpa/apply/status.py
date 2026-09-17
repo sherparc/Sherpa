@@ -35,20 +35,28 @@ class Report:
     corrections: int = 0
     notes: list[str] = field(default_factory=list)
     stale: tuple[str, str, str] | None = None  # (trunk, plan rev, current rev) when the trunk moved since the plan
+    state_error: str | None = None  # the state file is torn or foreign (ADR-0034); drift is unknown until adopt
 
     @property
     def fails(self) -> int:
         return sum(f.level == FAIL for f in self.findings)
 
 
-def report(repo: Path, state: State, actions: list, *, stale: tuple[str, str, str] | None = None) -> Report:
+def report(
+    repo: Path,
+    state: State,
+    actions: list,
+    *,
+    stale: tuple[str, str, str] | None = None,
+    state_error: str | None = None,
+) -> Report:
     from sherpa.apply import NEW, SKIPPED, UPDATED
 
-    r = Report(state.harness_rev or "none", state.applied_at or "never", stale=stale)
+    r = Report(state.harness_rev or "none", state.applied_at or "never", stale=stale, state_error=state_error)
     targeted = {a.path for a in actions}
     adopted = {path for path, rec in state.files.items() if rec.origin == ADOPTED}
     missing = {path for path in state.files if not (repo / path).is_file()}
-    for a in actions:
+    for a in actions if not state_error else ():  # drift against an empty index would name every file (ADR-0034)
         if a.path in adopted:
             continue  # yours (ADR-0007): listed below only when gone
         if a.path in missing:
@@ -106,7 +114,10 @@ def render(r: Report) -> str:
         lines.append(f"plan: stale — {trunk} moved {rev[:10]} → {now[:10]} since `sherpa plan`; run `sherpa plan`")
     else:
         lines.append("plan: current")
-    if r.drift:
+    if r.state_error:
+        lines.append(f"state: unreadable — {r.state_error}")
+        lines.append("drift: unknown until the state is rebuilt")
+    elif r.drift:
         w = min(max(len(p) for _, p, _ in r.drift), 56)
         lines.append(f"drift: {len(r.drift)} files")
         lines.extend(f"  {op} {path:<{w}}  {detail}" for op, path, detail in r.drift)
@@ -138,6 +149,7 @@ def render_json(r: Report) -> str:
         "applied_at": r.applied_at,
         "plan": {"stale": r.stale is not None}
         | ({"trunk": r.stale[0], "plan_rev": r.stale[1], "current_rev": r.stale[2]} if r.stale else {}),
+        "state": {"error": r.state_error} if r.state_error else {"error": None},
         "drift": [{"op": op, "path": path, "detail": detail} for op, path, detail in r.drift],
         "findings": [asdict(f) for f in r.findings],
         "outcomes": {rev: dict(c) for rev, c in sorted(r.outcomes.items())},

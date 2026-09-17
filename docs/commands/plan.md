@@ -137,6 +137,7 @@ fall back to a default.
 | 1 | scan failed (no repository, no origin, no trunk) | as for [`sherpa scan`](scan.md#exit-codes-and-errors), prefixed `sherpa plan:` |
 | 1 | `sherpa.toml [plan]` has unknown keys | `sherpa plan: sherpa.toml [plan]: unknown keys ['agent_top_n']; allowed: [...]` |
 | 1 | previous plan has an invalid decision | `sherpa plan: harness-plan.yaml: decision 'yes' at agent pay — allowed: ('accept', 'reject')` |
+| 0 | `.sherpa/state.json` torn or foreign — `covered:` marks are dropped, `… `sherpa adopt` rebuilds it …` on stderr (ADR-0034) | console view, `→ <path>` |
 | 1 | previous plan does not match the schema | `sherpa plan: harness-plan.yaml invalid at entries/3/kind: 'foo' is not one of [...]` |
 | 1 | `--accept`/`--reject` names no entry, or two | `sherpa plan: --accept agent:Nope: no such entry — entries of that kind: agent:pay:svc/pay` · `… ambiguous — owner-doc:x:a/x, owner-doc:x:b/x; give the scope` |
 

@@ -140,7 +140,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     previous = yamlio.load(out) if out and out.exists() else None
     plan, kept = yamlio.merge_decisions(plan, previous)
     plan, decided = yamlio.decide(plan, args.accept, args.reject)
-    plan, covered = yamlio.mark_covered(plan, _load_state(repo))
+    plan, covered = yamlio.mark_covered(plan, _load_state_or_empty(repo, "plan")[0])
 
     if out is None:
         sys.stdout.write(yamlio.dumps(plan))
@@ -171,6 +171,18 @@ def _load_state(repo: Path):
 
     path = repo / state_mod.STATE_PATH
     return state_mod.load(path) if path.exists() else state_mod.State()
+
+
+def _load_state_or_empty(repo: Path, command: str):
+    """``(state, error)``: the state is a rebuildable index (ADR-0017, ADR-0034), so a torn one is reported on
+    stderr and treated as empty — the way out, ``sherpa adopt``, is never blocked by the very file it rebuilds."""
+    from sherpa.apply import state as state_mod
+
+    try:
+        return _load_state(repo), None
+    except ValueError as e:
+        print(f"sherpa {command}: {e}", file=sys.stderr)
+        return state_mod.State(), str(e)
 
 
 def _resolve_layout(repo: Path, state, *, ask: bool) -> tuple[str, tuple[str, ...]]:
@@ -271,18 +283,19 @@ def cmd_status(args: argparse.Namespace) -> int:
     from sherpa.apply import status as status_mod
 
     repo = Path(args.repo).resolve()
-    state = _load_state(repo)
+    state, state_error = _load_state_or_empty(repo, "status")
     plan, model = _load_plan_and_model(repo)
     home, targets = _resolve_layout(repo, state, ask=False)
     actions = apply.plan_files(apply.targets_for(plan, model, home=home, targets=targets), repo, state)
-    report = status_mod.report(repo, state, actions, stale=_stale(repo, plan))
+    report = status_mod.report(repo, state, actions, stale=_stale(repo, plan), state_error=state_error)
     sys.stdout.write(status_mod.render_json(report) if args.json else status_mod.render(report))
     return EXIT_ERROR if report.fails else EXIT_OK
 
 
 def cmd_adopt(args: argparse.Namespace) -> int:
     """Inventory, reconcile against the plan's rendering, link to units, write the state and the plan's covered
-    marks. Nothing under the harness changes (ADR-0007); a torn state is rebuilt from the files (ADR-0017)."""
+    marks. Nothing under the harness changes (ADR-0007); a torn state is rebuilt from the files (ADR-0017). A stale
+    plan is no reason to refuse: ``adopt`` imports what is there, like ``terraform import`` (ADR-0034)."""
     from sherpa import apply
     from sherpa.apply import adopt as adopt_mod
     from sherpa.apply import state as state_mod
@@ -290,12 +303,7 @@ def cmd_adopt(args: argparse.Namespace) -> int:
 
     repo = Path(args.repo).resolve()
     plan, model = _load_plan_and_model(repo)
-    _refuse_stale(repo, plan)
-    try:
-        state = _load_state(repo)
-    except ValueError as e:
-        print(f"sherpa adopt: {e} — rebuilding", file=sys.stderr)
-        state = state_mod.State()
+    state, _ = _load_state_or_empty(repo, "adopt")
     home, targets = _resolve_layout(repo, state, ask=not args.dry_run)
     rendered = apply.targets_for(plan, model, home=home, targets=targets)
     a = adopt_mod.adopt(repo, plan, rendered, state, home=home, runtime_targets=targets)

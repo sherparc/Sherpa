@@ -497,15 +497,21 @@ def test_status_reports_a_stale_plan_and_json(active_repo: Path, capsys):
 
 
 def test_status_names_adopt_on_a_foreign_state_schema(active_repo: Path, capsys):
-    """ADR-0017: a state from another schema version is unreadable, and the message names the way out."""
+    """ADR-0017: a state from another schema version is unreadable, and the message names the way out; the
+    report itself still comes (ADR-0034), computed against an empty index."""
     applied(active_repo)
     path = active_repo / ".sherpa" / "state.json"
     d = json.loads(path.read_text(encoding="utf-8"))
     d["schema_version"] = 2
     path.write_text(json.dumps(d), encoding="utf-8")
     capsys.readouterr()
-    assert main(["status", str(active_repo)]) == 1
-    err = capsys.readouterr().err
+    assert main(["status", str(active_repo)]) == 0
+    out, err = capsys.readouterr()
+    assert "\nstate: unreadable — " in out and "\ndrift: unknown until the state is rebuilt\n" in out
+    assert "  + " not in out, "no drift lines against an empty index"
+    assert main(["status", str(active_repo), "--json"]) == 0
+    j = json.loads(capsys.readouterr().out)
+    assert "schema_version 2, expected 1" in j["state"]["error"] and j["drift"] == []
     assert "state has schema_version 2, expected 1" in err and "`sherpa adopt` rebuilds it" in err
 
 

@@ -151,7 +151,11 @@ the repository; a question on a terminal when both homes exist and nothing decid
 | Exit | When |
 |---|---|
 | 0 | done, including `--dry-run` and "nothing to adopt" (no harness files, no previous state) |
-| 1 | no plan or model (`run sherpa plan first`), stale plan, both homes and no terminal to ask |
+| 1 | no plan or model (`run sherpa plan first`), both homes and no terminal to ask |
+
+A stale plan (the trunk moved since `sherpa plan`) is not refused: `adopt` imports what is there against the plan it
+finds, like `terraform import` (ADR-0034); only `apply` insists on a fresh plan. A torn or foreign `state.json` is
+reported on stderr (`… is unreadable (…) — `sherpa adopt` rebuilds it from the harness files`) and rebuilt.
 
 ## Troubleshooting
 

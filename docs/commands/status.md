@@ -46,14 +46,22 @@ The `plan:` line is what `apply` checks first: when the trunk moved since `sherp
 warning, never an exit code. The harness can be current while the plan is stale (ADR-0019: a merge without
 activity in a unit changes no block), so the two facts are two lines.
 
+A torn or foreign `.sherpa/state.json` gets its own line and makes drift unknown rather than wrong (ADR-0034):
+
+```
+state: unreadable — .sherpa/state.json is unreadable (state has schema_version 2, expected 1) — `sherpa adopt` rebuilds it from the harness files
+drift: unknown until the state is rebuilt
+```
+
 `--json` prints the same report for scripts:
 
 ```json
 {
-  "sherpa": "0.7.1",
+  "sherpa": "0.7.2",
   "harness_rev": "c38498363846",
   "applied_at": "2026-09-16T22:07:12Z",
   "plan": {"stale": true, "trunk": "origin/main", "plan_rev": "2c22d796e3…", "current_rev": "9bac74de60…"},
+  "state": {"error": null},
   "drift": [{"op": "~", "path": ".agents/docs/modules/pay.md", "detail": "block facts updated"}],
   "findings": [{"level": "WARN", "rule": "C7", "path": ".claude/agents/pay.md", "message": "162 lines > budget 150 (agent)"}],
   "outcomes": {"c38498363846": {"success": 1, "unknown": 1}},
@@ -89,6 +97,9 @@ answer. Trend, regression between two harness versions and the share of `unknown
 |---|---|
 | 0 | no checker FAIL — drift, warnings and orphans are informational |
 | 1 | at least one checker FAIL (C1–C6), or plan/model missing (`… not found — run `sherpa plan` first`) |
+
+A torn or foreign `.sherpa/state.json` does not stop the report: the `state:` line names it with the way out
+(also on stderr, and as `"state": {"error": …}` in JSON), drift is `unknown` and the checker still runs (ADR-0034).
 
 ## Typical uses
 

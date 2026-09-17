@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from sherpa.apply.render import selected
 from sherpa.apply.state import ADOPTED, GENERATED
 from sherpa.cli import main
 from sherpa.plan import yamlio
+from tests.conftest import commit
 from tests.test_apply import applied
 from tests.test_apply import tree_hash as _tree_hash
 from tests.test_plan import check_golden
@@ -176,11 +178,11 @@ def test_adopt_rebuilds_a_lost_or_torn_state(active_repo: Path, capsys):
     rev = state_mod.load(state_path).harness_rev
     before = tree_hash(active_repo)
     state_path.write_text('{"schema_version": 1, "files": {', encoding="utf-8")  # torn write
-    assert main(["status", str(active_repo)]) == 1
+    assert main(["status", str(active_repo)]) == 0, "a torn index never blocks the diagnostic command (ADR-0034)"
     assert "`sherpa adopt` rebuilds it from the harness files" in capsys.readouterr().err
     assert main(["adopt", str(active_repo)]) == 0
     out, err = capsys.readouterr()
-    assert "rebuilding" in err and "0 adopted" in out and " kept" in out
+    assert "`sherpa adopt` rebuilds it" in err and "0 adopted" in out and " kept" in out
     state = state_mod.load(state_path)
     assert all(r.origin == GENERATED for r in state.files.values())
     assert state.harness_rev == rev, "the rebuilt state is the one apply wrote"
@@ -299,3 +301,29 @@ def test_existing_harness_goldens(active_repo: Path, capsys):
     out = capsys.readouterr().out
     assert out.endswith("harness-plan.yaml (2 covered by adopted files)\n")
     check_golden("active-plan-covered-console.txt", out[: out.rindex("→ ")])
+
+
+def test_adopt_and_plan_run_on_a_torn_state_after_the_trunk_moved(active_repo: Path, capsys):
+    """ADR-0034: the recovery dead end — a torn state and a moved trunk. ``plan`` must not fail on the index it
+    does not own, and ``adopt`` must not refuse a stale plan: it imports what is there, like ``terraform import``.
+    Before, ``plan`` said "run adopt" and ``adopt`` said "run plan", both exit 1."""
+    applied(active_repo)
+    state_path = active_repo / state_mod.STATE_PATH
+    rev = state_mod.load(state_path).harness_rev
+    state_path.write_text("{not json", encoding="utf-8")
+    seed = active_repo.parent / "seed"
+    commit(seed, "more pay", {"svc/pay/pay/new.py": "z = 1\n"}, date="2026-03-02T00:00:00Z", author="A")
+    subprocess.run(["git", "push", "-q", str(active_repo.parent / "origin.git"), "main"], cwd=seed, check=True)
+    subprocess.run(["git", "fetch", "-q", "origin"], cwd=active_repo, check=True)
+    assert main(["apply", str(active_repo), "--dry-run"]) == 1  # apply still refuses the stale plan
+    assert "run `sherpa plan` first" in capsys.readouterr().err
+    assert main(["adopt", str(active_repo)]) == 0
+    out, err = capsys.readouterr()
+    assert "`sherpa adopt` rebuilds it" in err and "is now at" not in err and " kept" in out
+    assert state_mod.load(state_path).harness_rev == rev
+    # the other way round works too: plan survives the torn index and reports it
+    state_path.write_text("{not json", encoding="utf-8")
+    assert main(["plan", str(active_repo)]) == 0
+    assert "`sherpa adopt` rebuilds it" in capsys.readouterr().err
+    assert main(["adopt", str(active_repo)]) == 0
+    assert main(["apply", str(active_repo), "--yes"]) == 0
