@@ -384,6 +384,22 @@ def test_harness_rev_changes_only_with_managed_content():
     assert rev != state_mod.harness_rev(files, version="9.9.9")
 
 
+def test_trunk_move_without_activity_changes_no_block(active_repo: Path, capsys):
+    """ADR-0019: a merge that touches nothing a unit measures moves the rev, not the numbers — apply says
+    ``nothing to do.`` instead of rewriting every block with a new stamp."""
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    seed = active_repo.parent / "seed"
+    commit(seed, "docs only", {"README.md": "# shop\n"}, date="2026-03-01T12:00:00Z", author="A")  # same window end
+    subprocess.run(["git", "push", "-q", str(active_repo.parent / "origin.git"), "main"], cwd=seed, check=True)
+    subprocess.run(["git", "fetch", "-q", "origin"], cwd=active_repo, check=True)
+    capsys.readouterr()
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "nothing to do." in out and "~" not in out.split("\n", 2)[2]
+
+
 def test_rescan_updates_the_facts_block_and_keeps_human_text(active_repo: Path, capsys):
     applied(active_repo)
     doc = active_repo / ".agents" / "docs" / "modules" / "pay.md"

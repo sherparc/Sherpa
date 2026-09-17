@@ -54,6 +54,20 @@ class Target:
     append: bool = False  # blocks: when the file exists without our markers, append them (CLAUDE.md)
 
 
+# Older stamp formats, newest first: what ``adopt`` recognises as sherpa's own rendering when it rebuilds a state
+# for a harness written by an earlier version (ADR-0019, ADR-0022). Each pattern rewrites to the current form.
+LEGACY_STAMPS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"origin/[^\s,()]+@[0-9a-f]{7,40}, as of (\d{4}-\d{2}-\d{2})"), r"as of \1"),  # ≤ 0.5.0
+)
+
+
+def modernize_stamp(text: str) -> str:
+    """``text`` with every older stamp rewritten to the current format; unchanged when none is present."""
+    for pattern, repl in LEGACY_STAMPS:
+        text = pattern.sub(repl, text)
+    return text
+
+
 def entry_key(e: Entry) -> str:
     """State key of an entry = its address (``Entry.address``); one format for plan, state and ``--accept``."""
     return e.address
@@ -111,8 +125,9 @@ class Renderer:
         self.home, self.runtime_targets = home, tuple(targets)
         self.modules = {m.id: m for m in model.modules}
         self.dirs = {d.path: d for d in model.git.dirs}
-        # No sherpa version in the stamp: an upgrade must not rewrite every facts block in the repo.
-        self.stamp = f"{model.git.trunk.ref}@{model.git.trunk.rev[:10]}, as of {model.git.windows.as_of[:10]}"
+        # The stamp is the window end only (ADR-0019): neither the sherpa version nor the trunk rev — an upgrade
+        # or a merge with no activity in a unit must not rewrite its block. The rev lives in the state and the plan.
+        self.stamp = f"as of {model.git.windows.as_of[:10]}"
         self.entries = selected(plan)
         self.slugs = self._slugs()
         self.units = [e for e in self.entries if e.kind in ("owner-doc", "test-infra")]

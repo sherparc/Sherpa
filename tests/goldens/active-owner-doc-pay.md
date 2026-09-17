@@ -4,7 +4,7 @@
 > copying (owner principle). Keep anchor headings small and stable — links hang on them.
 
 <!-- sherpa:begin facts -->
-## facts (origin/main@REV, as of 2026-03-01)
+## facts (as of 2026-03-01)
 
 | field | value |
 |---|---|

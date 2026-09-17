@@ -29,7 +29,7 @@ from pathlib import Path
 
 from sherpa import __version__, gitinfo
 from sherpa.apply import state as state_mod
-from sherpa.apply.render import Target, slug
+from sherpa.apply.render import Target, modernize_stamp, slug
 from sherpa.apply.state import ADOPTED, BLOCKS, GENERATED, JSON_HOOKS, MANAGED, FileRecord, State
 from sherpa.check import BUDGETS, SKIP_DIRS, block_contents, content_hash, front_matter
 from sherpa.plan import PROPOSE, Plan
@@ -269,6 +269,10 @@ def _reconcile(t: Target, f: Found) -> tuple[FileRecord | None, str]:
     if t.mode == MANAGED:
         if f.text == t.content:
             return FileRecord(MANAGED, GENERATED, t.entry, content_hash(f.text)), "sherpa's, matches the plan"
+        if modernize_stamp(f.text) == t.content:
+            return FileRecord(
+                MANAGED, GENERATED, t.entry, content_hash(f.text)
+            ), "sherpa's, older stamp — `apply` refreshes it"
         if t.entry is None:  # checker copy, hook, ignore file: sherpa's by name, refreshed by the next apply
             return FileRecord(MANAGED, GENERATED, None, content_hash(f.text)), "sherpa's by name — `apply` refreshes it"
         return FileRecord(MANAGED, ADOPTED, t.entry, content_hash(f.text)), "at sherpa's path, yours — covers the entry"
@@ -284,11 +288,21 @@ def _reconcile(t: Target, f: Found) -> tuple[FileRecord | None, str]:
         if t.append:
             return None, "no sherpa markers — `apply` appends its block (ADR-0016)"
         return FileRecord(MANAGED, ADOPTED, t.entry, content_hash(f.text)), "at sherpa's path, yours — covers the entry"
-    known = {n: content_hash(v) for n, v in t.blocks.items() if n in have and have[n] == v}
+    known = {n: content_hash(have[n]) for n, v in t.blocks.items() if n in have and have[n] == v}
+    # An older stamp format is still sherpa's rendering (ADR-0022): recorded with the bytes on disk, so the next
+    # apply sees "unchanged since the state" and rewrites it in the current form.
+    older = {
+        n: content_hash(have[n])
+        for n, v in t.blocks.items()
+        if n in have and n not in known and modernize_stamp(have[n]) == v
+    }
+    known.update(older)
     stale = [n for n in t.blocks if n in have and n not in known]
     detail = f"{len(known)} of {len(t.blocks)} blocks match the plan"
+    if older:
+        detail += f"; block {', '.join(older)} carries an older stamp — `apply` refreshes it"
     if stale:
-        detail += f"; block {', '.join(stale)} differs (hand edit or older rendering) — stays"
+        detail += f"; block {', '.join(stale)} differs (hand edit) — stays"
     return FileRecord(BLOCKS, GENERATED, t.entry, blocks=known), detail
 
 

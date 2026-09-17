@@ -9,7 +9,7 @@ description: "Regenerate Django Migrations output in svc/pay/pay/migrations inst
 > generator, never in the output.
 
 <!-- sherpa:begin facts -->
-## facts (origin/main@REV, as of 2026-03-01)
+## facts (as of 2026-03-01)
 
 | field | value |
 |---|---|
