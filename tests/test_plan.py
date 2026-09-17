@@ -12,12 +12,11 @@ import pytest
 from sherpa import __version__
 from sherpa.cli import main
 from sherpa.config import PlanConfig, load
-from sherpa.model import Conventions, DirStat, GeneratorStat, GitLayer, Model, ModuleStat, TrunkInfo, Windows
-from sherpa.plan import PROPOSE, SKIP, Check, Entry, build_plan, render_console, yamlio
+from sherpa.model import Conventions, DirStat, GeneratorStat, GitLayer, Model, ModuleStat, SubDir, TrunkInfo, Windows
+from sherpa.plan import PROPOSE, SKIP, Check, Entry, Plan, build_plan, render_console, yamlio
 from sherpa.plan.rules import Unit, units_of
 from sherpa.scan import scan
 from tests.conftest import commit, git
-from tests.test_t1_modules import poly_repo  # noqa: F401 — fixture
 
 GOLDENS = Path(__file__).parent / "goldens"
 
@@ -38,6 +37,8 @@ def mod(
     dependents=(),
     is_test=False,
     kind="dotnet",
+    sub_dirs=(),
+    coupling=(),
 ):
     return ModuleStat(
         id=id_,
@@ -56,7 +57,13 @@ def mod(
         commits_30d=c30,
         authors_90d=authors,
         hotspots=[],
+        sub_dirs=list(sub_dirs),
+        coupling=list(coupling),
     )
+
+
+def sub(path: str, depth: int, *, files=6, src=None, package=True, c90=0, c30=0, authors=0):
+    return SubDir(path, depth, files, files if src is None else src, package, files * 10, c90, c30, authors)
 
 
 def dir_(path: str, *, files=20, c90=0, c30=0, authors=0, gen=0):
@@ -66,7 +73,7 @@ def dir_(path: str, *, files=20, c90=0, c30=0, authors=0, gen=0):
 def model(modules=(), dirs=(), generators=(), repo="Shop"):
     return Model(
         sherpa=__version__,
-        schema_version=3,
+        schema_version=4,
         repo=repo,
         origin="x",
         git=GitLayer(
@@ -370,6 +377,27 @@ def test_merge_decisions_keeps_by_key_and_counts():
     assert yamlio.merge_decisions(p, stale)[1] == 0
 
 
+def test_decide_by_address_short_and_full_ambiguous_unknown_and_conflict():
+    p = build_plan(big_model(3, 3))
+    kinds = {e.kind for e in p.entries}
+    assert "agent" in kinds and all(e.address == f"{e.kind}:{e.target}:{e.scope}" for e in p.entries)
+    d, n = yamlio.decide(p, ["agent:M00"], ["owner-doc:M01:src/M01"])
+    by = {e.address: e.decision for e in d.entries}
+    assert n == 2 and by["agent:M00:src/M00"] == "accept" and by["owner-doc:M01:src/M01"] == "reject"
+    assert yamlio.decide(p, [], []) == (p, 0)
+    with pytest.raises(ValueError, match="no such entry — entries of that kind: agent:M00:src/M00"):
+        yamlio.decide(p, ["agent:Nope"], [])
+    with pytest.raises(ValueError, match="no such entry — entries of that kind: none of that kind"):
+        yamlio.decide(p, ["eval:M00"], [])
+    with pytest.raises(ValueError, match="both --accept and --reject"):
+        yamlio.decide(p, ["agent:M00"], ["agent:M00"])
+    # two entries of one kind and target in different scopes: the short address is ambiguous
+    twin = replace(p.entries[1], scope="other/M00")
+    p2 = Plan(p.repo, p.model, p.thresholds, p.ranking, [*p.entries, twin], p.sherpa, p.schema_version, p.notes)
+    with pytest.raises(ValueError, match="ambiguous — owner-doc:M00:src/M00, owner-doc:M00:other/M00; give the scope"):
+        yamlio.decide(p2, [f"{twin.kind}:M00"], [])
+
+
 def test_small_units_without_dependents_get_no_owner_doc():
     p = build_plan(
         model(modules=[mod("tiny", "t", c90=3, files=2), mod("lib", "l", c90=3, files=2, dependents=("x",))])
@@ -412,6 +440,73 @@ def test_render_console_marks_decisions_and_notes():
 # ---------------------------------------------------------------- configuration
 
 
+def _single(kind="python", **kw):
+    """One module at the root — the most common repository shape (ADR-0020)."""
+    return model([mod("app", "", kind=kind, files=60, c90=30, c30=10, authors=3, **kw)])
+
+
+def test_sub_units_depth_rule_skips_pass_through_tests_and_non_packages():
+    subs = [
+        sub("src", 1, package=False),  # not a package: pass-through
+        sub("tests", 1),  # a package, but a test directory
+        sub("docs", 1, src=0, package=False),  # no source files
+        sub("src/app", 2),  # the only package at depth 2 → one candidate, go deeper
+        sub("src/app/scan", 3, files=4, c90=12),
+        sub("src/app/plan", 3, files=3, c90=9),
+        sub("src/app/apply", 3, files=6, c90=20),
+        sub("src/app/schemas", 3, src=0, package=False),
+        sub("src/app/.hidden", 3),
+        sub("src/app/apply/assets", 4, files=1, src=1),
+    ]
+    p = build_plan(_single(sub_dirs=subs))
+    ids = [e.target for e in p.entries if e.kind == "owner-doc"]
+    assert ids[:1] == ["app"] and set(ids) == {"app", "src/app/apply", "src/app/plan", "src/app/scan"}
+    docs = by_kind(p, "owner-doc")
+    assert docs["src/app/apply"].default == PROPOSE and docs["src/app/apply"].scope == "src/app/apply"
+    assert docs["src/app/scan"].default == SKIP and "4 files ✗" in docs["src/app/scan"].summary  # ADR-0014 floor
+    assert p.notes[0] == (
+        "3 sub-units of app by the depth rule (depth 3): src/app/apply, src/app/plan, src/app/scan — "
+        "[plan] units in sherpa.toml overrides the rule."
+    )
+    assert p.ranking["commits_90d"] == ["app", "src/app/apply", "src/app/scan", "src/app/plan"]
+
+
+def test_sub_units_generic_ecosystem_needs_no_package_flag():
+    subs = [sub("src", 1, package=False), sub("lib", 1, package=False), sub("public", 1, src=0, package=False)]
+    p = build_plan(_single(kind="node", sub_dirs=subs))
+    assert {e.target for e in p.entries if e.kind == "owner-doc"} == {"app", "src", "lib"}
+    assert "2 sub-units of app by the depth rule (depth 1): lib, src" in p.notes[0]
+
+
+def test_sub_units_config_override_and_off_switch():
+    subs = [sub("src/app/a", 3), sub("src/app/b", 3), sub("tools/cli", 2, package=False)]
+    p = build_plan(_single(sub_dirs=subs), PlanConfig(units=("tools/*",)))
+    assert {e.target for e in p.entries if e.kind == "owner-doc"} == {"app", "tools/cli"}
+    assert p.notes[0] == "1 sub-units of app from sherpa.toml [plan] units"
+    p = build_plan(_single(sub_dirs=subs), PlanConfig(units=()))
+    assert {e.target for e in p.entries if e.kind == "owner-doc"} == {"app"} and p.notes == []
+    p = build_plan(_single(sub_dirs=[sub("src/app/a", 3)]))  # one candidate at every depth: no sub-units
+    assert {e.target for e in p.entries if e.kind == "owner-doc"} == {"app"} and p.notes == []
+    assert "units" not in p.thresholds
+
+
+def test_sub_units_only_for_a_single_root_module():
+    subs = [sub("src/a", 2), sub("src/b", 2)]
+    two = model([mod("app", "", sub_dirs=subs), mod("lib", "packages/lib")])
+    assert {e.target for e in build_plan(two).entries if e.kind == "owner-doc"} == {"app", "lib"}
+
+
+def test_plan_config_units_key(tmp_path: Path):
+    (tmp_path / "sherpa.toml").write_text('[plan]\nunits = ["src/app/*", "tools/cli"]\n')
+    c = load(tmp_path).plan
+    assert c.units == ("src/app/*", "tools/cli") and "units" not in c.thresholds()
+    (tmp_path / "sherpa.toml").write_text("[plan]\nunits = []\n")
+    assert load(tmp_path).plan.units == ()
+    (tmp_path / "sherpa.toml").write_text('[plan]\nunits = "src/*"\n')
+    with pytest.raises(ValueError, match="units must be a list of path globs"):
+        load(tmp_path)
+
+
 def test_plan_config_from_toml_and_unknown_key(tmp_path: Path):
     (tmp_path / "sherpa.toml").write_text("[plan]\nagent_top = 0.5\nlibrarian_top_n = 3\n")
     c = load(tmp_path).plan
@@ -440,7 +535,7 @@ def check_golden(name: str, text: str) -> None:
     )
 
 
-def test_poly_fixture_golden(poly_repo: Path):  # noqa: F811
+def test_poly_fixture_golden(poly_repo: Path):
     m = scan(poly_repo, fetch=False)
     p = build_plan(m)
     assert [e.kind for e in p.entries if e.default == PROPOSE] == ["outcome"] + ["owner-doc"] * 8
@@ -474,8 +569,7 @@ def test_poly_fixture_golden(poly_repo: Path):  # noqa: F811
     check_golden("poly-console.txt", render_console(p, "harness-plan.yaml"))
 
 
-@pytest.fixture
-def active_repo(tmp_path: Path) -> Path:
+def build_active_repo(tmp_path: Path) -> Path:
     """5 Python modules; ``svc/pay`` with 24 commits by 2 authors and 40 files; Django migrations in ``svc/pay``;
     a test module more active than any business module; ``svc/old`` dormant (only one old commit)."""
     work = tmp_path / "seed"
@@ -542,7 +636,7 @@ def test_active_fixture_acceptance(active_repo: Path):
 # ---------------------------------------------------------------- CLI
 
 
-def test_cli_plan_scans_when_model_missing_then_reuses_and_keeps_decisions(poly_repo: Path, capsys):  # noqa: F811
+def test_cli_plan_scans_when_model_missing_then_reuses_and_keeps_decisions(poly_repo: Path, capsys):
     assert main(["plan", str(poly_repo), "--no-fetch"]) == 0
     out, err = capsys.readouterr()
     assert "model scanned" in err and out.startswith("harness-plan.yaml — 9 proposals")
@@ -554,16 +648,24 @@ def test_cli_plan_scans_when_model_missing_then_reuses_and_keeps_decisions(poly_
     out, err = capsys.readouterr()
     assert err == "" and "(1 decisions kept)" in out and " [reject]" in out
     assert "decision: reject" in plan_path.read_text(encoding="utf-8")
+    # decisions by flag: the same YAML a hand would write, kept on the next plan, refused when unknown
+    assert main(["plan", str(poly_repo), "--accept", "librarian:Shop.Pricing", "--reject", "agent:Shop.Pricing"]) == 0
+    out, _ = capsys.readouterr()
+    assert "(1 decisions kept, 2 decided now)" in out
+    assert main(["plan", str(poly_repo)]) == 0
+    assert "(3 decisions kept)" in capsys.readouterr()[0]
+    assert main(["plan", str(poly_repo), "--accept", "agent:Nope"]) == 1
+    assert "sherpa plan: --accept agent:Nope: no such entry" in capsys.readouterr()[1]
 
 
-def test_cli_plan_rescan_and_stdout(poly_repo: Path, capsys):  # noqa: F811
+def test_cli_plan_rescan_and_stdout(poly_repo: Path, capsys):
     assert main(["plan", str(poly_repo), "--rescan", "--no-fetch", "--out", "-"]) == 0
     out, err = capsys.readouterr()
     assert out.startswith("# harness-plan") and "model scanned" in err and "harness-plan.yaml — " in err
     assert not (poly_repo / ".sherpa" / "harness-plan.yaml").exists()
 
 
-def test_cli_plan_stale_model_triggers_rescan(poly_repo: Path, capsys):  # noqa: F811
+def test_cli_plan_stale_model_triggers_rescan(poly_repo: Path, capsys):
     mp = poly_repo / ".sherpa" / "codebase-model.json"
     mp.parent.mkdir()
     mp.write_text('{"schema_version": 2}')
@@ -572,7 +674,7 @@ def test_cli_plan_stale_model_triggers_rescan(poly_repo: Path, capsys):  # noqa:
     assert "rebuilding the model" in err and "schema_version 2" in err
 
 
-def test_cli_plan_invalid_decision_is_an_error(poly_repo: Path, capsys):  # noqa: F811
+def test_cli_plan_invalid_decision_is_an_error(poly_repo: Path, capsys):
     assert main(["plan", str(poly_repo), "--no-fetch"]) == 0
     pp = poly_repo / ".sherpa" / "harness-plan.yaml"
     pp.write_text(pp.read_text(encoding="utf-8").replace("decision: null", "decision: maybe", 1), encoding="utf-8")

@@ -16,6 +16,12 @@ What it records, per execution (= one user prompt until the next Stop), in ``.sh
   harness_rev  from .sherpa/state.json — the number a harness change has to be measured against
   correction   a follow-up prompt that starts with "no, that's wrong" (and friends) relabels the previous
             execution as failed — the cheapest outcome signal there is
+  prompt    the first 160 characters of the user prompt, so a label can be read next to what was asked
+
+Privacy: every record stays on this machine — ``.sherpa/telemetry/`` is git-ignored by the file sherpa writes
+next to it, nothing is uploaded, and the prompt excerpt is the only free text stored. A team that does not want
+prompt text on disk removes the hook entries from ``.claude/settings.json``; ``sherpa status`` then reports no
+outcomes, nothing else changes.
 
 Evaluation (labels per harness_rev, trend, share of unknown) is ``sherpa status`` in M5.
 """
@@ -29,7 +35,7 @@ import sys
 import time
 from pathlib import Path
 
-SHERPA_VERSION = "0.5.0"  # replaced on deploy
+SHERPA_VERSION = "0.6.0"  # replaced on deploy
 
 TEST_RE = re.compile(
     r"\b(pytest|python -m pytest|dotnet test|npm test|npm run test|pnpm test|yarn test|go test|cargo test|"

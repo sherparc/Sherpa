@@ -43,6 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--rescan", action="store_true", help="rebuild the model even if it exists")
     pl.add_argument("--no-fetch", action="store_true", help="skip 'git fetch origin' when (re)scanning")
     pl.add_argument("--out", help=f"output file; '-' = YAML to stdout (default: <repo>/{PLAN_OUT})")
+    pl.add_argument(
+        "--accept", action="append", default=[], metavar="KIND:TARGET[:SCOPE]", help="decide an entry (repeatable)"
+    )
+    pl.add_argument(
+        "--reject", action="append", default=[], metavar="KIND:TARGET[:SCOPE]", help="decide an entry (repeatable)"
+    )
 
     ap = sub.add_parser("apply", help="create the approved plan -> .claude/** and .sherpa/state.json (dry run first)")
     ap.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
@@ -131,6 +137,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     out = None if args.out == "-" else (Path(args.out) if args.out else repo / PLAN_OUT)
     previous = yamlio.load(out) if out and out.exists() else None
     plan, kept = yamlio.merge_decisions(plan, previous)
+    plan, decided = yamlio.decide(plan, args.accept, args.reject)
     plan, covered = yamlio.mark_covered(plan, _load_state(repo))
 
     if out is None:
@@ -139,7 +146,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
         return EXIT_OK
     yamlio.write(plan, out)
     sys.stdout.write(render_console(plan, out.name))
-    tails = [t for t, n in (("decisions kept", kept), ("covered by adopted files", covered)) if n for t in [f"{n} {t}"]]
+    counts = (("decisions kept", kept), ("decided now", decided), ("covered by adopted files", covered))
+    tails = [f"{n} {t}" for t, n in counts if n]
     print(f"→ {out}" + (f" ({', '.join(tails)})" if tails else ""), file=sys.stdout)
     return EXIT_OK
 

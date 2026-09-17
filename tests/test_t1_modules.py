@@ -27,11 +27,14 @@ from pathlib import Path
 import pytest
 
 from sherpa.gitinfo import resolve_trunk
+from sherpa.model import Coupling, CouplingStats, FileStat
 from sherpa.scan import scan
 from sherpa.scan.t0_git import collect
 from sherpa.scan.t1_modules import (
     assign_files,
     build_modules,
+    compute_coupling,
+    coupling_cap,
     detect_conventions,
     find_modules,
     is_test_file,
@@ -104,8 +107,7 @@ FILES: dict[str, str | bytes] = {
 }
 
 
-@pytest.fixture
-def poly_repo(tmp_path: Path) -> Path:
+def build_poly_repo(tmp_path: Path) -> Path:
     work = tmp_path / "seed"
     work.mkdir()
     git(work, "init", "-q", "-b", "main")
@@ -377,3 +379,81 @@ def test_detect_conventions_counts_loc_per_language():
 
 def test_scan_stays_deterministic_with_modules(poly_repo: Path):
     assert scan(poly_repo, fetch=False).to_json() == scan(poly_repo, fetch=False).to_json()
+
+
+# ---------------------------------------------------------------- model v4: coupling and sub-directories (ADR-0020/0021)
+
+
+def _data(commits):
+    from datetime import datetime, timedelta
+
+    from sherpa.gitinfo import Trunk
+    from sherpa.scan.t0_git import Commit, T0Data
+
+    now = datetime(2026, 3, 1, tzinfo=UTC)
+    cs = tuple(Commit(f"{i:040x}", a, now - timedelta(days=d), tuple(files)) for i, (a, d, files) in enumerate(commits))
+    return T0Data(
+        Trunk("origin/main", "candidate", "0" * 40), now, now - timedelta(days=90), now - timedelta(days=30), cs, (), {}
+    )
+
+
+def test_coupling_cap_and_floors():
+    assert coupling_cap(1) == 5 and coupling_cap(10) == 5 and coupling_cap(11) == 6 and coupling_cap(122) == 61
+    owner = {"a/x": "A", "b/x": "B", "c/x": "C", "d/x": "D", "e/x": "E", "f/x": "F", "g/x": "G", "n/x": None}
+    commits = [("u", 1, ["a/x", "b/x"])] * 6  # A and B change together six times
+    commits += [("u", 2, ["a/x"])] * 4  # A alone: A has 10 commits, B 6 → share A→B 0.6, B→A 1.0
+    commits += [("u", 3, ["a/x", "c/x"])] * 2  # below min_shared 5
+    commits += [("u", 4, ["a/x", "b/x", "c/x", "d/x", "e/x", "f/x", "g/x"])] * 3  # 7 modules > cap 5: skipped
+    commits += [("u", 5, ["n/x"])]  # no module: ignored, not counted
+    per, stats = compute_coupling(_data(commits), owner, list("ABCDEFG"))
+    assert stats == CouplingStats(cap=5, skipped_commits=3, measured_commits=12, min_shared=5, min_share=0.3)
+    assert per["A"] == [Coupling("B", 6, 0.5)]  # 6 of A's 12 measured commits
+    assert per["B"] == [Coupling("A", 6, 1.0)] and per["C"] == [] and per["G"] == []
+
+
+def test_coupling_top_three_ordered_by_shared_then_name():
+    owner = {f"{m}/x": m for m in "ABCDF"}
+    commits = [("u", 1, ["A/x", "B/x", "C/x", "D/x", "F/x"])] * 10  # five modules = the cap, still measured
+    commits += [("u", 1, ["A/x", "B/x"])] * 2 + [("u", 1, ["A/x", "C/x"])]
+    per, stats = compute_coupling(_data(commits), owner, list("ABCDF"))
+    assert stats.skipped_commits == 0
+    assert [(c.module, c.shared) for c in per["A"]] == [("B", 12), ("C", 11), ("D", 10)]  # F ties D, name order
+
+
+def test_sub_dirs_depth_source_files_package_and_commits():
+    from sherpa.scan.t1_modules import RawModule, sub_dirs_of
+
+    paths = [
+        "src/pkg/__init__.py",
+        "src/pkg/a/__init__.py",
+        "src/pkg/a/one.py",
+        "src/pkg/a/deep/x/y/z.py",
+        "src/pkg/b/README.md",
+        "docs/guide.md",
+        "setup.cfg",
+    ]
+    fstat = {p: FileStat(p, 10, False, 0, 0, 0, None) for p in paths}
+    data = _data([("u", 1, ["src/pkg/a/one.py"]), ("v", 40, ["src/pkg/a/one.py", "src/pkg/b/README.md"])])
+    m = RawModule("pkg", "", "python", "pyproject.toml", (), (), False)
+    subs = {s.path: s for s in sub_dirs_of(m, paths, fstat, data)}
+    assert set(subs) == {"src", "src/pkg", "src/pkg/a", "src/pkg/a/deep", "src/pkg/b", "docs"}  # depth ≤ 4
+    a = subs["src/pkg/a"]
+    assert (a.depth, a.files, a.source_files, a.package, a.loc) == (3, 3, 3, True, 30)
+    assert (a.commits_90d, a.commits_30d, a.authors_90d) == (2, 1, 2)
+    assert subs["src/pkg/b"].package is False and subs["src/pkg/b"].source_files == 0
+    assert subs["src"].package is False and subs["src"].files == 5
+    # a nested module: paths outside it are not its sub-directories
+    nested = RawModule("a", "src/pkg/a", "python", "src/pkg/a/pyproject.toml", (), (), False)
+    assert [s.path for s in sub_dirs_of(nested, paths, fstat, data)] == [
+        "src/pkg/a/deep",
+        "src/pkg/a/deep/x",
+        "src/pkg/a/deep/x/y",
+    ]
+
+
+def test_scan_carries_sub_dirs_and_coupling_stats(poly_repo: Path):
+    m = scan(poly_repo, fetch=False)
+    assert m.coupling.cap == 7 and m.coupling.min_shared == 5  # 14 modules → ceil(14/2)
+    assert all(c.shared >= 5 for x in m.modules for c in x.coupling)
+    pricing = next(x for x in m.modules if x.id == "Shop.Pricing")
+    assert pricing.sub_dirs == [] or all(s.path.startswith("src/Shop.Pricing/") for s in pricing.sub_dirs)

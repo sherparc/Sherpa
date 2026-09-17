@@ -7,7 +7,7 @@ would flip the no. Nothing is created; the plan is a YAML file you review and de
 ## Synopsis
 
 ```
-sherpa plan [REPO] [--rescan] [--no-fetch] [--out PATH | --out -]
+sherpa plan [REPO] [--rescan] [--no-fetch] [--out PATH | --out -] [--accept ADDRESS]... [--reject ADDRESS]...
 ```
 
 Reads `REPO/.sherpa/codebase-model.json`, writes `REPO/.sherpa/harness-plan.yaml`, prints the console view.
@@ -17,12 +17,18 @@ Reads `REPO/.sherpa/codebase-model.json`, writes `REPO/.sherpa/harness-plan.yaml
 1. Loads the model. When it is missing, has an old schema, or the trunk moved since the scan (`git fetch origin`
    first unless `--no-fetch`), it runs [`sherpa scan`](scan.md) itself and writes the model.
 2. Builds the **units**: every module plus every depth-1 directory no module covers (≥ 10 files, not a dot
-   directory). A root module covers everything — then there are no directory units.
+   directory). A repository with a single root module — one `pyproject.toml` or `package.json` at the top, the
+   most common shape — gets **sub-units** by the depth rule (ADR-0020): the first depth below the module at which
+   at least two directories are source directories (≥ 2 files in the module's language; a package with
+   `__init__.py` for Python; test and dot directories excluded). The root module keeps the repository-level owner
+   doc; sub-units are directory units with their own facts. `[plan] units = ["src/app/*"]` in `sherpa.toml`
+   replaces the rule, an empty list switches sub-units off; the note in the console says which applied.
 3. Ranks the business units (non-test, not generator-dominated) by commits/90d and commits/30d.
 4. Applies the stage-1 rules — rank **and** floor per building block (table below) — and produces one entry per
    (kind, target) with `evidence` (model fields only), `checks` (✓/✗ per criterion), `cost` and, for a no,
    `reason` with the flip criterion.
-5. Carries `decision:` values over from the previous `harness-plan.yaml` (matched by kind, target, scope).
+5. Carries `decision:` values over from the previous `harness-plan.yaml` (matched by kind, target, scope), then
+   applies `--accept`/`--reject` given on the command line.
 6. Writes the YAML (fixed field order, validated against the schema) and prints the console view.
 
 The rules, the reasoning and the calibration behind them: [concepts/harness-plan.md](../concepts/harness-plan.md).
@@ -51,6 +57,8 @@ takes over (ADR-0011: generated code is regenerated, not explained). All thresho
 | `--no-fetch` | fetch | no `git fetch origin` before checking whether the trunk moved or scanning |
 | `--out PATH` | `REPO/.sherpa/harness-plan.yaml` | write the plan elsewhere; decisions are read from that file too |
 | `--out -` | — | YAML to stdout, console view to stderr |
+| `--accept ADDRESS` | — | set `decision: accept` on one entry; repeatable. `ADDRESS` is `kind:target` or `kind:target:scope` (`agent:pay`, `owner-doc:web:svc/web`) — the same address the state and `status` use |
+| `--reject ADDRESS` | — | set `decision: reject`; repeatable. An unknown address is an error that lists the entries of that kind; a short address that matches two scopes is an error that asks for the scope |
 
 ## Output
 
@@ -105,6 +113,11 @@ that is not rejected and every `skip` that is accepted. Decisions survive re-pla
 were kept (`(2 decisions kept)`). An entry that disappears from the plan (a module was deleted) takes its decision
 with it; an entry that changes kind or scope is a new entry.
 
+For scripts and CI the same decision is a flag: `sherpa plan --accept librarian:pay --reject agent:pay` writes
+exactly the `decision:` values a hand would, and the tail counts them (`(2 decided now)`); the next plan keeps
+them like any other decision. Addresses are `kind:target[:scope]` — `sherpa plan` prints them as the first two
+columns, `status` and the state use the same string.
+
 `covered:` is set by [`sherpa adopt`](adopt.md) and recomputed from the state on every plan: the path of an
 existing file that already fills the entry (an agent or owner doc of that unit). A covered proposal is shown as
 `[covered by <path>]` and `apply` renders nothing for it; `decision: accept` overrides that when you want
@@ -125,9 +138,10 @@ fall back to a default.
 | 1 | `sherpa.toml [plan]` has unknown keys | `sherpa plan: sherpa.toml [plan]: unknown keys ['agent_top_n']; allowed: [...]` |
 | 1 | previous plan has an invalid decision | `sherpa plan: harness-plan.yaml: decision 'yes' at agent pay — allowed: ('accept', 'reject')` |
 | 1 | previous plan does not match the schema | `sherpa plan: harness-plan.yaml invalid at entries/3/kind: 'foo' is not one of [...]` |
+| 1 | `--accept`/`--reject` names no entry, or two | `sherpa plan: --accept agent:Nope: no such entry — entries of that kind: agent:pay:svc/pay` · `… ambiguous — owner-doc:x:a/x, owner-doc:x:b/x; give the scope` |
 
 Informational lines on stderr: `sherpa plan: model scanned → …`, `sherpa plan: origin/main moved since the last
-scan — rescanning`, `sherpa plan: rebuilding the model (model has schema_version 2, expected 3)`.
+scan — rescanning`, `sherpa plan: rebuilding the model (model has schema_version 3, expected 4)`.
 
 ## Determinism and performance
 
@@ -142,10 +156,11 @@ existing model the plan for a 15k-file monorepo with ~50 modules takes 0.16 s; t
 | "not listed, out of reach: 12 units for agent" | units that meet neither the rank nor the commit floor are counted, not listed — the flip criterion there is not information | none needed; raise `agent_top` to see more of them |
 | A directory like `infrastructure/` gets nothing | fewer than `dir_min_files` files, or a module covers it | lower `dir_min_files` |
 | A migrations project gets a skill instead of an agent | ≥ 50 % of its files are generator output | intended (ADR-0011); the skill names sources, config and command |
-| My decisions vanished | the entry's key changed (kind, target, scope) — e.g. a module was renamed | set the decision again on the new entry |
+| My decisions vanished | the entry's key changed (kind, target, scope) — e.g. a module was renamed | set the decision again on the new entry (`--accept kind:target`) |
+| My single-package repo shows sub-units I do not want (or the wrong ones) | the depth rule picked the first depth with two source directories | `[plan] units = [...]` in `sherpa.toml` names them; `units = []` switches them off |
 | `harness-plan.yaml invalid at …` | hand edit broke the schema (a check line without ✓/✗, a wrong kind) | fix the line or delete the file and re-plan (decisions are lost then) |
 
 ## See also
 
 [`sherpa scan`](scan.md) · [`sherpa apply`](apply.md) · [concepts/harness-plan.md](../concepts/harness-plan.md) ·
-ADR-0005 (YAML, check-in), ADR-0006 (rank and floor), ADR-0011, ADR-0012 (units, reach, decisions).
+ADR-0005 (YAML, check-in), ADR-0006 (rank and floor), ADR-0011, ADR-0012 (units, reach, decisions), ADR-0020 (sub-units).

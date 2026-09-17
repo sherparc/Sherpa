@@ -1,5 +1,5 @@
 <!-- sherpa:begin facts -->
-## pay (managed by sherpa, origin/main@REV, as of 2026-03-01)
+## pay (managed by sherpa, as of 2026-03-01)
 
 | field | value |
 |---|---|

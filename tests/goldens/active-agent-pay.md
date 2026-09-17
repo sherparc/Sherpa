@@ -20,7 +20,7 @@ knowledge:
 
 Read first: [.agents/docs/modules/pay.md](../../.agents/docs/modules/pay.md).
 Dependents that see your changes: `suite`.
-Scope: `svc/pay` (origin/main@REV, as of 2026-03-01).
+Scope: `svc/pay` (as of 2026-03-01).
 <!-- sherpa:end manifest -->
 
 ## How to work

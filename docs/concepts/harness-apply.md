@@ -5,7 +5,7 @@
 > [`src/sherpa/apply/`](../../src/sherpa/apply/) (`render.py` files, `__init__.py` actions and write, `state.py`,
 > `status.py`) and [`src/sherpa/check.py`](../../src/sherpa/check.py). Principles: ADR-0008 (dry run, outcome
 > minimum), ADR-0013 (managed blocks, single-source checker), ADR-0007/0017 (adopt, rebuildable state).
-> Status: M3c, v0.4.0.
+> Status: M3d, v0.6.0.
 
 Command reference (options, exit codes, troubleshooting): [`sherpa apply`](../commands/apply.md).
 
@@ -63,7 +63,7 @@ core; each target in `targets` adds its projection. Sherpa owns the blocks named
 
 | Plan entry | Core `<home>/…` | `claude` | `agents-md` |
 |---|---|---|---|
-| always | `scripts/sherpa-check.py`, `.sherpa/telemetry/.gitignore` | `CLAUDE.md` block `harness` (six lines; `@AGENTS.md` import in a new file when AGENTS.md exists or is generated) | `AGENTS.md` block `harness`: overview, index of nested files, root-module facts |
+| always | `scripts/sherpa-check.py`, `.sherpa/telemetry/.gitignore` | `CLAUDE.md` block `harness` (six lines; `@AGENTS.md` import in a new file when AGENTS.md exists or is generated) | `AGENTS.md` block `harness`: overview, index of the 20 most active nested files (the rest counted), root-module facts |
 | `outcome` | — | `.claude/hooks/sherpa-outcome.py`, hook entries in `.claude/settings.json` | — |
 | `owner-doc`, `test-infra` | `docs/modules/<slug>.md` block `facts` | `<unit>/CLAUDE.md` block `harness` (`@AGENTS.md`, or the facts when `agents-md` is off) | `<unit>/AGENTS.md` block `facts` + link to the owner doc |
 | `agent` | — | `.claude/agents/<slug>.md` blocks `knowledge` (manifest: `always` = owner doc, `on_demand` = generator skills) and `manifest` | — |
@@ -161,7 +161,10 @@ foreign state fails every reader with the way out in the message, and `adopt` re
 | `unknown` | no signal — a pure question/answer turn; honest, not bad |
 | correction | a follow-up prompt that starts with "no, that's wrong", "doesn't work", … adds a `correction` record for the previous execution — the cheapest outcome signal there is |
 
-Telemetry never enters the repo: `.sherpa/telemetry/.gitignore` ignores everything but itself. The evaluation
+Telemetry never enters the repo: `.sherpa/telemetry/.gitignore` ignores everything but itself. Privacy note: the
+record carries the first 160 characters of the prompt (`"prompt"` above) — the only free text sherpa ever
+stores, local only, never uploaded; a team that wants none of it removes the hook entries from
+`.claude/settings.json` and loses only the outcome labels. The evaluation
 (labels per `harness_rev`, trend, regression between two harness versions) is M5; `sherpa status` already shows
 the counts per `harness_rev`.
 

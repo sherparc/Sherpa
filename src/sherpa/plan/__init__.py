@@ -54,6 +54,12 @@ class Entry:
         return (self.kind, self.target, self.scope)
 
     @property
+    def address(self) -> str:
+        """The one address of an entry across plan, state and CLI (``agent:pay:svc/pay``) — like a Terraform
+        resource address: ``kind:target:scope``, ":" because targets may contain "/" (Go module paths)."""
+        return f"{self.kind}:{self.target}:{self.scope}"
+
+    @property
     def summary(self) -> str:
         """Console line; skills are named after their family, so their location comes first."""
         parts = [c.short for c in self.checks]

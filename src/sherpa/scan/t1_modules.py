@@ -27,7 +27,7 @@ from dataclasses import dataclass, replace
 from fnmatch import fnmatchcase
 from pathlib import Path
 
-from sherpa.model import FileStat, ModuleStat
+from sherpa.model import Coupling, CouplingStats, FileStat, ModuleStat, SubDir
 from sherpa.scan.t0_git import T0Data, blob_contents
 
 SKIP_DIRS = (
@@ -317,6 +317,11 @@ def find_modules(paths: list[str], contents: dict[str, bytes | None]) -> list[Ra
 # --------------------------------------------------------------------------- resolution + aggregation
 
 
+def is_source(path: str) -> bool:
+    """A file in a language the T1 layer knows (``_EXT_LANG``) — code, not data, goldens or docs."""
+    return posixpath.splitext(path)[1].lower() in _EXT_LANG
+
+
 def is_test_file(path: str) -> bool:
     parts = path.split("/")
     if any(p in TEST_DIR_NAMES for p in parts[:-1]):
@@ -376,6 +381,106 @@ def build_modules(
     )
 
 
+# Source extensions per module kind: what counts as a "source file" for sub-directories (ADR-0020).
+KIND_EXTS: dict[str, tuple[str, ...]] = {
+    "dotnet": (".cs", ".fs", ".vb"),
+    "python": (".py", ".pyi"),
+    "node": (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte"),
+    "go": (".go",),
+    "rust": (".rs",),
+    "java": (".java", ".kt", ".scala", ".groovy"),
+}
+SUB_DIR_DEPTH = 4
+COUPLING_MIN_SHARED = 5
+COUPLING_MIN_SHARE = 0.30
+COUPLING_TOP = 3
+
+
+def coupling_cap(n_modules: int) -> int:
+    """Commits touching more modules than this are noise for coupling: squash-merged PRs, mass renames, format
+    runs. CodeScene and code-maat (``--max-changeset-size``) exclude them the same way; max(5, half the modules)
+    keeps small repositories measurable."""
+    return max(5, -(-n_modules // 2))
+
+
+def compute_coupling(
+    data: T0Data, owner: dict[str, str | None], module_ids: list[str]
+) -> tuple[dict[str, list[Coupling]], CouplingStats]:
+    """Temporal coupling per module (Tornhill): partners that changed in the same commits, above the floors."""
+    cap = coupling_cap(len(module_ids))
+    per_module: dict[str, int] = defaultdict(int)
+    pairs: dict[tuple[str, str], int] = defaultdict(int)
+    skipped = measured = 0
+    for c in data.commits:
+        touched = sorted({owner[f] for f in c.files if owner.get(f)})
+        if not touched:
+            continue
+        if len(touched) > cap:
+            skipped += 1
+            continue
+        measured += 1
+        for m in touched:
+            per_module[m] += 1
+        for i, a in enumerate(touched):
+            for b in touched[i + 1 :]:
+                pairs[(a, b)] += 1
+    partners: dict[str, list[Coupling]] = defaultdict(list)
+    for (a, b), n in pairs.items():
+        for me, other in ((a, b), (b, a)):
+            share = n / per_module[me] if per_module[me] else 0.0
+            if n >= COUPLING_MIN_SHARED and share >= COUPLING_MIN_SHARE:
+                partners[me].append(Coupling(other, n, round(share, 2)))
+    out = {m: sorted(partners[m], key=lambda c: (-c.shared, c.module))[:COUPLING_TOP] for m in module_ids}
+    return out, CouplingStats(cap, skipped, measured, COUPLING_MIN_SHARED, COUPLING_MIN_SHARE)
+
+
+def sub_dirs_of(module: RawModule, paths: list[str], fstat: dict[str, FileStat], data: T0Data) -> list[SubDir]:
+    """Directories inside the module (depths 1–``SUB_DIR_DEPTH`` below its path) with files, source files, LOC,
+    the Python-package flag and commits — the plan's depth rule reads them (ADR-0020)."""
+    base = module.path + "/" if module.path else ""
+    exts = KIND_EXTS.get(module.kind, ())
+    agg: dict[str, dict] = {}
+    file_dirs: dict[str, list[str]] = defaultdict(list)
+    for p in paths:
+        if not p.startswith(base):
+            continue
+        rel_parts = p[len(base) :].split("/")[:-1]
+        f = fstat[p]
+        for depth in range(1, min(len(rel_parts), SUB_DIR_DEPTH) + 1):
+            d = base + "/".join(rel_parts[:depth])
+            a = agg.setdefault(d, {"depth": depth, "files": 0, "source_files": 0, "package": False, "loc": 0})
+            a["files"] += 1
+            a["loc"] += f.loc or 0
+            if p.lower().endswith(exts):
+                a["source_files"] += 1
+            if depth == len(rel_parts) and rel_parts[-1:] and p.endswith("/__init__.py"):
+                a["package"] = True
+            file_dirs[p].append(d)
+    c90: dict[str, set[str]] = defaultdict(set)
+    c30: dict[str, set[str]] = defaultdict(set)
+    authors: dict[str, set[str]] = defaultdict(set)
+    for c in data.commits:
+        for d in {d for f in c.files for d in file_dirs.get(f, ())}:
+            c90[d].add(c.sha)
+            authors[d].add(c.author)
+            if c.date > data.since_30:
+                c30[d].add(c.sha)
+    return [
+        SubDir(
+            path=d,
+            depth=a["depth"],
+            files=a["files"],
+            source_files=a["source_files"],
+            package=a["package"],
+            loc=a["loc"],
+            commits_90d=len(c90[d]),
+            commits_30d=len(c30[d]),
+            authors_90d=len(authors[d]),
+        )
+        for d, a in sorted(agg.items())
+    ]
+
+
 def build_modules_from(
     data: T0Data,
     files: list[FileStat],
@@ -384,10 +489,14 @@ def build_modules_from(
     *,
     hotspots_per_module: int = 3,
     outputs: frozenset[str] = frozenset(),
+    coupling: dict[str, list[Coupling]] | None = None,
 ) -> list[ModuleStat]:
-    """Like ``build_modules``, but with modules already detected and files assigned (shared with the generators)."""
+    """Like ``build_modules``, but with modules already detected and files assigned (shared with the generators).
+    ``coupling`` comes from ``compute_coupling`` (``scan`` keeps its stats for the model); computed here if absent."""
     if not raw:
         return []
+    if coupling is None:
+        coupling, _ = compute_coupling(data, owner, [m.id for m in raw])
     deps = resolve_deps(raw)
     dependents: dict[str, list[str]] = defaultdict(list)
     for mid, ds in deps.items():
@@ -400,6 +509,7 @@ def build_modules_from(
                 tested_by[d].append(m.id)
 
     fstat = {f.path: f for f in files}
+    files_of: dict[str, list[str]] = defaultdict(list)
     nfiles: dict[str, int] = defaultdict(int)
     loc: dict[str, int] = defaultdict(int)
     tfiles: dict[str, int] = defaultdict(int)
@@ -409,6 +519,7 @@ def build_modules_from(
         if mid is None:
             continue
         f = fstat[p]
+        files_of[mid].append(p)
         nfiles[mid] += 1
         loc[mid] += f.loc or 0
         if is_test_file(p):
@@ -447,6 +558,8 @@ def build_modules_from(
             commits_30d=len(c30[m.id]),
             authors_90d=len(authors[m.id]),
             hotspots=[p for _, p in sorted(scored[m.id])[:hotspots_per_module]],
+            sub_dirs=sub_dirs_of(m, files_of[m.id], fstat, data),
+            coupling=coupling.get(m.id, []),
         )
         for m in sorted(raw, key=lambda m: (m.path, m.id))
     ]

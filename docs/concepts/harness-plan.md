@@ -3,7 +3,7 @@
 > Owner of: invocation, rules, file format, interpretation. Field semantics belong to the schema
 > [`src/sherpa/schemas/harness-plan.schema.json`](../../src/sherpa/schemas/harness-plan.schema.json) (v1); code in
 > [`src/sherpa/plan/`](../../src/sherpa/plan/) (`rules.py` rules, `yamlio.py` format). Principles: ADR-0006 (rank and
-> floor), ADR-0011 (generators), ADR-0012 (units, visibility, decisions). Status: M2, v0.4.0.
+> floor), ADR-0011 (generators), ADR-0012 (units, visibility, decisions). Status: M3d, v0.6.0.
 
 Command reference (options, exit codes, troubleshooting): [`sherpa plan`](../commands/plan.md).
 
@@ -29,6 +29,19 @@ Rules work on **units**: every module from T1 plus every depth-1 directory that 
 (`infrastructure/`, `pipelines/`), is not a dot directory and reaches `dir_min_files`. A root module covers
 everything. Units are `module` or `dir`; both carry files, LOC, generator output, commits/90d, commits/30d,
 authors/90d, dependents.
+
+**Sub-units for single-manifest repositories** (ADR-0020). A repository with exactly one module at its root —
+one `pyproject.toml`, `package.json`, `go.mod` — would otherwise be one unit, and the plan's strongest case
+(units, ranks, reasoned no's) would never show. The depth rule takes the module's `sub_dirs` from the model and
+walks down: the first depth at which at least two directories are *source directories* — ≥ 2 files in the
+module's language, and for Python a package (`__init__.py`) — becomes the unit layer; test directories
+(`tests`, `test`, `spec`, `__tests__`) and dot directories never qualify, a pass-through directory (`src/`
+holding one package) is skipped by construction because it is one candidate, not two. Sub-units are `dir` units
+with the directory's own files, LOC and churn and no dependents; the root module keeps the repository-level
+owner doc, and every other rule (floors, ranks, dormant, small) applies unchanged — a three-file package is a
+reasoned no with its flip criterion, like any small unit. `[plan] units = ["src/app/*", "tools/cli"]` replaces
+the rule with exactly those directories; `units = []` switches sub-units off. The console note names what
+applied and the key that changes it.
 
 The **ranking** runs over business units (no test units, no generator-dominated ones). Quartile = rank ≤
 ⌈n · agent_top⌉; ties by id. It is in the plan header (`ranking`) so every "rank 7/44" can be recomputed.

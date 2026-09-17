@@ -24,10 +24,12 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 
 from sherpa.config import PlanConfig
-from sherpa.model import GeneratorStat, Model
+from sherpa.model import GeneratorStat, Model, ModuleStat, SubDir
 from sherpa.plan import PROPOSE, SKIP, Check, Entry, Plan
+from sherpa.scan.t1_modules import SUB_DIR_DEPTH, TEST_DIR_NAMES
 
 MAX_NAMED = 12  # names in a note; the entries themselves list every unit
 
@@ -64,7 +66,49 @@ class Unit:
         return self.commits_90d == 0 and self.dependents == 0
 
 
+def sub_units_of(m: ModuleStat, cfg: PlanConfig) -> tuple[list[Unit], str | None]:
+    """Sub-units of a single-manifest repository (ADR-0020). The depth rule: the first depth below the module's
+    path at which at least two directories are *source directories* — ≥ 2 files in the module's language, a
+    package for Python — test directories excluded. ``[plan] units = [globs]`` replaces the rule; an empty list
+    switches sub-units off. Returns the units and a one-line explanation for the plan notes."""
+
+    def unit(s: SubDir) -> Unit:
+        return Unit(s.path, "dir", s.path, s.files, s.loc, 0, s.commits_90d, s.commits_30d, s.authors_90d, 0, False)
+
+    def is_test_dir(path: str) -> bool:
+        return any(part in TEST_DIR_NAMES for part in path.split("/"))
+
+    if cfg.units is not None:
+        chosen = sorted((s for s in m.sub_dirs if any(fnmatchcase(s.path, g) for g in cfg.units)), key=lambda s: s.path)
+        if not chosen:
+            return [], None
+        return [unit(s) for s in chosen], f"{len(chosen)} sub-units of {m.id} from sherpa.toml [plan] units"
+    for depth in range(1, SUB_DIR_DEPTH + 1):
+        candidates = [
+            s
+            for s in m.sub_dirs
+            if s.depth == depth
+            and s.source_files >= 2
+            and (s.package or m.kind != "python")
+            and not is_test_dir(s.path)
+            and not s.path.rsplit("/", 1)[-1].startswith(".")
+        ]
+        if len(candidates) >= 2:
+            candidates.sort(key=lambda s: s.path)
+            names = ", ".join(s.path for s in candidates[:MAX_NAMED])
+            return [unit(s) for s in candidates], (
+                f"{len(candidates)} sub-units of {m.id} by the depth rule (depth {depth}): {names} — "
+                "[plan] units in sherpa.toml overrides the rule."
+            )
+    return [], None
+
+
 def units_of(model: Model, cfg: PlanConfig) -> list[Unit]:
+    units, _ = units_and_note(model, cfg)
+    return units
+
+
+def units_and_note(model: Model, cfg: PlanConfig) -> tuple[list[Unit], str | None]:
     units = [
         Unit(
             m.id,
@@ -82,8 +126,11 @@ def units_of(model: Model, cfg: PlanConfig) -> list[Unit]:
         for m in model.modules
     ]
     covered = [m.path for m in model.modules]
+    if len(model.modules) == 1 and covered == [""]:
+        subs, note = sub_units_of(model.modules[0], cfg)
+        return units + subs, note
     if "" in covered:
-        return units
+        return units, None
     for d in model.git.dirs:
         p = d.path
         if not p or "/" in p or p.startswith(".") or d.files < cfg.dir_min_files:
@@ -96,7 +143,7 @@ def units_of(model: Model, cfg: PlanConfig) -> list[Unit]:
                 p, "dir", p, d.files, d.loc, d.generated_files, d.commits_90d, d.commits_30d, d.authors_90d, 0, is_test
             )
         )
-    return units
+    return units, None
 
 
 def _rank(units: list[Unit], key: str) -> dict[str, int]:
@@ -279,7 +326,7 @@ def skill_entry(g: GeneratorStat, cfg: PlanConfig) -> Entry:
 
 
 def build(model: Model, cfg: PlanConfig) -> Plan:
-    units = units_of(model, cfg)
+    units, units_note = units_and_note(model, cfg)
     by_module_gen: dict[str, GeneratorStat] = {}  # largest generator per module, for the hint in the no
     for g in sorted(model.generators, key=lambda g: (-g.generated_files, g.family)):
         if g.module and g.skill:
@@ -329,7 +376,7 @@ def build(model: Model, cfg: PlanConfig) -> Plan:
     entries.sort(key=lambda e: (e.default != PROPOSE, kind_order[e.kind], _pos(e, r90)))
 
     dormant = sorted(u.id for u in business if u.dormant)
-    notes = []
+    notes = [units_note] if units_note else []
     if dormant:
         names = ", ".join(dormant[:MAX_NAMED]) + (
             f", … (+{len(dormant) - MAX_NAMED} more)" if len(dormant) > MAX_NAMED else ""
@@ -368,7 +415,7 @@ def build(model: Model, cfg: PlanConfig) -> Plan:
             "as_of": model.git.windows.as_of,
             "sherpa": model.sherpa,
         },
-        thresholds=dict(vars(cfg)),
+        thresholds=cfg.thresholds(),
         ranking={
             "commits_90d": [u.id for u in sorted(rankable, key=lambda u: r90[u.id])],
             "commits_30d": [u.id for u in sorted(rankable, key=lambda u: r30[u.id])],

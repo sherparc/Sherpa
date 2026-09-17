@@ -22,7 +22,7 @@ from sherpa.cli import main
 from sherpa.plan import PROPOSE, Check, Entry, build_plan
 from sherpa.scan import scan
 from tests.conftest import commit
-from tests.test_plan import active_repo, check_golden, mod, model  # noqa: F401 — fixture and builders
+from tests.test_plan import check_golden, mod, model
 
 
 def entry(kind, target, scope="", default=PROPOSE, decision=None, **evidence) -> Entry:
@@ -213,6 +213,76 @@ def test_directory_unit_and_accepted_librarian():
     assert lib.content.startswith("---\nname: pay-sync\ndescription: ")
 
 
+def test_coupling_row_and_sub_unit_facts():
+    from sherpa.model import Coupling, FileStat
+    from tests.test_plan import sub
+
+    subs = [sub("src/app/pay", 3, files=6, c90=12, c30=4, authors=2), sub("src/app/core", 3, files=5, c90=3)]
+    m = model(
+        [
+            mod(
+                "app",
+                "",
+                kind="python",
+                files=60,
+                c90=30,
+                c30=10,
+                authors=3,
+                sub_dirs=subs,
+                coupling=[Coupling("shared-lib", 15, 0.5), Coupling("web", 9, 0.3)],
+            ),
+        ]
+    )
+    files = [
+        FileStat("src/app/pay/engine.py", 400, False, 9, 3, 2, None),
+        FileStat("src/app/pay/models.py", 200, False, 4, 1, 1, None),
+        FileStat("src/app/pay/gen.py", 900, True, 9, 1, 1, None),  # generated: never a hotspot
+        FileStat("src/app/pay/quiet.py", 900, False, 0, 0, 0, None),  # no commits: never a hotspot
+        FileStat("tests/test_pay.py", 100, False, 2, 1, 1, None),
+        FileStat("tests/unit/pay_test.py", 50, False, 1, 1, 1, None),
+        FileStat("src/app/pay/tests/test_local.py", 10, False, 1, 1, 1, None),  # inside the unit: not "naming it"
+        FileStat("tests/goldens/pay-console.txt", 10, False, 1, 1, 1, None),  # a golden: data under tests/, not code
+    ]
+    m = replace(m, git=replace(m.git, files=files))
+    p = build_plan(m)
+    by_path = {t.path: t for t in targets_for(p, m)}
+    facts = by_path[".agents/docs/modules/app.md"].blocks["facts"]
+    assert "| changes together with | `shared-lib` (15 of 30 commits, 50 %), `web` (9 of 30 commits, 30 %) |" in facts
+    assert "changes together with" in by_path["AGENTS.md"].blocks["harness"]  # the root proximity block too
+    # the root doc knows its sub-units and says where their files are described (one owner per fact)
+    assert "| files / LOC | 60 / 600 — 11 files in 2 sub-units, described in their own owner docs |" in facts
+    assert (
+        "| contains | [src/app/core](src-app-core.md) (5 files, 3 commits/90d), "
+        "[src/app/pay](src-app-pay.md) (6 files, 12 commits/90d) |" in facts
+    )
+    pay = by_path[".agents/docs/modules/src-app-pay.md"].blocks["facts"]
+    assert "| kind | directory inside module `app` (package) |" in pay
+    assert "| files / LOC | 6 / 60 (6 source files) |" in pay and "| commits 90d / 30d | 12 / 4 · 2 authors |" in pay
+    assert "| hotspots | `src/app/pay/engine.py`, `src/app/pay/models.py`, `src/app/pay/tests/test_local.py` |" in pay
+    assert "| tests naming it | `tests/test_pay.py`, `tests/unit/pay_test.py` |" in pay
+    core = by_path[".agents/docs/modules/src-app-core.md"].blocks["facts"]
+    assert "| hotspots | — |" in core and "| tests naming it | none — a name match, not a dependency |" in core
+    nested = by_path["src/app/pay/AGENTS.md"].blocks["facts"]
+    assert "| part of | `app` — 6 files, 12 commits/90d |" in nested
+    assert (
+        "| hotspots | `src/app/pay/engine.py`, `src/app/pay/models.py`, `src/app/pay/tests/test_local.py` |" in nested
+    )
+    assert "changes together with" not in nested  # coupling is measured per module, not per sub-unit
+
+
+def test_root_index_is_capped_and_ordered_by_rank():
+    from sherpa.apply.render import INDEX_MAX
+
+    mods = [mod(f"m{i:02d}", f"svc/m{i:02d}", c90=i + 1, files=10) for i in range(INDEX_MAX + 6)]
+    m = model(mods)
+    p = build_plan(m)
+    root = {t.path: t for t in targets_for(p, m)}["AGENTS.md"].blocks["harness"]
+    lines = [ln for ln in root.splitlines() if ln.startswith("- `svc/")]
+    assert len(lines) == INDEX_MAX and lines[0] == "- `svc/m25/AGENTS.md` — m25" and lines[-1].endswith("m06")
+    assert "- … and 6 more, each with its own AGENTS.md; every unit is listed in `.agents/docs/modules/`" in root
+    assert "most active first" in root
+
+
 # ---------------------------------------------------------------- plan_files: ownership modes
 
 
@@ -348,7 +418,7 @@ def applied(repo: Path) -> None:
     assert main(["apply", str(repo), "--yes"]) == 0
 
 
-def test_apply_is_idempotent_and_deterministic(active_repo: Path, capsys):  # noqa: F811
+def test_apply_is_idempotent_and_deterministic(active_repo: Path, capsys):
     applied(active_repo)
     out = capsys.readouterr().out
     assert "18 to add, 0 to change, 0 unchanged, 0 skipped." in out and "check: 0 FAIL, 0 WARN" in out
@@ -384,7 +454,23 @@ def test_harness_rev_changes_only_with_managed_content():
     assert rev != state_mod.harness_rev(files, version="9.9.9")
 
 
-def test_rescan_updates_the_facts_block_and_keeps_human_text(active_repo: Path, capsys):  # noqa: F811
+def test_trunk_move_without_activity_changes_no_block(active_repo: Path, capsys):
+    """ADR-0019: a merge that touches nothing a unit measures moves the rev, not the numbers — apply says
+    ``nothing to do.`` instead of rewriting every block with a new stamp."""
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    seed = active_repo.parent / "seed"
+    commit(seed, "docs only", {"README.md": "# shop\n"}, date="2026-03-01T12:00:00Z", author="A")  # same window end
+    subprocess.run(["git", "push", "-q", str(active_repo.parent / "origin.git"), "main"], cwd=seed, check=True)
+    subprocess.run(["git", "fetch", "-q", "origin"], cwd=active_repo, check=True)
+    capsys.readouterr()
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "nothing to do." in out and "~" not in out.split("\n", 2)[2]
+
+
+def test_rescan_updates_the_facts_block_and_keeps_human_text(active_repo: Path, capsys):
     applied(active_repo)
     doc = active_repo / ".agents" / "docs" / "modules" / "pay.md"
     doc.write_text(
@@ -455,7 +541,7 @@ def test_state_round_trip_and_schema_guard(tmp_path: Path):
 # ---------------------------------------------------------------- status
 
 
-def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, capsys):  # noqa: F811
+def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, capsys):
     applied(active_repo)
     capsys.readouterr()
     assert main(["status", str(active_repo)]) == 0
@@ -522,7 +608,7 @@ def test_cli_apply_needs_plan_and_model(tmp_path: Path, capsys):
     assert "codebase-model.json not found" in capsys.readouterr().err
 
 
-def test_cli_apply_dry_run_asks_and_aborts(active_repo: Path, capsys, monkeypatch):  # noqa: F811
+def test_cli_apply_dry_run_asks_and_aborts(active_repo: Path, capsys, monkeypatch):
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
     capsys.readouterr()
     assert main(["apply", str(active_repo)]) == 0  # no terminal → dry run only
@@ -538,7 +624,7 @@ def test_cli_apply_dry_run_asks_and_aborts(active_repo: Path, capsys, monkeypatc
     assert "18 files written" in capsys.readouterr().out and (active_repo / "CLAUDE.md").exists()
 
 
-def test_cli_check(active_repo: Path, capsys):  # noqa: F811
+def test_cli_check(active_repo: Path, capsys):
     applied(active_repo)
     capsys.readouterr()
     assert main(["check", str(active_repo)]) == 0
@@ -549,7 +635,7 @@ def test_cli_check(active_repo: Path, capsys):  # noqa: F811
 # ---------------------------------------------------------------- goldens (the README shows these)
 
 
-def test_active_fixture_goldens(active_repo: Path, capsys):  # noqa: F811
+def test_active_fixture_goldens(active_repo: Path, capsys):
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
     capsys.readouterr()
     assert main(["apply", str(active_repo), "--dry-run"]) == 0
@@ -731,7 +817,7 @@ def test_resolve_layout_detects_asks_and_remembers(tmp_path: Path, monkeypatch):
     )
 
 
-def test_cli_apply_refuses_ambiguous_home_without_terminal(active_repo: Path, capsys):  # noqa: F811
+def test_cli_apply_refuses_ambiguous_home_without_terminal(active_repo: Path, capsys):
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
     (active_repo / ".claude").mkdir()
     (active_repo / ".agents").mkdir()
@@ -740,7 +826,7 @@ def test_cli_apply_refuses_ambiguous_home_without_terminal(active_repo: Path, ca
     assert 'Set [apply] home = ".agents" or ".claude" in sherpa.toml' in capsys.readouterr().err
 
 
-def test_existing_nested_agents_md_gets_the_block_appended(active_repo: Path, capsys):  # noqa: F811
+def test_existing_nested_agents_md_gets_the_block_appended(active_repo: Path, capsys):
     nested = active_repo / "svc" / "pay" / "AGENTS.md"
     nested.write_text("# pay — team notes\n\nRun `make test` first.\n", encoding="utf-8")
     root = active_repo / "AGENTS.md"

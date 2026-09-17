@@ -19,6 +19,7 @@
     generated_share = 0.5              # from this share of generator output: no agent/librarian, a skill instead
     skill_min_generated_files = 5      # skill proposal from this many generated files (or config, see rules)
     owner_doc_min_files = 5            # owner doc from this many files, unless something depends on the unit
+    units = ["src/sherpa/*"]           # single-manifest repos: sub-units by glob instead of the depth rule (ADR-0020)
 
     [apply]                            # target layer (ADR-0015); both default to detection, see docs/commands/apply.md
     home = ".agents"                   # where owner docs, skills and the checker copy live: ".agents" or ".claude"
@@ -62,6 +63,11 @@ class PlanConfig:
     generated_share: float = 0.5
     skill_min_generated_files: int = 5
     owner_doc_min_files: int = 5
+    units: tuple[str, ...] | None = None  # None = depth rule; a list = these globs (empty = no sub-units)
+
+    def thresholds(self) -> dict[str, float]:
+        """The numeric rules as the plan header records them; ``units`` is a list and travels as a note."""
+        return {k: v for k, v in vars(self).items() if k != "units"}
 
 
 HOMES = (".agents", ".claude")
@@ -93,7 +99,13 @@ def load(repo: Path) -> Config:
     unknown = sorted(set(pl) - set(known))
     if unknown:
         raise ValueError(f"sherpa.toml [plan]: unknown keys {unknown}; allowed: {sorted(known)}")
-    plan = PlanConfig(**{k: (float(v) if known[k] == "float" else int(v)) for k, v in pl.items()})
+    units = pl.pop("units", None)
+    if units is not None and (not isinstance(units, list) or not all(isinstance(u, str) for u in units)):
+        raise ValueError('sherpa.toml [plan]: units must be a list of path globs, e.g. ["src/app/*"]')
+    plan = PlanConfig(
+        **{k: (float(v) if known[k] == "float" else int(v)) for k, v in pl.items()},
+        units=tuple(units) if units is not None else None,
+    )
     ap = raw.get("apply", {})
     unknown = sorted(set(ap) - {"home", "targets"})
     if unknown:

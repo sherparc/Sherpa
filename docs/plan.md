@@ -1,7 +1,7 @@
 # Sherpa — Plan
 
-> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 8: M2b done — GitHub Releases, `doctor`, `self-update`, the daily hint; §2.7 what ships; Q5, Q10, Q11 decided) · **Author:** Claude (Opus 5) with Andrei
-> **Status:** v0.5.0 — M0, M1, M1a, M2, M2b, M3a, M3t, M3c done; order from here: M3d → M5 → M6-lite → M4 → M6 → M3b → M7 (§7.3)
+> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 9: M3d done — stamp without rev, sub-units, coupling with a size cap, `--accept/--reject`, capped index, privacy note; §8 retro after M2b with the two gaps the review caught before they shipped) · **Author:** Claude (Opus 5) with Andrei
+> **Status:** v0.6.0 — M0, M1, M1a, M2, M2b, M3a, M3t, M3c, M3d done; order from here: M5 → M6-lite → M4 → M6 → M3b → M7 (§7.3)
 > **Origin of the patterns:** production Claude Code harnesses built and analysed in practice (owner docs, agents with
 > knowledge manifests, librarians, deterministic checkers) plus the industry patterns in §2. Sherpa is a generic
 > product; no customer project is named anywhere in this repo.
@@ -248,7 +248,7 @@ cached: it can never slow or fail a command. Test corpus check: `doctor` on all 
 | M3a ✅ | `apply` with dry-run default, managed blocks, state, **outcome minimum** (hook, labels, `harness_rev`), checker with rollback, `status`, `check` | second run = all `=`, state and tree hash unchanged; hand-edited blocks skipped, other blocks still regenerated; rollback on a new FAIL tested; 213 tests, 98 %; 61 files for a 15k-file monorepo plan in 0.15 s |
 | M3t ✅ | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files, `[apply]` config, ask when both homes exist | five-module fixture with both targets: 18 files, second run all `=`; existing root and nested `AGENTS.md` get the block appended; a 122-module corpus repo: 243 files in 0.2 s; 222 tests |
 | M3c ✅ | `sherpa adopt` (§2.6) — reads `.claude/`, `.agents/` and AGENTS.md hierarchies; covered entries; rebuildable state (ADR-0017) | existing-harness fixture: 6 files adopted, 0 bytes changed, 2 entries covered, gaps listed; torn state rebuilt with the same `harness_rev`; a 16-module corpus repo with 12 hand-written AGENTS.md: 0.22 s, 32 files rebuilt after a lost state; 230 tests, 98 % |
-| M3d | low-hanging fruit from the retro (§7): stamp without rev, sub-units for single-manifest repos, change coupling, `plan --accept/--reject`, capped root index, privacy note | a trunk move rewrites only blocks whose numbers changed (test: two consecutive revs, no activity → `nothing to do.`); Sherpa's own plan lists `scan`, `plan`, `apply` as units; a coupling row on the corpus with ≥ 2 co-changing modules; root `AGENTS.md` of the 122-module repo ≤ 40 lines |
+| M3d ✅ | low-hanging fruit from the retro (§7) plus the two preconditions the review found (§8): stamp without rev (ADR-0019) with legacy-stamp recognition in `adopt` (ADR-0022), model v4 with `sub_dirs` and sub-units by the depth rule (ADR-0020), change coupling with a size cap (ADR-0021), `plan --accept/--reject` by address, root index capped at 20 by rank, privacy note for the hook, session-built fixtures | `test_trunk_move_without_activity_changes_no_block`: two revs, no activity → `nothing to do.`; `test_adopt_recognises_an_older_stamp…`: 0.5.0 bytes → lost state → adopt → apply → `nothing to do.`; Sherpa's own plan lists `src/sherpa/apply`, `plan`, `scan` as units; `test_root_index_is_capped_and_ordered_by_rank`; suite 12 s → 7 s on Linux; 296 tests, 98 % |
 | M3b | adapters `dotnet` + `python` (T2: anchors, patterns) — **proposed after M6-lite** (§7.3) | a scan yields the anchors a harness checker verifies today; owner docs get anchors |
 | M4 | auto-evals from the graph, `status` with baseline | eval run on the fixture ≥ 90 %; regression is reported |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev`, trend, share of `unknown` | first 10 executions on a corpus repo with a label ≠ `unknown`; regression between two harness versions visible |
@@ -323,13 +323,24 @@ subprocesses: no test reaches the network.
 12. ~~Milestone order (§7.3)?~~ Decided 2026-09-17: M2b → M3d → M5 → M6-lite → M4 → M6 → M3b → M7. Tree-sitter
     (M3b) stays an optional extra (`sherpa[adapters]`), never a core dependency; it moves forward only if M4
     evals from the graph score < 90 % on the corpus or a customer needs skills from code patterns.
+13. Coupling between sub-units of a single-manifest repository (ADR-0021 measures modules only): worth a model
+    field once a corpus repository with sub-units shows a pair above the floors? Measure first.
+14. Remaining fruit from §7.2 not in M3d: test and build commands per unit in the facts; a `status` line for
+    adopted files changed since adopt. Both small; schedule with M5, which touches `status` anyway.
+15. **Owner-doc floor for sub-units by files is the wrong metric for Python packages.** Sherpa's own `plan` (3
+    files, ~1.0k LOC) and `scan` (4 files, ~0.9k LOC) are reasoned no's under `owner_doc_min_files = 5`, while
+    they carry most of the logic; the repository's hotspot score would have named them first. ADR-0014 was
+    calibrated on modules (a three-file module is a tool), not on packages with few large files. Proposal: a
+    second way over the floor for sub-units only — ≥ 5 files **or** ≥ 500 LOC — as an amendment to ADR-0014,
+    with the LOC value in `sherpa.toml`. Decide after one more corpus repository with sub-units (Q13).
 
 Decided (2026-09-16): plan format YAML and check-in of plan/state → ADR-0005; generator principle → ADR-0011;
 units, visibility, decision keeping → ADR-0012. Decided (2026-09-17): state as a rebuildable index, atomic
 writes, adopt as the rebuild → ADR-0017; block ownership, single-source checker,
 Terraform-style selection → ADR-0013; owner-doc floor by files → ADR-0014; target layer → ADR-0015; never
 overwrite, only add → ADR-0016; distribution through GitHub Releases → ADR-0018; stamp without rev → ADR-0019;
-sub-units with override → ADR-0020.
+sub-units with override → ADR-0020; change coupling with a size cap → ADR-0021; adopt recognises older
+renderings → ADR-0022.
 
 ## 7. Retro after M3c (2026-09-17) — what the numbers say against the plan
 
@@ -381,3 +392,56 @@ Decided (Andrei, 2026-09-17): **M2b → M3d → M5 → M6-lite (provider layer) 
 - Speed: the largest corpus repo scans in 3.8 s, plans in 0.12 s, applies in 0.2 s, adopts in 0.37 s.
 - The corpus rule (four foreign repos, never named) caught the Windows path bug and the empty-state case that
   the fixtures did not.
+
+## 8. Retro after M2b (2026-09-17) — the review before M3d
+
+Method: the read-only skill `architect-review` with focus M3d (§7 method); every claim measured on the fixtures,
+on Sherpa's own repository or on the corpus. Two of the six M3d items carried a precondition the retro in §7
+had not seen; both were built into M3d before it shipped.
+
+### 8.1 Gaps
+
+| # | Finding | Evidence | Consequence |
+|---|---|---|---|
+| G5 | **ADR-0019 would have broken `adopt`'s rebuild for every harness written before it.** `adopt` decides ownership by "equals the current rendering"; after the stamp change no 0.5.0 block equals its 0.6.0 rendering. | `adopt.py` reconcile: a differing block "stays"; no test for "old stamp, new sherpa". | A lost state rebuilt after the upgrade would freeze the whole harness as hand-edited, silently. Built: `LEGACY_STAMPS` + `modernize_stamp` (ADR-0022), one end-to-end test. |
+| G6 | **The sub-unit rule had no data to run on.** `DirStat` stopped at depth 2; Sherpa's own sub-units are depth 3, the Python default `src/<pkg>/<sub>` layout too. | `t0_git.py` `DIR_DEPTH = 2`; `sherpa plan .` → `1 owner-doc sherpa-harness`. | ADR-0020 could not be implemented in `plan/` alone. Built: `sub_dirs` per module in the model (v4), depths 1–4 relative to the module path, with source-file counts and the package flag. |
+| G7 | **Naive change coupling is dominated by squash merges.** Sherpa's trunk: 14 commits in 90 d, every one touches docs, tests, README and several modules → 100 % coupling everywhere. GitHub's default merge option produces this shape. | `git log origin/main --no-merges --name-only` on this repository. | A `changes together with` row that reads 100 % is wrong. Built: size cap max(5, ⌈modules/2⌉) with the skipped count in the model (ADR-0021). |
+| G8 | **The index cap needs a rank, the index had none.** `agents_md_targets` sorted nested files alphabetically; `plan.ranking` was unused in `apply`. | `render.py` `sorted(nested, key=scope)`. | A cap on an alphabetical list keeps `a…` and drops the hotspot. Built: order by `ranking.commits_90d`, top 20, "and N more". |
+
+Seen in the dogfood after the slice (Sherpa's own harness, first sub-unit `src/sherpa/apply`), fixed in the
+same PR: the sub-unit facts block had four rows and no hotspots, although `git.files` carries them — now
+hotspots under the path and the test files naming it; the root doc counted the sub-units' files without
+saying where they are described — now `files / LOC … — N files in K sub-units, described in their own owner
+docs` plus a `contains` row with links. What stays open is the floor (§6 Q15).
+
+### 8.2 Fruit taken and left
+
+| Item | Status | Where |
+|---|---|---|
+| Windows CI 7–8× Linux (4m33s / 5m46s vs. 43 s / 45 s on PR #11) | done first — session-built fixtures copied per test | `tests/conftest.py` `copy_repo`, `_session_repo` |
+| `plan --accept/--reject` with one address format across plan, state and CLI | done — `Entry.address`, `yamlio.decide` | `plan/__init__.py`, `plan/yamlio.py`, `cli.py` |
+| privacy note for the outcome hook | done — hook docstring, `commands/apply.md`, `concepts/harness-apply.md` | — |
+| test/build commands per unit; `status` line for changed adopted files | left — §6 Q14, with M5 | — |
+| state schema-version read-tolerance test (review #6) | left — the first state bump will need it; `state.py:69` names `adopt` as the way out already | — |
+
+### 8.3 What holds
+
+- Idempotence and determinism: `test_apply_is_idempotent_and_deterministic`; goldens changed only where the stamp
+  and the index wording changed, in dedicated commits.
+- Never overwrite, hand edits stay: `test_adopt_keeps_hand_edits_and_refreshes_base_files_by_name` — now with the
+  unhedged message `(hand edit)`.
+- The release path: v0.5.0 tag → `release.yml` green on the first run → wheel on the release → `self-update
+  --check` reports current from the live API.
+- Corpus: `doctor` 0 problems on all four repositories. Coupling on the three multi-module ones (16, 79 and
+  122 modules): 21, 7 and 15 partner rows above the floors, one commit above the cap; the single-module one gets
+  two sub-units at depth 1 by the rule. Sherpa's own repository: three sub-units at depth 3, one above the
+  owner-doc floor, two listed as small units — exactly ADR-0014's reasoned no's.
+
+### 8.4 Innovation candidates confirmed
+
+1. **Change coupling as a harness fact** — real now that the cap is in; no AGENTS.md generator in the market
+   carries it. Next proof: a corpus repository with a pair above the floors, quoted in the README from a golden.
+2. **Zero harness churn when nothing changed** (ADR-0019) — Terraform's "no changes" for documentation;
+   `test_trunk_move_without_activity_changes_no_block` is the proof, the README shows the line.
+3. **`adopt` as config migration** (ADR-0022) — Renovate migrates config in place; Sherpa understands its own
+   older renderings instead. The pattern list is the contract for every future block change.

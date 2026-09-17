@@ -17,7 +17,7 @@ from sherpa.cli import main
 from sherpa.plan import yamlio
 from tests.test_apply import applied
 from tests.test_apply import tree_hash as _tree_hash
-from tests.test_plan import active_repo, check_golden  # noqa: F401 — fixture and golden helper
+from tests.test_plan import check_golden
 
 
 def tree_hash(repo: Path) -> str:
@@ -101,7 +101,7 @@ def existing_harness(repo: Path) -> None:
         p.write_text(text, encoding="utf-8")
 
 
-def test_adopt_takes_over_without_touching_a_byte_and_covers_entries(active_repo: Path, capsys):  # noqa: F811
+def test_adopt_takes_over_without_touching_a_byte_and_covers_entries(active_repo: Path, capsys):
     existing_harness(active_repo)
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
     before = tree_hash(active_repo)
@@ -170,7 +170,7 @@ def test_adopt_takes_over_without_touching_a_byte_and_covers_entries(active_repo
     assert "dropped from the state (file gone): .claude/agents/ops.md" in capsys.readouterr().out
 
 
-def test_adopt_rebuilds_a_lost_or_torn_state(active_repo: Path, capsys):  # noqa: F811
+def test_adopt_rebuilds_a_lost_or_torn_state(active_repo: Path, capsys):
     applied(active_repo)
     state_path = active_repo / state_mod.STATE_PATH
     rev = state_mod.load(state_path).harness_rev
@@ -192,7 +192,7 @@ def test_adopt_rebuilds_a_lost_or_torn_state(active_repo: Path, capsys):  # noqa
     assert f"0 adopted, 0 rebuilt, {len(state.files)} kept, 0 dropped" in capsys.readouterr().out
 
 
-def test_adopt_keeps_hand_edits_and_refreshes_base_files_by_name(active_repo: Path, capsys):  # noqa: F811
+def test_adopt_keeps_hand_edits_and_refreshes_base_files_by_name(active_repo: Path, capsys):
     applied(active_repo)
     nested = active_repo / "svc/pay/AGENTS.md"
     text = nested.read_text(encoding="utf-8")
@@ -204,7 +204,7 @@ def test_adopt_keeps_hand_edits_and_refreshes_base_files_by_name(active_repo: Pa
     (active_repo / state_mod.STATE_PATH).unlink()
     assert main(["adopt", str(active_repo)]) == 0
     out = capsys.readouterr().out
-    assert "0 of 1 blocks match the plan; block facts differs (hand edit or older rendering) — stays" in out
+    assert "0 of 1 blocks match the plan; block facts differs (hand edit) — stays" in out
     assert "= .agents/scripts/sherpa-check.py" in out and "sherpa's by name — `apply` refreshes it" in out
     state = state_mod.load(active_repo / state_mod.STATE_PATH)
     assert state.files["svc/pay/AGENTS.md"].blocks == {}
@@ -214,7 +214,37 @@ def test_adopt_keeps_hand_edits_and_refreshes_base_files_by_name(active_repo: Pa
     assert "~ .agents/scripts/sherpa-check.py" in out
 
 
-def test_adopt_dry_run_and_settings_without_hook(active_repo: Path, capsys):  # noqa: F811
+def test_adopt_recognises_an_older_stamp_and_apply_refreshes_it(active_repo: Path, capsys):
+    """A harness written by sherpa ≤ 0.5.0 carries ``origin/main@<rev>, as of <date>`` in every block. A rebuild
+    after the upgrade must still call those blocks sherpa's (ADR-0022) — otherwise a lost state would freeze the
+    whole harness as "hand-edited"."""
+    applied(active_repo)
+    state = state_mod.load(active_repo / state_mod.STATE_PATH)
+    rev = state.plan["rev"][:10]
+    touched = 0
+    for rel in ("svc/pay/AGENTS.md", ".agents/docs/modules/pay.md", ".claude/agents/pay.md"):
+        f = active_repo / rel
+        old = f.read_text(encoding="utf-8")
+        new = old.replace("as of 2026-03-01", f"origin/main@{rev}, as of 2026-03-01")
+        assert new != old, rel
+        f.write_text(new, encoding="utf-8")
+        touched += 1
+    assert touched == 3
+    (active_repo / state_mod.STATE_PATH).unlink()
+    assert main(["adopt", str(active_repo)]) == 0
+    out = capsys.readouterr().out
+    assert "carries an older stamp — `apply` refreshes it" in out and "(hand edit)" not in out
+    rebuilt = state_mod.load(active_repo / state_mod.STATE_PATH)
+    assert set(rebuilt.files["svc/pay/AGENTS.md"].blocks) == {"facts"}
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    out = capsys.readouterr().out
+    assert "~ svc/pay/AGENTS.md" in out and "3 files written" in out
+    assert f"origin/main@{rev}" not in (active_repo / "svc/pay/AGENTS.md").read_text(encoding="utf-8")
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    assert "nothing to do." in capsys.readouterr().out
+
+
+def test_adopt_dry_run_and_settings_without_hook(active_repo: Path, capsys):
     (active_repo / ".claude").mkdir()
     (active_repo / ".claude/settings.json").write_text('{"permissions": {}}\n', encoding="utf-8")
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
@@ -245,7 +275,7 @@ def test_state_load_names_the_way_out(tmp_path: Path):
     assert state_mod.load(p).files["a"].origin == GENERATED
 
 
-def test_existing_harness_goldens(active_repo: Path, capsys):  # noqa: F811
+def test_existing_harness_goldens(active_repo: Path, capsys):
     """The README shows these: adopt on a hand-written harness, then the plan with covered entries."""
     existing_harness(active_repo)
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0

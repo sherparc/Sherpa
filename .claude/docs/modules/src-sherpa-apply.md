@@ -1,6 +1,6 @@
-# sherpa-harness — owner doc
+# src/sherpa/apply — owner doc
 
-> Owner of every fact about the module `sherpa-harness`. Agents and skills link here instead of
+> Owner of every fact about the module `src/sherpa/apply`. Agents and skills link here instead of
 > copying (owner principle). Keep anchor headings small and stable — links hang on them.
 
 <!-- sherpa:begin facts -->
@@ -8,15 +8,12 @@
 
 | field | value |
 |---|---|
-| path | `.` |
-| kind | python module (`pyproject.toml`) |
-| files / LOC | 113 / 14473 — 6 files in 1 sub-units, described in their own owner docs |
-| commits 90d / 30d | 16 / 16 · 2 authors |
-| depends on | — |
-| dependents | — |
-| tested by | — |
-| hotspots | `docs/plan.md`, `tests/test_apply.py`, `README.md` |
-| contains | [src/sherpa/apply](src-sherpa-apply.md) (6 files, 3 commits/90d) |
+| path | `src/sherpa/apply` |
+| kind | directory inside module `sherpa-harness` (package) |
+| files / LOC | 6 / 1750 (6 source files) |
+| commits 90d / 30d | 3 / 3 · 1 authors |
+| hotspots | `src/sherpa/apply/render.py`, `src/sherpa/apply/__init__.py`, `src/sherpa/apply/state.py` |
+| tests naming it | `tests/test_apply.py` |
 <!-- sherpa:end facts -->
 
 ## structure

@@ -12,7 +12,8 @@
     "git",
     "modules",
     "generators",
-    "conventions"
+    "conventions",
+    "coupling"
   ],
   "additionalProperties": false,
   "properties": {
@@ -22,7 +23,7 @@
     },
     "schema_version": {
       "type": "integer",
-      "const": 3
+      "const": 4
     },
     "repo": {
       "type": "string",
@@ -288,7 +289,9 @@
           "commits_90d",
           "commits_30d",
           "authors_90d",
-          "hotspots"
+          "hotspots",
+          "sub_dirs",
+          "coupling"
         ],
         "properties": {
           "id": {
@@ -376,6 +379,90 @@
               "type": "string"
             },
             "description": "Up to 3 paths in the module by commits_90d×loc, not generated, descending."
+          },
+          "sub_dirs": {
+            "type": "array",
+            "description": "Directories inside the module, depths 1-4 below its path, sorted by path: the raw material for sub-units of a single-manifest repository (ADR-0020). source_files counts files in the module's own language(s); package = Python package (__init__.py). Test directories are included and marked by name in the plan.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "depth",
+                "files",
+                "source_files",
+                "package",
+                "loc",
+                "commits_90d",
+                "commits_30d",
+                "authors_90d"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "depth": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4
+                },
+                "files": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "source_files": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "package": {
+                  "type": "boolean"
+                },
+                "loc": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "commits_90d": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "commits_30d": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "authors_90d": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "coupling": {
+            "type": "array",
+            "description": "Temporal coupling (Tornhill, ADR-0021): up to 3 partner modules that changed in the same commits, descending by shared, ties by module. Only partners with shared >= coupling.min_shared and share >= coupling.min_share; commits touching more than coupling.cap modules are excluded.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "module",
+                "shared",
+                "share"
+              ],
+              "properties": {
+                "module": {
+                  "type": "string"
+                },
+                "shared": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "share": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "shared / this module's commits_90d, rounded to 2 decimals"
+                }
+              }
+            }
           }
         }
       }
@@ -481,6 +568,41 @@
             "type": "string"
           },
           "description": "Dockerfile*, docker-compose*.yml, compose*.yml."
+        }
+      }
+    },
+    "coupling": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How coupling was measured: cap = max(5, ceil(modules / 2)) modules per commit; skipped_commits = commits above the cap (squash merges, mass renames), measured_commits = the rest.",
+      "required": [
+        "cap",
+        "skipped_commits",
+        "measured_commits",
+        "min_shared",
+        "min_share"
+      ],
+      "properties": {
+        "cap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_commits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "measured_commits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min_shared": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min_share": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       }
     }

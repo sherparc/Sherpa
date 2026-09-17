@@ -54,9 +54,9 @@ apply; everything else is seeded once and yours.
 
 | Plan entry | Core (`<home>/…`) | Target `claude` | Target `agents-md` |
 |---|---|---|---|
-| always | `scripts/sherpa-check.py` (the checker copy), `.sherpa/telemetry/.gitignore` | `CLAUDE.md` block `harness` (appended to an existing file; a new file imports `@AGENTS.md` when that exists or is generated) | `AGENTS.md` block `harness`: overview and the index of nested files; the facts of a root module |
+| always | `scripts/sherpa-check.py` (the checker copy), `.sherpa/telemetry/.gitignore` | `CLAUDE.md` block `harness` (appended to an existing file; a new file imports `@AGENTS.md` when that exists or is generated) | `AGENTS.md` block `harness`: overview and the index of nested files — the 20 most active units by name, the rest counted (the root file is loaded on every turn); the facts of a root module |
 | `outcome` | — | `.claude/hooks/sherpa-outcome.py`, four hook entries merged into `.claude/settings.json` | — (no hooks in this family; `apply` says so when `claude` is off) |
-| `owner-doc`, `test-infra` | `docs/modules/<slug>.md` block `facts`: path, kind, files/LOC, commits, authors, dependencies, dependents, tests, hotspots, generators | `<unit>/CLAUDE.md` block `harness`: `@AGENTS.md` when both targets are on, else the facts inline | `<unit>/AGENTS.md` block `facts`: dependencies, dependents, tests, hotspots, generated code → skill, link to the owner doc |
+| `owner-doc`, `test-infra` | `docs/modules/<slug>.md` block `facts`: path, kind, files/LOC, commits, authors, dependencies, dependents, tests, hotspots, change coupling, generators; a module with sub-units (ADR-0020) adds `contains` with links and says how many files are described there; a sub-unit gets its own hotspots and the test files naming it | `<unit>/CLAUDE.md` block `harness`: `@AGENTS.md` when both targets are on, else the facts inline | `<unit>/AGENTS.md` block `facts`: dependencies, dependents, tests, hotspots, generated code → skill, link to the owner doc |
 | `agent` | — | `.claude/agents/<slug>.md` blocks `knowledge` (front matter manifest pointing at the owner doc and skills) and `manifest` | — |
 | `librarian` | `skills/<slug>-sync/SKILL.md` block `scope` | stub `.claude/skills/<slug>-sync/SKILL.md` when `home` is `.agents` | — |
 | `skill` | `skills/regenerate-<family>/SKILL.md` block `facts` | stub `.claude/skills/regenerate-<family>/SKILL.md` when `home` is `.agents` | — |
@@ -133,7 +133,9 @@ a rollback: `check: 1 new FAIL — rolled back, nothing written` followed by the
 `.sherpa/state.json` records, per file, the ownership mode (`managed`, `blocks`, `json-hooks`), the origin
 (`generated`, or `adopted` by [`sherpa adopt`](adopt.md)), the plan entry and the hashes sherpa wrote — one per managed
 file, one per block. `harness_rev` is a hash over all of them plus the sherpa version: it changes exactly when
-sherpa's share of the harness changes. The outcome hook stamps it on every label, so `sherpa status` can compare
+sherpa's share of the harness changes. Facts blocks are stamped `as of <date>` — the scan window end — and
+nothing else (ADR-0019): a trunk move without activity in a unit, or a new sherpa version, rewrites no block;
+the trunk revision lives here in the state and in the plan header, once each. The outcome hook stamps it on every label, so `sherpa status` can compare
 harness versions. `applied_at` is the only timestamp Sherpa ever writes and lives only here. Commit the state
 (ADR-0005). Schema: [`harness-state.schema.json`](../../src/sherpa/schemas/harness-state.schema.json). The state
 is written atomically and is an index over the files: lost or torn, `sherpa adopt` rebuilds it (ADR-0017).
@@ -146,7 +148,10 @@ It is stdlib-only, fail-open and never prints. Per execution it appends one line
 `.sherpa/telemetry/outcomes.ndjson` with a label — `success` (last test run green, or a PR created), `failed`
 (last test run red), `unknown` (no signal) — the tool signals, and the `harness_rev`. A follow-up prompt that
 starts with a correction ("no, that's wrong", "doesn't work", …) records a `correction` for the previous
-execution. Telemetry is ignored by git through `.sherpa/telemetry/.gitignore`. Details:
+execution. **Privacy:** each record also stores the first 160 characters of the prompt, so a label can be read
+next to what was asked; everything stays on the machine — `.sherpa/telemetry/` is ignored by git through the
+`.gitignore` sherpa writes there, nothing is uploaded, and there is no other free text. Remove the hook entries
+from `.claude/settings.json` to store nothing. Details:
 [concepts/harness-apply.md](../concepts/harness-apply.md#outcome-minimum--the-hook-adr-0008).
 
 The hook command is `sh -c '… python3 "$0" || python "$0"' "$CLAUDE_PROJECT_DIR/.claude/hooks/sherpa-outcome.py"`
