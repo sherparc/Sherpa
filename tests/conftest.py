@@ -84,3 +84,10 @@ def make_clone(tmp_path: Path):
         return dst
 
     return _make
+
+
+@pytest.fixture(autouse=True)
+def no_network_update_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """No test — in-process or via subprocess — ever calls the GitHub Releases API, and the cache stays in tmp."""
+    monkeypatch.setenv("SHERPA_NO_UPDATE_CHECK", "1")
+    monkeypatch.setenv("SHERPA_CACHE_DIR", str(tmp_path / "cache"))

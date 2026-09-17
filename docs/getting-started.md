@@ -6,13 +6,17 @@ in any of the steps below.
 
 ## 1. Install
 
-Sherpa is a Python 3.12+ CLI with one runtime dependency (PyYAML). Release wheels come with milestone M2b; today
-you install straight from the repository:
+Sherpa is a Python 3.12+ CLI with one runtime dependency (PyYAML), released as the wheel `sherpa-harness` on
+GitHub Releases. The repository is private until the public release, so install through your GitHub access:
 
 ```bash
 uv tool install git+https://github.com/sherparc/Sherpa.git      # or: pipx install git+https://github.com/sherparc/Sherpa.git
-sherpa --version
+sherpa doctor                                                    # every prerequisite with a fix
 ```
+
+`git+https://…` installs the current `main`; a tag (`…Sherpa.git@v0.5.0`) pins a release. Later releases come
+with `sherpa self-update` — with `gh auth login` it fetches the wheel from the release, without a token it uses
+the same git URL. `doctor` lists everything the next steps need: git, `origin`, a trunk, a runtime.
 
 Prerequisites in the target repository: `git` on the `PATH`, a remote named `origin`, and a trunk branch Sherpa
 can find (`origin/HEAD`, or one of `main`, `master`, `dev`, `develop`, `trunk` — or set it in

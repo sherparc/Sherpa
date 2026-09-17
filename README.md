@@ -10,7 +10,8 @@ Sherpa analyses your codebase deterministically (like CodeScene) and plans the k
 
 [![CI](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml/badge.svg)](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
-![Status: scan, plan, apply and adopt live](https://img.shields.io/badge/status-scan%20%2B%20plan%20%2B%20apply%20%2B%20adopt%20live-brightgreen)
+![Status: scan, plan, apply, adopt, doctor live](https://img.shields.io/badge/status-scan%20%2B%20plan%20%2B%20apply%20%2B%20adopt%20%2B%20doctor%20live-brightgreen)
+[![Release](https://img.shields.io/github/v/release/sherparc/Sherpa?include_prereleases&label=release)](https://github.com/sherparc/Sherpa/releases)
 
 </div>
 
@@ -97,7 +98,7 @@ sherpa adopt — home .claude · targets claude: 7 harness files
 gaps:
   - .claude/agents/pay-expert.md: 175 lines, no knowledge manifest — rotation candidate, facts belong in an owner doc
   - .claude/docs/modules/legacy.md: no unit matches by name or path mentions — moved, renamed or not a module doc
-state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 9ff76cfb703d → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
+state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 5657bca7cbac → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
 ```
 
 The next `sherpa plan` shows `[covered by .claude/agents/pay-expert.md]` on the agent entry and `apply` creates
@@ -109,16 +110,17 @@ nothing there ([golden](tests/goldens/active-plan-covered-console.txt)). The sam
 - `sherpa apply` 🟢 **Live** — dry run first, managed blocks, state file, outcome hook, checker with rollback; targets `claude` and `agents-md` from one neutral core
 - `sherpa status` · `sherpa check` 🟢 **Live** — drift per file and block, structural rules, outcome labels per harness version
 - `sherpa adopt` 🟢 **Live** — take an existing harness into the state without changing a byte; files that already fill a plan entry cover it; a lost state is rebuilt from the files
-- `sherpa doctor` ⚪ **Planned (M2b)** — check the environment, update hint
+- `sherpa doctor` · `sherpa self-update` 🟢 **Live** — every prerequisite with a fix; the next release via the installer that owns this copy; a daily hint that never blocks
 
-Documentation: [docs/index.md](docs/index.md) — [getting started](docs/getting-started.md), one reference page per command ([scan](docs/commands/scan.md), [plan](docs/commands/plan.md), [apply](docs/commands/apply.md), [adopt](docs/commands/adopt.md), [status](docs/commands/status.md), [check](docs/commands/check.md)), [configuration](docs/reference/configuration.md); milestones: [docs/plan.md](docs/plan.md).
+Documentation: [docs/index.md](docs/index.md) — [getting started](docs/getting-started.md), one reference page per command ([scan](docs/commands/scan.md), [plan](docs/commands/plan.md), [apply](docs/commands/apply.md), [adopt](docs/commands/adopt.md), [status](docs/commands/status.md), [check](docs/commands/check.md), [doctor](docs/commands/doctor.md), [self-update](docs/commands/self-update.md)), [configuration](docs/reference/configuration.md); milestones: [docs/plan.md](docs/plan.md).
 
 ## Quick start
 
-Straight from the repo, no clone (release wheels as the package `sherpa-harness` come with M2b):
+Straight from the repo, no clone — releases are tags with the wheel `sherpa-harness` attached ([releases](https://github.com/sherparc/Sherpa/releases)); `sherpa self-update` fetches the next one:
 
 ```bash
-uv tool install git+https://github.com/sherparc/Sherpa.git     # or: pipx install git+https://github.com/sherparc/Sherpa.git
+uv tool install git+https://github.com/sherparc/Sherpa.git     # or: pipx install …; a tag pins a release: …Sherpa.git@v0.5.0
+sherpa doctor                                                    # Python, git, origin, trunk, runtime, install, update — with a fix each
 sherpa plan /path/to/repo                                        # scans when needed → .sherpa/harness-plan.yaml
 sherpa apply /path/to/repo                                       # dry run, then asks → .claude/**, .sherpa/state.json
 sherpa status /path/to/repo                                      # drift, checks, outcome labels
@@ -221,9 +223,10 @@ flowchart LR
 | M3a | `apply`: dry run, managed blocks, state, outcome hook, checker with rollback; `status`, `check` | ✅ |
 | M3t | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files | ✅ |
 | M3c | `adopt`: existing harnesses taken over unchanged, covered entries, rebuildable state | ✅ |
-| M2b | distribution: release wheels, `self-update`, `doctor` | 🚧 |
-| M3b | language adapters (anchors, patterns) | ⏳ |
-| M4–M7 | auto-evals, outcome evaluation, LLM stage, librarians & multi-repo | ⏳ |
+| M2b | distribution: release wheel per tag, `doctor`, `self-update`, daily hint | ✅ |
+| M3d | retro fruit: stamp without rev, sub-units for single-manifest repos, change coupling, `plan --accept/--reject` | 🚧 |
+| M5 · M6-lite · M4 · M6 | outcome evaluation, provider layer, auto-evals, LLM enrichment | ⏳ |
+| M3b · M7 | language adapters (anchors, patterns), librarians & multi-repo | ⏳ |
 
 Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an ADR: [docs/adr/](docs/adr/README.md)
 
@@ -234,7 +237,7 @@ Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generat
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 230 tests, ~98 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 282 tests, ~98 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 

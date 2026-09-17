@@ -25,6 +25,7 @@
 | `AGENTS.md` (block `harness`), `<unit>/AGENTS.md` (block `facts`) | `apply`, target `agents-md` | yes |
 | `.sherpa/telemetry/.gitignore` | `apply` | yes (it ignores everything else in the directory) |
 | `.sherpa/telemetry/outcomes.ndjson`, `session-*.json` | the outcome hook | **no** — ignored via the file above |
+| `<cache>/update-check.json` (`~/.cache/sherpa`, `%LOCALAPPDATA%\sherpa`) | the daily update check | outside the repository; `SHERPA_CACHE_DIR` moves it |
 
 All files are UTF-8 with `\n` line endings; paths inside them use `/` on every platform. Hashes in the state are
 computed with line endings normalised, so an autocrlf checkout is not a hand edit.
@@ -40,8 +41,7 @@ Suggested `.gitignore` in a target repository:
 | Code | Meaning | Commands |
 |---|---|---|
 | 0 | success — including a dry run, an aborted question and "nothing to do" | all |
-| 1 | error: git (no repository, no origin, no trunk), configuration, plan or state file invalid or missing, stale plan, rollback after a new checker FAIL, checker FAIL | all |
-| 2 | command not implemented yet (`doctor`) | — |
+| 1 | error: git (no repository, no origin, no trunk), configuration, plan or state file invalid or missing, stale plan, rollback after a new checker FAIL, checker FAIL, a `doctor` fail, `self-update` without a reachable release or with a failed installer | all |
 
 Errors go to stderr as `sherpa <command>: <message>`; the message names the fix where there is one
 (`— run `sherpa plan` first`, `Fix: 'git remote set-head origin -a' or 'trunk' in sherpa.toml`).
@@ -53,6 +53,10 @@ Errors go to stderr as `sherpa <command>: <message>`; the message names the fix 
 | `CLAUDE_PROJECT_DIR` | the outcome hook, the deployed checker | repository root when run by Claude Code; the checker falls back to `.` |
 | `SHERPA_CHECK_STANDALONE=1` | the deployed checker | run the copy's own rules instead of delegating to an installed sherpa |
 | `SHERPA_UPDATE_GOLDENS=1` | the test suite | rewrite `tests/goldens/` after an intended rule change |
+| `SHERPA_NO_UPDATE_CHECK=1` | every command | no release check, no daily hint (`doctor --offline` for one run) |
+| `SHERPA_CACHE_DIR` | the update check | cache directory instead of `$XDG_CACHE_HOME/sherpa`, `~/.cache/sherpa` or `%LOCALAPPDATA%\sherpa` |
+| `GITHUB_TOKEN`, `GH_TOKEN` | `self-update`, `doctor`, the update check | token for the private repository's Releases API; otherwise `gh auth token` is asked |
+| `CI` | every command | no daily hint |
 
 Sherpa needs `git` on the `PATH` and Python ≥ 3.12. The outcome hook and the deployed checker need only a
 Python interpreter (`python3`, or `python` on Windows) — no sherpa installation, no third-party packages.

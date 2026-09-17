@@ -65,6 +65,9 @@ parts (agents' front matter, hooks, `CLAUDE.md`) stay isolated in `apply/render.
 
 ## How to work
 
+0. A review request ("analyse the plan and sherpa", "is this design sound", the retro after a milestone)
+   follows `.claude/skills/architect-review/SKILL.md`: read-only, evidence per finding, market by name, the
+   seven-section output. Everything below is for work that changes the repository.
 1. Read the plan's milestone table and open questions before proposing anything; check the ADR index for a
    decision that already exists.
 2. Compare with the market first (Terraform, Backstage, Renovate, CodeScene, Ansible, promptfoo): say what they

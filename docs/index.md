@@ -12,6 +12,7 @@ sherpa apply  ──►  .agents/** · .claude/** · AGENTS.md · CLAUDE.md + .s
 sherpa adopt  ──►  .sherpa/state.json                an existing harness taken over unchanged; a lost state rebuilt from the files
 sherpa status ──►  drift, checker findings, outcome labels per harness version
 sherpa check  ──►  structural rules for .claude/** (also runs without sherpa installed)
+sherpa doctor ──►  every prerequisite with a fix; sherpa self-update installs the next release
 ```
 
 ## Start here
@@ -32,8 +33,8 @@ One page per command: synopsis, every option, inputs and outputs, exit codes, re
 | `sherpa adopt` | take an existing harness into the state without changing a byte; rebuild a lost state; cover plan entries that files already fill | [commands/adopt.md](commands/adopt.md) |
 | `sherpa status` | drift between state, files and plan; checker; outcome labels | [commands/status.md](commands/status.md) |
 | `sherpa check` | structural rules C1–C8, standalone copy in the repo | [commands/check.md](commands/check.md) |
-
-Planned: `sherpa doctor` (environment check, M2b).
+| `sherpa doctor` | every prerequisite (Python, git, origin, trunk, config, runtime, install, update) with a fix | [commands/doctor.md](commands/doctor.md) |
+| `sherpa self-update` | the latest GitHub release via the installer that owns this copy; the daily hint | [commands/self-update.md](commands/self-update.md) |
 
 ## Reference
 

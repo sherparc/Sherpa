@@ -23,3 +23,6 @@ no ADR is not decided.
 | [0015](0015-target-layer-neutral-core.md) | Runtime-neutral core under `.agents`/`.claude` (`home`), adapters per target (`claude`, `agents-md`), nested AGENTS.md/CLAUDE.md per unit, ask when both homes exist | accepted |
 | [0016](0016-never-overwrite-only-add.md) | In the user's repository Sherpa never overwrites what exists — it creates, appends, merges, and rewrites only its own unchanged bytes | accepted |
 | [0017](0017-state-is-a-rebuildable-index.md) | The state is a rebuildable index over the harness files: atomic writes, `adopt` rebuilds a lost or torn state, readers name the way out | accepted |
+| [0018](0018-distribution-github-releases.md) | Distribution through GitHub Releases: wheel per tag, `self-update` via the owning installer, a daily hint that never blocks, `doctor` first | accepted |
+| [0019](0019-stamp-without-rev.md) | The facts stamp carries the window end only; the rev lives in the state and the plan header (M3d) | accepted |
+| [0020](0020-sub-units-for-single-manifest-repos.md) | Sub-units for single-manifest repositories by a depth rule, `[plan] units` overrides it (M3d) | accepted |

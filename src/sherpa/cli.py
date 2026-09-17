@@ -6,8 +6,9 @@ Three stages, three artefacts (see docs/plan.md):
   apply  -> .claude/** + .sherpa/state.json (dry run by default; deterministic, idempotent)
   status -> drift between state and file system, checker findings, outcome labels
   check  -> structural rules only (the same file is deployed as .claude/scripts/sherpa-check.py)
+  doctor -> every prerequisite with a fix (first contact); self-update -> the next release from GitHub
 
-Exit codes: 0 ok · 1 error (git, config, plan file, checker FAIL) · 2 command not implemented yet.
+Exit codes: 0 ok · 1 error (git, config, plan file, checker FAIL, doctor problem, update failed).
 """
 
 from __future__ import annotations
@@ -16,10 +17,10 @@ import argparse
 import sys
 from pathlib import Path
 
-from sherpa import __version__
+from sherpa import __version__, update
 from sherpa.gitinfo import GitError
 
-EXIT_OK, EXIT_ERROR, EXIT_NOT_IMPLEMENTED = 0, 1, 2
+EXIT_OK, EXIT_ERROR = 0, 1
 MODEL_OUT = Path(".sherpa") / "codebase-model.json"
 PLAN_OUT = Path(".sherpa") / "harness-plan.yaml"
 
@@ -61,6 +62,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ad.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
     ad.add_argument("--dry-run", action="store_true", help="only report, write neither state nor plan marks")
+
+    dr = sub.add_parser("doctor", help="every prerequisite (git, origin, trunk, runtime, install, update) with a fix")
+    dr.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
+    dr.add_argument("--offline", action="store_true", help="skip the release check (no network)")
+
+    su = sub.add_parser("self-update", help="install the latest GitHub release with the installer that owns this copy")
+    su.add_argument("--check", action="store_true", help="only report whether a newer release exists")
     return p
 
 
@@ -298,6 +306,18 @@ def cmd_check(args: argparse.Namespace) -> int:
     return check.main([args.repo] + (["--json"] if args.json else []))
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from sherpa import doctor
+
+    checks = doctor.run(Path(args.repo).resolve(), network=not args.offline)
+    sys.stdout.write(doctor.render(checks))
+    return EXIT_ERROR if any(c.level == "fail" for c in checks) else EXIT_OK
+
+
+def cmd_self_update(args: argparse.Namespace) -> int:
+    return update.self_update(check_only=args.check)
+
+
 def _console_utf8() -> None:
     """Windows consoles and pipes are often cp1252: ✓/✗ must never crash the command."""
     for stream in (sys.stdout, sys.stderr):
@@ -308,7 +328,19 @@ def _console_utf8() -> None:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _console_utf8()
+    update.start_check(args.cmd)  # daily, in the background; the hint below reads only what is cached
     try:
+        code = _dispatch(args)
+    except (GitError, ValueError, OSError, update.UpdateError) as e:
+        print(f"sherpa {args.cmd}: {e}", file=sys.stderr)
+        return EXIT_ERROR
+    if line := update.hint(args.cmd):
+        print(line, file=sys.stderr)
+    return code
+
+
+def _dispatch(args: argparse.Namespace) -> int:
+    if True:
         if args.cmd == "scan":
             return cmd_scan(args)
         if args.cmd == "plan":
@@ -321,11 +353,11 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_check(args)
         if args.cmd == "adopt":
             return cmd_adopt(args)
-    except (GitError, ValueError, OSError) as e:
-        print(f"sherpa {args.cmd}: {e}", file=sys.stderr)
-        return EXIT_ERROR
-    print(f"sherpa {args.cmd}: not implemented yet (see docs/plan.md, milestone table)", file=sys.stderr)
-    return EXIT_NOT_IMPLEMENTED
+        if args.cmd == "doctor":
+            return cmd_doctor(args)
+        if args.cmd == "self-update":
+            return cmd_self_update(args)
+    raise ValueError("unknown command")  # argparse refuses unknown commands before we get here
 
 
 if __name__ == "__main__":
