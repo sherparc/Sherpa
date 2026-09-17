@@ -21,7 +21,7 @@ sherpa doctor [REPO] [--offline]
 | `sherpa.toml` | ok / fail | absent, or parses with known keys only | the offending key |
 | `trunk` | ok / hint / fail | `origin/<trunk>` resolves (ADR-0003); a hint when it was guessed from the candidate list instead of `origin/HEAD` or `sherpa.toml` | `git remote set-head origin -a` or `trunk` in `sherpa.toml` |
 | `runtime` | ok / hint | an agent runtime is visible: `claude`, `codex`, `cursor` or `gemini` on the `PATH`, or `.claude/`, `CLAUDE.md`, `.agents/`, `AGENTS.md` in the repo | sherpa writes the harness anyway; install a runtime to use it |
-| `update` | ok / hint | the latest GitHub release is not newer than this sherpa; unreachable or no token is a hint, never a failure | `sherpa self-update`, or `gh auth login` |
+| `update` | ok / hint | the latest release (API with a token, `git ls-remote` without one, ADR-0035) is not newer than this sherpa; unreachable or no access is a hint, never a failure | `sherpa self-update`, or `gh auth login` |
 
 Levels: `✓` ok, `!` hint (sherpa works, you should know), `✗` fail (blocks `scan`). Exit 1 only on a fail.
 
@@ -50,7 +50,7 @@ sherpa doctor — 0.5.0
   ! trunk        origin/main @ 896aa9bb1f (guessed from candidates)
     hint: `git remote set-head origin -a` or `trunk` in sherpa.toml [scan] makes it explicit
   ✓ runtime      claude (Claude Code CLI), .claude/ or CLAUDE.md in the repo
-  ✓ update       0.5.0 is current (token: yes)
+  ✓ update       0.5.0 is current (via the API)
 0 problems, 1 hints.
 ```
 
@@ -79,7 +79,7 @@ sherpa doctor — 0.5.0
 | Symptom | Cause | Fix |
 |---|---|---|
 | `update` says `no release published yet` | the token works, but the repository has no GitHub release | nothing to do; `git pull` on a clone |
-| `update` says `GitHub API 404 … a token is needed` | the repository is private and no token was found | `gh auth login`, or `GITHUB_TOKEN` in the environment |
+| `update` says `no access without a token: git ls-remote failed …` | no token and no git credentials for the private repository | `gh auth login`, `GITHUB_TOKEN`, or a credential helper / ssh key |
 | `trunk` fails although the branch exists | it exists locally only; sherpa reads `origin/<branch>` | `git fetch origin`, then `git remote set-head origin -a` |
 | `install` hints that `uv` is not on the `PATH` | sherpa was installed with `uv tool` from a shell that had it | reinstall uv or add `~/.local/bin` to the `PATH` |
 

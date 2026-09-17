@@ -113,7 +113,8 @@ nothing to do.
 
 The rebuilt `harness_rev` is the one `apply` wrote — the state is an index over the files, and the files were
 never lost. With both `.agents/` and `.claude/` present and no state to say where the core lives, the checker
-copy `<home>/scripts/sherpa-check.py` answers the question; only when that is missing too does adopt ask.
+copy `<home>/scripts/sherpa-check.py` answers the question; only when that is missing too does adopt ask —
+and `--dry-run` assumes `.agents` and says so instead of asking (ADR-0036).
 
 ## After adopt
 
@@ -144,14 +145,16 @@ revision from then on.
 | `--dry-run` | print the inventory, links and gaps; write neither state nor plan marks |
 
 Home and targets are resolved as for [`sherpa apply`](apply.md) (`sherpa.toml [apply]`, then the state, then
-the repository; a question on a terminal when both homes exist and nothing decides it).
+the repository; a question on a terminal when both homes exist and nothing decides it, an assumed `.agents`
+with a note under `--dry-run`). A home or `.claude/` that is a repository of its own gets the same note as
+under `apply` (ADR-0037).
 
 ## Exit codes
 
 | Exit | When |
 |---|---|
 | 0 | done, including `--dry-run` and "nothing to adopt" (no harness files, no previous state) |
-| 1 | no plan or model (`run sherpa plan first`), both homes and no terminal to ask |
+| 1 | no plan or model (`run sherpa plan first`), both homes and no terminal to ask (never under `--dry-run`) |
 
 A stale plan (the trunk moved since `sherpa plan`) is not refused: `adopt` imports what is there against the plan it
 finds, like `terraform import` (ADR-0034); only `apply` insists on a fresh plan. A torn or foreign `state.json` is

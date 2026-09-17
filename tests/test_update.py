@@ -28,7 +28,26 @@ class _Resp(io.BytesIO):
         self.close()
 
 
-def _fake_api(monkeypatch, *, tag=f"v{NEWER}", wheel=True, status=None, raise_url=False, seen=None):
+def _fake_api(monkeypatch, *, tag=f"v{NEWER}", wheel=True, status=None, raise_url=False, seen=None, git=None):
+    """The Releases API and, for the tokenless path, ``git ls-remote`` (``git``: a list of tags, or None for the
+    same failure the API would show — a URLError becomes an OSError, a status becomes exit 128)."""
+
+    class Ran:
+        def __init__(self, code, out="", err=""):
+            self.returncode, self.stdout, self.stderr = code, out, err
+
+    def run_git(cmd, timeout):
+        if seen is not None:
+            seen.append(cmd)
+        if raise_url:
+            raise OSError(2, "No such file or directory")
+        if status:
+            return Ran(128, err="fatal: could not read Username for 'https://github.com': terminal prompts disabled")
+        tags = git if git is not None else ([tag, "v0.1.0", "v0.1.0rc1"] if tag else [])
+        return Ran(0, out="".join(f"{'0' * 40}\trefs/tags/{t}\n" for t in tags))
+
+    monkeypatch.setattr(update, "_run_git", run_git)
+
     def urlopen(req, timeout=0):
         if seen is not None:
             seen.append(req)
@@ -97,19 +116,49 @@ def test_latest_release_parses_tag_and_wheel(monkeypatch):
     _fake_api(monkeypatch, seen=seen)
     rel = update.latest_release("tok")
     assert rel == update.Release(
-        NEWER, f"v{NEWER}", "https://api/assets/1", f"https://github.com/{update.REPO}/releases/tag/v{NEWER}"
+        NEWER,
+        f"v{NEWER}",
+        "https://api/assets/1",
+        f"https://github.com/{update.REPO}/releases/tag/v{NEWER}",
+        f"sherpa_harness-{NEWER}-py3-none-any.whl",
     )
     assert seen[0].get_header("Authorization") == "Bearer tok"
     _fake_api(monkeypatch, wheel=False)
-    assert update.latest_release(None).wheel_url is None
+    assert update.latest_release("tok").wheel_url is None and update.latest_release("tok").wheel_name is None
+
+
+def test_latest_release_without_token_uses_git_ls_remote(monkeypatch):
+    """ADR-0035: no token → no API call at all; the newest ``v*`` tag by version order, pre-releases below."""
+    seen = []
+    _fake_api(monkeypatch, seen=seen, git=["v0.9.0", f"v{NEWER}", "v0.10.0rc1", "v0.2.0"])
+    rel = update.latest_release(None)
+    assert rel.tag == f"v{NEWER}" and rel.wheel_url is None and rel.wheel_name is None
+    assert rel.html_url == f"https://github.com/{update.REPO}/releases/tag/v{NEWER}"
+    assert seen == [["git", "ls-remote", "--tags", "--refs", update.GIT_URL]]
+
+
+def test_latest_tag_tries_ssh_after_https_and_names_both_failures(monkeypatch):
+    calls = []
+
+    class Ran:
+        returncode, stdout, stderr = 128, "", "fatal: Authentication failed"
+
+    monkeypatch.setattr(update, "_run_git", lambda cmd, timeout: calls.append(cmd[-1]) or Ran())
+    with pytest.raises(update.UpdateError, match="no access without a token") as e:
+        update.latest_tag()
+    assert calls == list(update.GIT_URLS)
+    assert "Authentication failed" in str(e.value) and "gh auth login" in str(e.value)
+    _fake_api(monkeypatch, git=[])
+    with pytest.raises(update.UpdateError, match="no release tag"):
+        update.latest_tag()
 
 
 @pytest.mark.parametrize(
     "status,tok,needle",
     [
-        (404, None, "token is needed"),
+        (404, None, "no access without a token"),
         (404, "tok", "no release published yet"),
-        (401, "tok", "token is needed"),
+        (401, "tok", "token has no access"),
         (500, "tok", "GitHub API 500"),
     ],
 )
@@ -122,21 +171,58 @@ def test_latest_release_http_errors_name_the_fix(monkeypatch, status, tok, needl
 def test_latest_release_unreachable_and_empty(monkeypatch):
     _fake_api(monkeypatch, raise_url=True)
     with pytest.raises(update.UpdateError, match="unreachable"):
-        update.latest_release(None)
+        update.latest_release("tok")
+    with pytest.raises(update.UpdateError, match="No such file"):
+        update.latest_release(None)  # no git at all
     _fake_api(monkeypatch, tag="")
     with pytest.raises(update.UpdateError, match="no release"):
+        update.latest_release("tok")
+    with pytest.raises(update.UpdateError, match="no release tag"):
         update.latest_release(None)
 
 
-def test_download_writes_wheel_with_octet_stream(monkeypatch, tmp_path: Path):
+def _release(**kw) -> update.Release:
+    base = dict(
+        version=NEWER,
+        tag=f"v{NEWER}",
+        wheel_url="https://api/assets/1",
+        html_url="",
+        wheel_name=f"sherpa_harness-{NEWER}-py3-none-any.whl",
+    )
+    return update.Release(**(base | kw))
+
+
+def test_download_writes_wheel_under_its_pep427_name(monkeypatch, tmp_path: Path):
+    """The API asset URL ends in a number; pip needs ``dist-version-py-abi-plat.whl`` to accept the file."""
     seen = []
     _fake_api(monkeypatch, seen=seen)
-    p = update.download("https://api/assets/1", "tok", tmp_path)
-    assert p.read_bytes() == b"WHEELBYTES" and p.suffix == ".whl"
+    p = update.download(_release(), "tok", tmp_path)
+    assert p.read_bytes() == b"WHEELBYTES" and p.name == f"sherpa_harness-{NEWER}-py3-none-any.whl"
     assert seen[0].get_header("Accept") == "application/octet-stream"
+    assert update.WHEEL_NAME.match(p.name)
+    assert update.download(_release(wheel_name=None), "tok", tmp_path).name == p.name  # derived from the version
+    with pytest.raises(update.UpdateError, match="not a valid wheel file name"):
+        update.download(_release(wheel_name="sherpa_harness.whl"), "tok", tmp_path)
+    with pytest.raises(update.UpdateError, match="no wheel attached"):
+        update.download(_release(wheel_url=None), "tok", tmp_path)
     _fake_api(monkeypatch, raise_url=True)
     with pytest.raises(update.UpdateError, match="download failed"):
-        update.download("https://api/assets/1", "tok", tmp_path)
+        update.download(_release(), "tok", tmp_path)
+
+
+@pytest.mark.parametrize(
+    "name,ok",
+    [
+        ("sherpa_harness-0.7.2-py3-none-any.whl", True),
+        ("sherpa_harness-0.7.2-1-py3-none-any.whl", True),
+        ("sherpa_harness-0.7.2rc1-py3-none-any.whl", True),
+        ("sherpa_harness.whl", False),
+        ("570259520", False),
+        ("sherpa_harness-0.7.2.whl", False),
+    ],
+)
+def test_wheel_name_pattern_is_pep427(name, ok):
+    assert bool(update.WHEEL_NAME.match(name)) is ok
 
 
 @pytest.mark.parametrize(
@@ -199,7 +285,8 @@ def test_self_update_installs_wheel_with_token(monkeypatch):
 
     out = io.StringIO()
     assert update.self_update(run=run, out=out) == 0
-    assert calls[0][:5] == ["uv", "tool", "install", "--force", "--reinstall"] and calls[0][-1].endswith(".whl")
+    assert calls[0][:5] == ["uv", "tool", "install", "--force", "--reinstall"]
+    assert Path(calls[0][-1]).name == f"sherpa_harness-{NEWER}-py3-none-any.whl"
     assert f"sherpa {NEWER} installed via uv." in out.getvalue()
 
 
@@ -292,7 +379,7 @@ def test_start_check_records_failure_and_hint_stays_quiet(monkeypatch):
     t = update.start_check("plan")
     t.join(5)
     cache = update.read_cache()
-    assert cache["latest"] is None and "token is needed" in cache["error"]
+    assert cache["latest"] is None and "no access without a token" in cache["error"]
     assert update.hint("plan", _Tty()) is None
 
 
@@ -334,7 +421,7 @@ def test_cli_self_update_error_is_exit_1(monkeypatch, capsys):
     monkeypatch.setattr(update, "token", lambda: None)
     monkeypatch.setattr(update, "installer", lambda: "uv")
     assert cli.main(["self-update"]) == 1
-    assert "sherpa self-update: GitHub unreachable" in capsys.readouterr().err
+    assert "sherpa self-update: no access without a token" in capsys.readouterr().err
 
 
 def test_cli_prints_hint_after_command(monkeypatch, capsys, make_origin, make_clone):

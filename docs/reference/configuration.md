@@ -74,7 +74,7 @@ The target layer (ADR-0015): one runtime-neutral core, one adapter per runtime. 
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `home` | `".agents"` \| `".claude"` | exactly one of `.claude/`, `.agents/` present → that one; **both → `apply` asks** (refuses without a terminal); **neither → `apply` asks, `.agents` is the default** (Enter, `--yes`, `--dry-run`, no terminal) | where owner docs (`<home>/docs/modules/`), skills (`<home>/skills/`) and the checker copy (`<home>/scripts/sherpa-check.py`) live. `.agents/` is read by Codex and the AGENTS.md family; `.claude/` keeps everything in one directory for Claude-only teams. |
+| `home` | `".agents"` \| `".claude"` | exactly one of `.claude/`, `.agents/` present → that one; **both → `apply` asks** (a write refuses without a terminal; `--dry-run`, `adopt --dry-run` and `status` assume `.agents` and say so, ADR-0036); **neither → `apply` asks, `.agents` is the default** (Enter, `--yes`, `--dry-run`, no terminal) | where owner docs (`<home>/docs/modules/`), skills (`<home>/skills/`) and the checker copy (`<home>/scripts/sherpa-check.py`) live. `.agents/` is read by Codex and the AGENTS.md family; `.claude/` keeps everything in one directory for Claude-only teams. |
 | `targets` | list of `"claude"`, `"agents-md"` | detected: `.claude/` or `CLAUDE.md` → `claude`; `AGENTS.md` or `.agents/` → `agents-md`; nothing → both | `claude`: subagents, the outcome hook, root and nested `CLAUDE.md`, skill stubs when `home` is not `.claude`. `agents-md`: root `AGENTS.md` with the index, a nested `AGENTS.md` per unit with its facts. Without `claude` no outcome labels are collected — `apply` says so. |
 
 Precedence: `sherpa.toml` beats the state beats detection. Changing `home` after the first apply moves every

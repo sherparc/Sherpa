@@ -185,13 +185,22 @@ def _load_state_or_empty(repo: Path, command: str):
         return state_mod.State(), str(e)
 
 
-def _resolve_layout(repo: Path, state, *, ask: bool) -> tuple[str, tuple[str, ...]]:
+ASSUMED_HOME = (
+    "note: both .agents/ and .claude/ exist and nothing decides where the core lives — this preview assumes "
+    '.agents; the real run asks, or set [apply] home = ".agents" or ".claude" in sherpa.toml.'
+)
+
+
+def _resolve_layout(repo: Path, state, *, ask: bool, preview: bool = False) -> tuple[str, tuple[str, ...], list[str]]:
     """Home and targets (ADR-0015): sherpa.toml beats the state beats detection. Both ``.agents`` and ``.claude``
-    present and nothing decided yet → ask on a terminal, refuse otherwise."""
+    present and nothing decided yet → ask on a terminal, refuse otherwise — except a ``preview`` (dry run,
+    ``status``), which assumes ``.agents`` and says so instead of stopping (ADR-0036). The notes also name a
+    target directory that is a repository of its own (ADR-0037)."""
     from sherpa import config
     from sherpa.apply.render import check_script
 
     cfg = config.load(repo).apply
+    notes: list[str] = []
     has_claude = (repo / ".claude").is_dir() or (repo / "CLAUDE.md").is_file()
     has_agents = (repo / ".agents").is_dir() or (repo / "AGENTS.md").is_file()
     home = cfg.home or state.home
@@ -202,6 +211,8 @@ def _resolve_layout(repo: Path, state, *, ask: bool) -> tuple[str, tuple[str, ..
         tty = ask and sys.stdin.isatty()
         if both and len(footprint) == 1:
             home = footprint[0]  # sherpa's own checker copy says where the core lives (a lost state, ADR-0017)
+        elif both and preview:
+            home, notes = ".agents", [ASSUMED_HOME]
         elif both and not tty:
             raise ValueError(
                 "both .agents/ and .claude/ exist — where should owner docs and skills live? "
@@ -219,7 +230,20 @@ def _resolve_layout(repo: Path, state, *, ask: bool) -> tuple[str, tuple[str, ..
     if not targets:
         detected = tuple(t for t, on in (("claude", has_claude), ("agents-md", has_agents)) if on)
         targets = detected or config.TARGETS
-    return home, tuple(targets)
+    targets = tuple(targets)
+    notes += _nested_repositories(repo, home, targets)
+    return home, targets, notes
+
+
+def _nested_repositories(repo: Path, home: str, targets: tuple[str, ...]) -> list[str]:
+    """A directory sherpa writes into that is a repository of its own — a ``.git`` directory or worktree file under
+    it — gets a note: what lands there is not tracked by this repository (ADR-0037). Named once per directory."""
+    dirs = [home] + ([".claude"] if "claude" in targets and home != ".claude" else [])
+    return [
+        f"note: {d}/ is a repository of its own ({d}/.git) — files written there are not tracked by this repository."
+        for d in dirs
+        if (repo / d / ".git").exists()
+    ]
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
@@ -230,9 +254,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
     plan, model = _load_plan_and_model(repo)
     _refuse_stale(repo, plan)
     state = _load_state(repo)
-    home, targets = _resolve_layout(repo, state, ask=not args.yes and not args.dry_run)
+    home, targets, notes = _resolve_layout(repo, state, ask=not args.yes and not args.dry_run, preview=args.dry_run)
     actions = apply.plan_files(apply.targets_for(plan, model, home=home, targets=targets), repo, state)
     sys.stdout.write(f"targets: {', '.join(targets)} · home: {home}\n")
+    for note in notes:
+        print(note, file=sys.stdout)
     if "claude" not in targets:
         print(
             "note: no target with hooks (claude) — outcome labels are not collected (ADR-0008); "
@@ -285,7 +311,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
     state, state_error = _load_state_or_empty(repo, "status")
     plan, model = _load_plan_and_model(repo)
-    home, targets = _resolve_layout(repo, state, ask=False)
+    home, targets, _ = _resolve_layout(repo, state, ask=False, preview=True)
     actions = apply.plan_files(apply.targets_for(plan, model, home=home, targets=targets), repo, state)
     report = status_mod.report(repo, state, actions, stale=_stale(repo, plan), state_error=state_error)
     sys.stdout.write(status_mod.render_json(report) if args.json else status_mod.render(report))
@@ -304,10 +330,12 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
     plan, model = _load_plan_and_model(repo)
     state, _ = _load_state_or_empty(repo, "adopt")
-    home, targets = _resolve_layout(repo, state, ask=not args.dry_run)
+    home, targets, notes = _resolve_layout(repo, state, ask=not args.dry_run, preview=args.dry_run)
     rendered = apply.targets_for(plan, model, home=home, targets=targets)
     a = adopt_mod.adopt(repo, plan, rendered, state, home=home, runtime_targets=targets)
     sys.stdout.write(adopt_mod.render(a, home=home, targets=targets))
+    for note in notes:
+        print(note, file=sys.stdout)
     new_state = adopt_mod.new_state(a, plan, state, home=home, targets=targets)
     if args.dry_run:
         print(f"dry run: {a.counts()} · harness_rev {new_state.harness_rev} (state not written)", file=sys.stdout)
