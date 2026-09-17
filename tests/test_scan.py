@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
@@ -136,13 +137,12 @@ def test_scan_counts_churn_on_non_ascii_tab_and_newline_paths(tmp_path: Path):
     seed = tmp_path / "seed"
     seed.mkdir()
     git(seed, "init", "-q", "-b", "main")
-    names = {
-        "normal.py": "x = 1\n",
-        "über.py": "y = 1\n",
-        "日本.py": "z = 1\n",
-        "tab\tname.py": "t = 1\n",
-        "new\nline.py": "n = 1\n",
-    }
+    names = {"normal.py": "x = 1\n", "über.py": "y = 1\n", "日本.py": "z = 1\n"}
+    control = (
+        sys.platform != "win32"
+    )  # NTFS refuses tab and newline in a file name; the umlauts still exercise the C-quoting
+    if control:
+        names |= {"tab\tname.py": "t = 1\n", "new\nline.py": "n = 1\n"}
     commit(seed, "one", names, date="2026-03-01T00:00:00Z", author="A")
     commit(seed, "two", {k: v + "# more\n" for k, v in names.items()}, date="2026-03-02T00:00:00Z", author="B")
     origin = tmp_path / "origin.git"
@@ -158,6 +158,10 @@ def test_scan_counts_churn_on_non_ascii_tab_and_newline_paths(tmp_path: Path):
     assert per_file == dict.fromkeys(names, 2)
     model = scan(clone, fetch=False)
     hot = {h.path: h.commits_90d for h in model.git.hotspots}
-    assert hot["über.py"] == 2 and hot["日本.py"] == 2 and hot["tab\tname.py"] == 2
-    assert "new\nline.py" not in hot, "no LOC for a path with a newline (cat-file --batch is line-based), no hotspot"
-    assert hot["normal.py"] == 2, "the answers after the newline path are not shifted"
+    assert hot["über.py"] == 2 and hot["日本.py"] == 2 and hot["normal.py"] == 2
+    if control:
+        assert hot["tab\tname.py"] == 2
+        assert "new\nline.py" not in hot, (
+            "no LOC for a path with a newline (cat-file --batch is line-based), no hotspot"
+        )
+        assert hot["normal.py"] == 2, "the answers after the newline path are not shifted"
