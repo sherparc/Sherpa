@@ -20,6 +20,8 @@ split into two requests and shift every answer after it.
    `cat-file --batch -z` needs git ≥ 2.43 and would exclude older hosts for a file name no real project has.
 3. The test builds a repository with `über.py`, `日本.py`, `tab\tname.py` and `new\nline.py`, two commits each,
    and asserts the churn per file, the hotspots and that the LOC of the files after the newline path are intact.
+   On Windows the two control-character names are left out — NTFS refuses them — so the umlaut and CJK
+   paths alone cover the C-quoting there.
 
 ## Reasoning
 
