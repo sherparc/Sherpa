@@ -9,7 +9,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4  # v4: sub_dirs and coupling per module (ADR-0020, ADR-0021)
 SCHEMA_PATH = Path(__file__).parent / "schemas" / "codebase-model.schema.json"
 
 
@@ -58,6 +58,42 @@ class Hotspot:
 
 
 @dataclass(frozen=True)
+class SubDir:
+    """A directory inside a module, depths 1–4 below the module's path: the raw material for sub-units of a
+    single-manifest repository (ADR-0020). ``source_files`` counts files in the module's own language(s);
+    ``package`` is a Python package (``__init__.py``)."""
+
+    path: str  # repo-relative, no trailing slash
+    depth: int  # 1 = directly below the module path
+    files: int
+    source_files: int
+    package: bool
+    loc: int
+    commits_90d: int
+    commits_30d: int
+    authors_90d: int
+
+
+@dataclass(frozen=True)
+class Coupling:
+    """Temporal coupling (Tornhill): ``module`` changed in ``shared`` of this module's commits (``share`` of them).
+    Commits above the size cap are excluded — see ``Model.coupling``."""
+
+    module: str
+    shared: int
+    share: float  # 0.0–1.0, of this module's commits_90d
+
+
+@dataclass(frozen=True)
+class CouplingStats:
+    cap: int  # commits touching more modules than this are ignored for coupling (squash merges, mass renames)
+    skipped_commits: int
+    measured_commits: int
+    min_shared: int  # floor: partners with fewer shared commits are not listed
+    min_share: float
+
+
+@dataclass(frozen=True)
 class ModuleStat:
     id: str
     path: str  # directory of the manifest, "" = root
@@ -77,6 +113,8 @@ class ModuleStat:
     commits_30d: int
     authors_90d: int
     hotspots: list[str]  # top paths by commits×loc within the module
+    sub_dirs: list[SubDir] = field(default_factory=list)
+    coupling: list[Coupling] = field(default_factory=list)  # top partners, descending by shared commits
 
 
 @dataclass(frozen=True)
@@ -127,6 +165,7 @@ class Model:
     modules: list[ModuleStat] = field(default_factory=list)
     generators: list[GeneratorStat] = field(default_factory=list)
     conventions: Conventions = field(default_factory=lambda: Conventions({}, [], []))
+    coupling: CouplingStats = field(default_factory=lambda: CouplingStats(0, 0, 0, 0, 0.0))
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), sort_keys=True, indent=2, ensure_ascii=False) + "\n"
@@ -160,10 +199,18 @@ class Model:
             repo=d["repo"],
             origin=d["origin"],
             git=git,
-            modules=[ModuleStat(**m) for m in d["modules"]],
+            modules=[_module(m) for m in d["modules"]],
             generators=[GeneratorStat(**x) for x in d.get("generators", [])],
             conventions=Conventions(**d["conventions"]),
+            coupling=CouplingStats(**d["coupling"]),
         )
+
+
+def _module(m: dict) -> ModuleStat:
+    m = dict(m)
+    m["sub_dirs"] = [SubDir(**x) for x in m.get("sub_dirs", [])]
+    m["coupling"] = [Coupling(**x) for x in m.get("coupling", [])]
+    return ModuleStat(**m)
 
 
 def load(path: Path) -> Model:

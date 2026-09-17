@@ -42,7 +42,7 @@ def test_scan_validates_against_schema(clone: Path):
 
 def test_scan_model_header(clone: Path):
     m = scan(clone, fetch=False)
-    assert (m.sherpa, m.schema_version, m.repo) == (__version__, 3, "clone")
+    assert (m.sherpa, m.schema_version, m.repo) == (__version__, 4, "clone")
     assert m.origin.endswith("origin.git")
     assert m.git.trunk.ref == "origin/main"
 

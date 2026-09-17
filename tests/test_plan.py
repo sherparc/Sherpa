@@ -12,7 +12,7 @@ import pytest
 from sherpa import __version__
 from sherpa.cli import main
 from sherpa.config import PlanConfig, load
-from sherpa.model import Conventions, DirStat, GeneratorStat, GitLayer, Model, ModuleStat, TrunkInfo, Windows
+from sherpa.model import Conventions, DirStat, GeneratorStat, GitLayer, Model, ModuleStat, SubDir, TrunkInfo, Windows
 from sherpa.plan import PROPOSE, SKIP, Check, Entry, Plan, build_plan, render_console, yamlio
 from sherpa.plan.rules import Unit, units_of
 from sherpa.scan import scan
@@ -37,6 +37,8 @@ def mod(
     dependents=(),
     is_test=False,
     kind="dotnet",
+    sub_dirs=(),
+    coupling=(),
 ):
     return ModuleStat(
         id=id_,
@@ -55,7 +57,13 @@ def mod(
         commits_30d=c30,
         authors_90d=authors,
         hotspots=[],
+        sub_dirs=list(sub_dirs),
+        coupling=list(coupling),
     )
+
+
+def sub(path: str, depth: int, *, files=6, src=None, package=True, c90=0, c30=0, authors=0):
+    return SubDir(path, depth, files, files if src is None else src, package, files * 10, c90, c30, authors)
 
 
 def dir_(path: str, *, files=20, c90=0, c30=0, authors=0, gen=0):
@@ -65,7 +73,7 @@ def dir_(path: str, *, files=20, c90=0, c30=0, authors=0, gen=0):
 def model(modules=(), dirs=(), generators=(), repo="Shop"):
     return Model(
         sherpa=__version__,
-        schema_version=3,
+        schema_version=4,
         repo=repo,
         origin="x",
         git=GitLayer(
@@ -430,6 +438,73 @@ def test_render_console_marks_decisions_and_notes():
 
 
 # ---------------------------------------------------------------- configuration
+
+
+def _single(kind="python", **kw):
+    """One module at the root — the most common repository shape (ADR-0020)."""
+    return model([mod("app", "", kind=kind, files=60, c90=30, c30=10, authors=3, **kw)])
+
+
+def test_sub_units_depth_rule_skips_pass_through_tests_and_non_packages():
+    subs = [
+        sub("src", 1, package=False),  # not a package: pass-through
+        sub("tests", 1),  # a package, but a test directory
+        sub("docs", 1, src=0, package=False),  # no source files
+        sub("src/app", 2),  # the only package at depth 2 → one candidate, go deeper
+        sub("src/app/scan", 3, files=4, c90=12),
+        sub("src/app/plan", 3, files=3, c90=9),
+        sub("src/app/apply", 3, files=6, c90=20),
+        sub("src/app/schemas", 3, src=0, package=False),
+        sub("src/app/.hidden", 3),
+        sub("src/app/apply/assets", 4, files=1, src=1),
+    ]
+    p = build_plan(_single(sub_dirs=subs))
+    ids = [e.target for e in p.entries if e.kind == "owner-doc"]
+    assert ids[:1] == ["app"] and set(ids) == {"app", "src/app/apply", "src/app/plan", "src/app/scan"}
+    docs = by_kind(p, "owner-doc")
+    assert docs["src/app/apply"].default == PROPOSE and docs["src/app/apply"].scope == "src/app/apply"
+    assert docs["src/app/scan"].default == SKIP and "4 files ✗" in docs["src/app/scan"].summary  # ADR-0014 floor
+    assert p.notes[0] == (
+        "3 sub-units of app by the depth rule (depth 3): src/app/apply, src/app/plan, src/app/scan — "
+        "[plan] units in sherpa.toml overrides the rule."
+    )
+    assert p.ranking["commits_90d"] == ["app", "src/app/apply", "src/app/scan", "src/app/plan"]
+
+
+def test_sub_units_generic_ecosystem_needs_no_package_flag():
+    subs = [sub("src", 1, package=False), sub("lib", 1, package=False), sub("public", 1, src=0, package=False)]
+    p = build_plan(_single(kind="node", sub_dirs=subs))
+    assert {e.target for e in p.entries if e.kind == "owner-doc"} == {"app", "src", "lib"}
+    assert "2 sub-units of app by the depth rule (depth 1): lib, src" in p.notes[0]
+
+
+def test_sub_units_config_override_and_off_switch():
+    subs = [sub("src/app/a", 3), sub("src/app/b", 3), sub("tools/cli", 2, package=False)]
+    p = build_plan(_single(sub_dirs=subs), PlanConfig(units=("tools/*",)))
+    assert {e.target for e in p.entries if e.kind == "owner-doc"} == {"app", "tools/cli"}
+    assert p.notes[0] == "1 sub-units of app from sherpa.toml [plan] units"
+    p = build_plan(_single(sub_dirs=subs), PlanConfig(units=()))
+    assert {e.target for e in p.entries if e.kind == "owner-doc"} == {"app"} and p.notes == []
+    p = build_plan(_single(sub_dirs=[sub("src/app/a", 3)]))  # one candidate at every depth: no sub-units
+    assert {e.target for e in p.entries if e.kind == "owner-doc"} == {"app"} and p.notes == []
+    assert "units" not in p.thresholds
+
+
+def test_sub_units_only_for_a_single_root_module():
+    subs = [sub("src/a", 2), sub("src/b", 2)]
+    two = model([mod("app", "", sub_dirs=subs), mod("lib", "packages/lib")])
+    assert {e.target for e in build_plan(two).entries if e.kind == "owner-doc"} == {"app", "lib"}
+
+
+def test_plan_config_units_key(tmp_path: Path):
+    (tmp_path / "sherpa.toml").write_text('[plan]\nunits = ["src/app/*", "tools/cli"]\n')
+    c = load(tmp_path).plan
+    assert c.units == ("src/app/*", "tools/cli") and "units" not in c.thresholds()
+    (tmp_path / "sherpa.toml").write_text("[plan]\nunits = []\n")
+    assert load(tmp_path).plan.units == ()
+    (tmp_path / "sherpa.toml").write_text('[plan]\nunits = "src/*"\n')
+    with pytest.raises(ValueError, match="units must be a list of path globs"):
+        load(tmp_path)
 
 
 def test_plan_config_from_toml_and_unknown_key(tmp_path: Path):

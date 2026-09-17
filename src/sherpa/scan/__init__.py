@@ -10,7 +10,14 @@ from sherpa import __version__, config, gitinfo
 from sherpa.model import SCHEMA_VERSION, Conventions, Model
 from sherpa.scan.generators import Matcher, detect_generators
 from sherpa.scan.t0_git import build_git_layer, collect
-from sherpa.scan.t1_modules import assign_files, build_modules_from, detect_conventions, find_modules, load_manifests
+from sherpa.scan.t1_modules import (
+    assign_files,
+    build_modules_from,
+    compute_coupling,
+    detect_conventions,
+    find_modules,
+    load_manifests,
+)
 
 
 def parse_as_of(value: str) -> datetime:
@@ -46,7 +53,8 @@ def scan(
     git_layer = build_git_layer(
         repo, data, top=hotspots or cfg.scan.hotspots, generated=cfg.scan.generated, outputs=outputs
     )
-    modules = build_modules_from(data, git_layer.files, raw, owner, outputs=outputs)
+    coupling, coupling_stats = compute_coupling(data, owner, [m.id for m in raw])
+    modules = build_modules_from(data, git_layer.files, raw, owner, outputs=outputs, coupling=coupling)
     languages, ci, containers = detect_conventions(paths, data.locs)
     return Model(
         sherpa=__version__,
@@ -57,4 +65,5 @@ def scan(
         modules=modules,
         generators=generators,
         conventions=Conventions(languages, ci, containers),
+        coupling=coupling_stats,
     )
