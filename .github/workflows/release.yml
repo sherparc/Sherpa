@@ -40,4 +40,10 @@ jobs:
       - name: GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.whl dist/*.tar.gz --title "sherpa $GITHUB_REF_NAME" --generate-notes
+        # GitHub can start two runs for one tag push; the second finds the release and leaves it alone.
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release $GITHUB_REF_NAME exists — nothing to do"
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.whl dist/*.tar.gz --title "sherpa $GITHUB_REF_NAME" --generate-notes
+          fi
