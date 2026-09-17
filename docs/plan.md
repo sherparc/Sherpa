@@ -334,7 +334,10 @@ sub-units with override → ADR-0020.
 ## 7. Retro after M3c (2026-09-17) — what the numbers say against the plan
 
 Method: every claim below was measured on the fixtures, on Sherpa's own repository or on the corpus (four
-ecosystems, 54 to 20k files); nothing is a feeling. Findings are ordered by cost of ignoring them.
+ecosystems, 54 to 20k files); nothing is a feeling. Findings are ordered by cost of ignoring them. The retro
+after every milestone runs as the read-only skill `.claude/skills/architect-review/SKILL.md`
+(`/architect-review [focus]`): evidence per finding, the market answer by name, nothing implemented — Andrei
+decides what enters this plan.
 
 ### 7.1 Four gaps the plan did not see
 

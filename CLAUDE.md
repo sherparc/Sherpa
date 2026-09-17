@@ -4,8 +4,8 @@ Generic harness generator. CLI `sherpa` (`scan | plan | apply | adopt | status |
 Plan and architecture: `docs/plan.md`. Documentation: `docs/index.md` (landing), `docs/commands/` (reference per
 command), `docs/concepts/` (rules and formats), `docs/reference/` (configuration, files, exit codes). Decisions:
 `docs/adr/` (index in `docs/adr/README.md`). Field semantics: `src/sherpa/schemas/`. The repo carries its own
-harness: `.claude/agents/architect.md` (overview and reasoning), skills `milestone-step` and `sync-kb`, and the
-files `sherpa apply .` generates (owner doc, hook, checker, the block at the end of this file).
+harness: `.claude/agents/architect.md` (overview and reasoning), skills `architect-review`, `milestone-step` and
+`sync-kb`, and the files `sherpa apply .` generates (owner doc, hook, checker, the block at the end of this file).
 
 ## Language
 - **English everywhere that gets pushed**: code comments, docstrings, docs, ADRs, README, CLI output, test names,
@@ -67,7 +67,8 @@ files `sherpa apply .` generates (owner doc, hook, checker, the block at the end
 ## Collaboration
 - After every step revise `docs/plan.md` critically: against the best established market solutions (Terraform,
   Backstage, Renovate, CodeScene, promptfoo, …) plus own knowledge — propose inconsistencies, missing building blocks,
-  better alternatives with reasoning; Andrei decides what enters the plan.
+  better alternatives with reasoning; Andrei decides what enters the plan. The full, read-only form of this is the
+  skill `architect-review` (`/architect-review [focus]`): findings with evidence, nothing implemented.
 - After every iteration one ADR per decision taken (`docs/adr/`, keep the index). What has no ADR is not decided.
 - Teamwork: when unsure or at design decisions ask Andrei, do not decide silently. Report briefly what was done —
   he must always know what is happening.
