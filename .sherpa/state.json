@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "sherpa": "0.7.3",
-  "harness_rev": "ed0717176365",
+  "sherpa": "0.7.4",
+  "harness_rev": "41665e3f0147",
   "home": ".claude",
   "targets": [
     "claude"
@@ -11,7 +11,7 @@
     "rev": "8572a26a10e45b71d477527c3892ebd094d5a65a",
     "as_of": "2026-09-17T13:37:22Z"
   },
-  "applied_at": "2026-09-17T13:46:43Z",
+  "applied_at": "2026-09-17T14:04:19Z",
   "files": {
     ".claude/agents/architect.md": {
       "mode": "managed",
@@ -47,12 +47,12 @@
     ".claude/hooks/sherpa-outcome.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "89d6319cafd48aca"
+      "hash": "6a332295775e47cf"
     },
     ".claude/scripts/sherpa-check.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "d8a7c43351cfa57c"
+      "hash": "3daad7e7ba21934b"
     },
     ".claude/settings.json": {
       "mode": "json-hooks",
