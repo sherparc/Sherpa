@@ -11,13 +11,16 @@ sherpa self-update [--check]
 
 ## How it works
 
-1. **Find the release.** `GET /repos/sherparc/Sherpa/releases/latest` with a token from `GITHUB_TOKEN`,
-   `GH_TOKEN` or `gh auth token` (the repository is private until the public release, ADR-0010). The tag
-   `v<version>` is compared numerically with the running version; a pre-release suffix sorts below the plain
-   version.
+1. **Find the release.** With a token from `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`:
+   `GET /repos/sherparc/Sherpa/releases/latest` (the repository is private until the public release, ADR-0010).
+   Without a token: `git ls-remote --tags` over the user's git credentials — the https URL first (credential
+   helper), then ssh — and the highest `v*` tag wins (ADR-0035); git never prompts (`GIT_TERMINAL_PROMPT=0`).
+   The tag `v<version>` is compared numerically with the running version; a pre-release suffix sorts below the
+   plain version.
 2. **Fetch.** With a token the wheel attached by `release.yml` is downloaded through the API into a temporary
-   directory. Without a token, or when no wheel is attached, the source is the tag's git URL
-   (`git+https://github.com/sherparc/Sherpa.git@v0.5.0`) through the user's git credentials.
+   directory under its own file name (`sherpa_harness-0.7.3-py3-none-any.whl` — pip reads the version and the
+   tags from the name, PEP 427). Without a token, or when no wheel is attached, the source is the tag's git URL
+   (`git+https://github.com/sherparc/Sherpa.git@v0.7.3`) through the user's git credentials.
 3. **Install.** The command of the detected installer:
 
    | Installer | Detected by | Command |
@@ -78,8 +81,10 @@ sherpa 0.6.0 is current (latest release: v0.6.0).
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `GitHub API 404 … a token is needed` | private repository, no token | `gh auth login` or `GITHUB_TOKEN=…` |
-| `no release published yet` | the token works; nothing released | wait, or install from the repository (`git+https://…`) |
+| `no access without a token: git ls-remote failed for …` | no token and no git credentials for the repository (both URLs are named with git's last line) | `gh auth login`, `GITHUB_TOKEN=…`, or a credential helper / ssh key for GitHub |
+| `GitHub API 401/403 … the token has no access` | the token does not cover the private repository | a token of a collaborator, or unset it to use git credentials |
+| `no release published yet` / `no release tag on …` | access works; nothing released | wait, or install from the repository (`git+https://…`) |
+| `… is not a valid wheel file name (PEP 427)` | the release asset has an unexpected name | check the release's assets; `release.yml` attaches the wheel under its build name |
 | `this sherpa runs from a clone` | editable install | `git pull` in the clone |
 | `uv failed: …` | the installer's own error (network, permissions) | run the printed command by hand |
 | the hint keeps showing after an update | the cache is refreshed once a day | harmless; `rm ~/.cache/sherpa/update-check.json` forces a new check |

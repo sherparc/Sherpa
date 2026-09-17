@@ -18,9 +18,12 @@ sherpa apply [REPO] [--yes | -y] [--dry-run] [--no-check]
 1. Resolves the layout (ADR-0015): `home` — where owner docs, skills and the checker copy live (`.agents`, the
    cross-tool default, or `.claude`) — and the `targets` to project into (`claude`, `agents-md`). Both come
    from `sherpa.toml [apply]`, else from the state, else from the repository: exactly one of `.claude/` and
-   `.agents/` present → that one; **both present → `apply` asks** (and refuses without a terminal); **neither →
-   `apply` asks, `.agents` is the default** (Enter, `--yes`, `--dry-run` or no terminal take it). The first
-   output line says what was resolved: `targets: claude, agents-md · home: .agents`.
+   `.agents/` present → that one; **both present → `apply` asks** (a write refuses without a terminal; a
+   `--dry-run` assumes `.agents` and says so, ADR-0036); **neither → `apply` asks, `.agents` is the default**
+   (Enter, `--yes`, `--dry-run` or no terminal take it). The first output line says what was resolved:
+   `targets: claude, agents-md · home: .agents`. A home or `.claude/` that is a repository of its own (a
+   `.git` inside — a harness kept in a separate clone) gets one note after that line: files written there are
+   not tracked by this repository (ADR-0037); it is a note, not a refusal.
 2. Selects the entries: every `default: propose` without `decision: reject`, every `default: skip` with
    `decision: accept`. A rejected `outcome` entry is an error.
 3. Renders the target files from the plan and the model (pure, no clock) and compares them with the files on disk
@@ -193,7 +196,8 @@ Proven by `test_apply_is_idempotent_and_deterministic`: the second run is all `=
 |---|---|---|
 | Everything is `! exists, not managed by sherpa` | the repo already has a `.claude/` — those files have no state record | `sherpa adopt` takes them over and marks the entries they cover |
 | `sherpa apply: .sherpa/state.json is unreadable (…)` | a crash left a torn state, or the file is foreign | `sherpa adopt` rebuilds it from the harness files (ADR-0017) |
-| `both .agents/ and .claude/ exist — where should owner docs and skills live?` | two homes, nothing decided, no terminal | set `[apply] home` in `sherpa.toml`, or run `apply` interactively once — the answer is remembered |
+| `both .agents/ and .claude/ exist — where should owner docs and skills live?` | two homes, nothing decided, no terminal, `--yes` | set `[apply] home` in `sherpa.toml`, or run `apply` interactively once — the answer is remembered; the dry run assumes `.agents` meanwhile and says so |
+| `note: .claude/ is a repository of its own (.claude/.git) — files written there are not tracked by this repository.` | the harness lives in a separate clone under `.claude/` (or the home) | intended? then nothing — commit the files in that clone; otherwise move the clone away or set `[apply] home`/`targets` so sherpa writes elsewhere |
 | No `CLAUDE.md`, no hook after apply | the repo had `AGENTS.md` and no `.claude/`, so only `agents-md` was detected | add `targets = ["claude", "agents-md"]` to `[apply]` |
 | `status` shows `~ block facts updated` right after `apply` | `apply` was run with an older model than the plan | run `sherpa plan` then `sherpa apply` |
 | CLAUDE.md got a block at the very end, below my own sections | intended — sherpa appends, never reorders | move the block; its markers are what matters, not its position |

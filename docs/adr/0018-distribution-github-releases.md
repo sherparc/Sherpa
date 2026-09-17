@@ -21,7 +21,8 @@ user with repository access already has.
    `GH_TOKEN` or `gh auth token`, downloads the wheel and installs it with the installer that owns the running
    copy (`uv tool install --force --reinstall`, `pipx install --force`, `pip install --upgrade`). Without a
    token, or without a wheel on the release, the source is the tag's git URL — the user's git credentials work
-   where the API token does not. An editable clone is refused with `git pull` as the fix.
+   where the API token does not (the tag itself comes from `git ls-remote`, ADR-0035). An editable clone is
+   refused with `git pull` as the fix.
 3. **The daily hint never blocks.** The everyday commands start a daemon thread at most once per 24 hours;
    it writes the result to `update-check.json` in the user's cache directory. The command prints only what an
    earlier check cached, on stderr, after its own output, only on a terminal and never under `CI`,

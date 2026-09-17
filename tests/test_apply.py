@@ -847,47 +847,118 @@ def test_config_apply_section(tmp_path: Path):
 def test_resolve_layout_detects_asks_and_remembers(tmp_path: Path, monkeypatch):
     from sherpa.cli import _resolve_layout
 
-    assert _resolve_layout(tmp_path, State(), ask=False) == (".agents", ("claude", "agents-md"))  # bare, no terminal
+    def layout(state=None, *, ask: bool, preview: bool = False):
+        return _resolve_layout(tmp_path, state or State(), ask=ask, preview=preview)[:2]
+
+    assert layout(ask=False) == (".agents", ("claude", "agents-md"))  # bare, no terminal
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     asked = []
     monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or "")
-    assert _resolve_layout(tmp_path, State(), ask=True)[0] == ".agents"  # bare: the user decides, Enter = default
+    assert layout(ask=True)[0] == ".agents"  # bare: the user decides, Enter = default
     assert asked[-1].startswith("no harness directory yet — owner docs and skills under [1] .agents (default")
     monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or "2")
-    assert _resolve_layout(tmp_path, State(), ask=True)[0] == ".claude"
+    assert layout(ask=True)[0] == ".claude"
     (tmp_path / ".claude").mkdir()
     asked.clear()
-    assert (
-        _resolve_layout(tmp_path, State(), ask=True) == (".claude", ("claude",)) and not asked
-    )  # one exists: no question
+    assert layout(ask=True) == (".claude", ("claude",)) and not asked  # one exists: no question
     (tmp_path / "AGENTS.md").write_text("# x\n", encoding="utf-8")
-    assert _resolve_layout(tmp_path, State(), ask=False) == (".claude", ("claude", "agents-md"))
+    assert layout(ask=False) == (".claude", ("claude", "agents-md"))
     (tmp_path / ".agents").mkdir()
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     with pytest.raises(ValueError, match="both .agents/ and .claude/ exist"):
-        _resolve_layout(tmp_path, State(), ask=True)
+        layout(ask=True)
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    assert _resolve_layout(tmp_path, State(), ask=True)[0] == ".claude" and asked[-1].startswith(
-        "both .agents/ and .claude/ exist"
-    )
+    assert layout(ask=True)[0] == ".claude" and asked[-1].startswith("both .agents/ and .claude/ exist")
     monkeypatch.setattr("builtins.input", lambda _: "")
-    assert _resolve_layout(tmp_path, State(), ask=True)[0] == ".agents"
+    assert layout(ask=True)[0] == ".agents"
     # the state remembers, the config file wins
-    assert _resolve_layout(tmp_path, State(home=".claude", targets=("claude",)), ask=False) == (".claude", ("claude",))
+    assert layout(State(home=".claude", targets=("claude",)), ask=False) == (".claude", ("claude",))
     (tmp_path / "sherpa.toml").write_text('[apply]\nhome = ".agents"\ntargets = ["agents-md"]\n', encoding="utf-8")
-    assert _resolve_layout(tmp_path, State(home=".claude", targets=("claude",)), ask=False) == (
+    assert layout(State(home=".claude", targets=("claude",)), ask=False) == (".agents", ("agents-md",))
+
+
+def test_resolve_layout_preview_assumes_agents_when_both_homes_exist(tmp_path: Path, monkeypatch):
+    """ADR-0036: a preview never asks and never refuses — it assumes .agents and says so; a write still refuses."""
+    from sherpa.cli import ASSUMED_HOME, _resolve_layout
+
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".agents").mkdir()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    assert _resolve_layout(tmp_path, State(), ask=False, preview=True) == (
         ".agents",
-        ("agents-md",),
+        ("claude", "agents-md"),
+        [ASSUMED_HOME],
     )
+    with pytest.raises(ValueError, match="both .agents/ and .claude/ exist"):
+        _resolve_layout(tmp_path, State(), ask=False)  # --yes: a write never guesses
+    # decided by the state, the checker copy or sherpa.toml: no assumption, no note
+    assert _resolve_layout(tmp_path, State(home=".claude", targets=("claude",)), ask=False, preview=True) == (
+        ".claude",
+        ("claude",),
+        [],
+    )
+    (tmp_path / ".claude" / "scripts").mkdir()
+    (tmp_path / ".claude" / "scripts" / "sherpa-check.py").write_text("# copy\n", encoding="utf-8")
+    assert _resolve_layout(tmp_path, State(), ask=False, preview=True) == (".claude", ("claude", "agents-md"), [])
 
 
-def test_cli_apply_refuses_ambiguous_home_without_terminal(active_repo: Path, capsys):
+def test_resolve_layout_names_a_target_directory_that_is_a_repository_of_its_own(tmp_path: Path):
+    """ADR-0037: .claude/ (or the home) with a .git inside is a nested repository — one note per directory."""
+    from sherpa.cli import _resolve_layout
+
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / ".git").mkdir()  # a clone
+    assert _resolve_layout(tmp_path, State(home=".agents", targets=("claude", "agents-md")), ask=False) == (
+        ".agents",
+        ("claude", "agents-md"),
+        [
+            "note: .claude/ is a repository of its own (.claude/.git) — files written there are not tracked by this repository."
+        ],
+    )
+    # the home itself, as a worktree (.git is a file); .claude named once when it is the home
+    (tmp_path / ".agents").mkdir()
+    (tmp_path / ".agents" / ".git").write_text("gitdir: ../.git/worktrees/agents\n", encoding="utf-8")
+    notes = _resolve_layout(tmp_path, State(home=".agents", targets=("claude", "agents-md")), ask=False)[2]
+    assert [n.split(" is ")[0] for n in notes] == ["note: .agents/", "note: .claude/"]
+    assert len(_resolve_layout(tmp_path, State(home=".claude", targets=("claude",)), ask=False)[2]) == 1
+    # a target without a directory of its own says nothing
+    assert _resolve_layout(tmp_path, State(home=".agents", targets=("agents-md",)), ask=False)[2] == [
+        "note: .agents/ is a repository of its own (.agents/.git) — files written there are not tracked by this repository."
+    ]
+
+
+def test_cli_dry_run_assumes_a_home_and_the_write_refuses_without_a_terminal(active_repo: Path, capsys):
+    from sherpa.cli import ASSUMED_HOME
+
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
     (active_repo / ".claude").mkdir()
     (active_repo / ".agents").mkdir()
     capsys.readouterr()
-    assert main(["apply", str(active_repo), "--dry-run"]) == 1
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("targets: claude, agents-md · home: .agents\n" + ASSUMED_HOME + "\n")
+    assert ".agents/scripts/sherpa-check.py" in out and "to add" in out
+    assert main(["adopt", str(active_repo), "--dry-run"]) == 0
+    assert ASSUMED_HOME in capsys.readouterr().out
+    assert main(["status", str(active_repo)]) == 0  # read-only: never refuses either
+    assert main(["apply", str(active_repo), "--yes"]) == 1
     assert 'Set [apply] home = ".agents" or ".claude" in sherpa.toml' in capsys.readouterr().err
+    assert not (active_repo / ".agents" / "scripts").exists()
+
+
+def test_cli_apply_names_a_nested_repository_in_the_dry_run_and_the_write(active_repo: Path, capsys):
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    (active_repo / ".claude").mkdir()
+    (active_repo / ".claude" / ".git").mkdir()
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    note = "note: .claude/ is a repository of its own (.claude/.git) — files written there are not tracked by this repository."
+    assert note in capsys.readouterr().out
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    out = capsys.readouterr().out
+    assert note in out and (active_repo / ".claude" / "hooks" / "sherpa-outcome.py").is_file()  # a note, not a refusal
+    assert main(["adopt", str(active_repo), "--dry-run"]) == 0
+    assert note in capsys.readouterr().out
 
 
 def test_existing_nested_agents_md_gets_the_block_appended(active_repo: Path, capsys):

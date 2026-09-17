@@ -136,10 +136,10 @@ def check_update() -> Check:
     try:
         rel = update.latest_release(tok)
     except update.UpdateError as e:
-        return Check("update", "warn", str(e), "`gh auth login` or GITHUB_TOKEN gives self-update access")
+        return Check("update", "warn", str(e), "`gh auth login`, GITHUB_TOKEN or git credentials for the repository")
     if update.is_newer(rel.version):
         return Check("update", "warn", f"{rel.version} available, you have {__version__}", "`sherpa self-update`")
-    return Check("update", "ok", f"{__version__} is current (token: {'yes' if tok else 'no'})")
+    return Check("update", "ok", f"{__version__} is current (via {'the API' if tok else 'git ls-remote'})")
 
 
 def run(repo: Path, *, network: bool = True) -> list[Check]:

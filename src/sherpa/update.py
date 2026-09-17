@@ -2,8 +2,8 @@
 
 Releases are GitHub Releases of ``sherparc/Sherpa`` (ADR-0018): ``release.yml`` attaches the wheel to the tag.
 The repository is private until the public release (ADR-0010), so the Releases API needs a token —
-``GITHUB_TOKEN``/``GH_TOKEN`` or ``gh auth token``. Without a token ``self-update`` falls back to the git URL of
-the tag, which uses the user's git credentials.
+``GITHUB_TOKEN``/``GH_TOKEN`` or ``gh auth token``. Without one the newest tag comes from ``git ls-remote`` over
+the user's git credentials, and the install source is the tag's git URL (ADR-0035).
 
 The hint never blocks: the check runs in a daemon thread at most once a day, writes its result to a cache file,
 and the command prints only what an earlier check has already cached. ``SHERPA_NO_UPDATE_CHECK=1`` switches it off.
@@ -30,6 +30,8 @@ from sherpa import __version__, atomic
 REPO = "sherparc/Sherpa"
 API_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 GIT_URL = f"https://github.com/{REPO}.git"
+GIT_URLS = (GIT_URL, f"git@github.com:{REPO}.git")  # ls-remote tries https (credential helper), then ssh
+WHEEL_NAME = re.compile(r"^[A-Za-z0-9_.]+-[A-Za-z0-9_.!+]+(-\d[A-Za-z0-9_.]*)?-[^-]+-[^-]+-[^-]+\.whl$")  # PEP 427
 CACHE_FILE = "update-check.json"
 CHECK_INTERVAL = timedelta(hours=24)
 TIMEOUT = 3.0  # seconds; the hint thread and doctor both use it
@@ -43,6 +45,7 @@ class Release:
     tag: str  # "v0.5.0"
     wheel_url: str | None  # API asset URL (needs Accept: application/octet-stream), None when no wheel attached
     html_url: str
+    wheel_name: str | None = None  # the asset's file name — pip reads the tags from it (PEP 427), so it must stay
 
 
 def parse_version(v: str) -> tuple[int, ...]:
@@ -85,35 +88,81 @@ def _request(url: str, tok: str | None, accept: str = "application/vnd.github+js
 
 
 def latest_release(tok: str | None, timeout: float = TIMEOUT) -> Release:
-    """The newest GitHub release; raises ``UpdateError`` with the reason (no network, no token, no release)."""
+    """The newest release: the GitHub API with a token, else the newest tag by ``git ls-remote`` through the user's
+    git credentials (ADR-0035). Raises ``UpdateError`` with the reason (no network, no access, no release)."""
+    if not tok:
+        return latest_tag(timeout=timeout)
     try:
         with urllib.request.urlopen(_request(API_LATEST, tok), timeout=timeout) as r:
             data = json.load(r)
     except urllib.error.HTTPError as e:
-        if e.code == 404 and tok:  # GitHub answers 404 for "no release yet" as well as for "no access"
+        if e.code == 404:  # with a token GitHub answers 404 only for "no release yet"
             raise UpdateError(f"no release published yet (https://github.com/{REPO}/releases)") from e
-        hint = ""
-        if e.code in (401, 403, 404):
-            hint = " — a token is needed for the private repository (GITHUB_TOKEN or `gh auth login`)"
+        hint = " — the token has no access to the private repository" if e.code in (401, 403) else ""
         raise UpdateError(f"GitHub API {e.code} for {API_LATEST}{hint}") from e
     except (urllib.error.URLError, OSError, ValueError) as e:
         raise UpdateError(f"GitHub unreachable ({getattr(e, 'reason', e)})") from e
     tag = str(data.get("tag_name", ""))
     if not tag:
         raise UpdateError("no release found")
-    wheel = next((a["url"] for a in data.get("assets", []) if str(a.get("name", "")).endswith(".whl")), None)
-    return Release(version=tag.removeprefix("v"), tag=tag, wheel_url=wheel, html_url=str(data.get("html_url", "")))
+    asset = next((a for a in data.get("assets", []) if str(a.get("name", "")).endswith(".whl")), None)
+    return Release(
+        version=tag.removeprefix("v"),
+        tag=tag,
+        wheel_url=asset["url"] if asset else None,
+        html_url=str(data.get("html_url", "")),
+        wheel_name=str(asset["name"]) if asset else None,
+    )
+
+
+def _run_git(cmd: list[str], timeout: float) -> subprocess.CompletedProcess:
+    """Seam for tests; never prompts for credentials (``GIT_TERMINAL_PROMPT=0``)."""
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
+
+
+def latest_tag(timeout: float = TIMEOUT) -> Release:
+    """The newest ``v*`` tag by ``git ls-remote --tags`` — no token, no API, the user's git credentials (https
+    credential helper, then ssh). Never prompts (``GIT_TERMINAL_PROMPT=0``)."""
+    errors = []
+    for url in GIT_URLS:
+        cmd = ["git", "ls-remote", "--tags", "--refs", url]
+        try:
+            r = _run_git(cmd, timeout)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            errors.append(f"{url}: {getattr(e, 'strerror', None) or e.__class__.__name__}")
+            continue
+        if r.returncode != 0:
+            last = (r.stderr or "").strip().splitlines()[-1:] or [f"exit {r.returncode}"]
+            errors.append(f"{url}: {last[0][:160]}")
+            continue
+        tags = [line.split("refs/tags/", 1)[1] for line in r.stdout.splitlines() if "refs/tags/v" in line]
+        if not tags:
+            raise UpdateError(f"no release tag on {url} (https://github.com/{REPO}/releases)")
+        tag = max(tags, key=parse_version)
+        return Release(tag.removeprefix("v"), tag, None, f"https://github.com/{REPO}/releases/tag/{tag}")
+    raise UpdateError(
+        "no access without a token: `git ls-remote` failed for "
+        + "; ".join(errors)
+        + " — `gh auth login`, GITHUB_TOKEN, or git credentials for the repository"
+    )
 
 
 class UpdateError(RuntimeError):
     """The update path is blocked; the message names the reason and the fix."""
 
 
-def download(url: str, tok: str | None, into: Path, timeout: float = 60.0) -> Path:
-    name = url.rsplit("/", 1)[-1]
-    target = into / (name if name.endswith(".whl") else "sherpa_harness.whl")
+def download(rel: Release, tok: str | None, into: Path, timeout: float = 60.0) -> Path:
+    """The release's wheel under its own file name: pip reads the version and the tags from the name (PEP 427);
+    the API asset URL ends in a number and would make an unusable file."""
+    if not rel.wheel_url:
+        raise UpdateError(f"release {rel.tag} has no wheel attached")
+    name = rel.wheel_name or f"sherpa_harness-{rel.version}-py3-none-any.whl"
+    if not WHEEL_NAME.match(name):
+        raise UpdateError(f"{name!r} is not a valid wheel file name (PEP 427)")
+    target = into / name
     try:
-        with urllib.request.urlopen(_request(url, tok, "application/octet-stream"), timeout=timeout) as r:
+        with urllib.request.urlopen(_request(rel.wheel_url, tok, "application/octet-stream"), timeout=timeout) as r:
             target.write_bytes(r.read())
     except (urllib.error.URLError, OSError) as e:
         raise UpdateError(f"download failed ({getattr(e, 'reason', e)})") from e
@@ -162,7 +211,7 @@ def self_update(*, check_only: bool = False, run=subprocess.run, out=None) -> in
         return 0
     with tempfile.TemporaryDirectory(prefix="sherpa-update-") as tmp:
         if rel.wheel_url and tok:
-            source = str(download(rel.wheel_url, tok, Path(tmp)))
+            source = str(download(rel, tok, Path(tmp)))
         else:
             source = f"git+{GIT_URL}@{rel.tag}"  # no token or no wheel: the tag through the user's git credentials
         cmd = install_command(kind, source)
