@@ -3,7 +3,7 @@
 > Owner of: invocation, decisions, interpretation. Field semantics belong to the schema
 > [`src/sherpa/schemas/codebase-model.schema.json`](../../src/sherpa/schemas/codebase-model.schema.json) (v3); code in
 > [`src/sherpa/scan/t0_git.py`](../../src/sherpa/scan/t0_git.py), [`t1_modules.py`](../../src/sherpa/scan/t1_modules.py)
-> and [`generators.py`](../../src/sherpa/scan/generators.py). Status: M2, v0.4.0.
+> and [`generators.py`](../../src/sherpa/scan/generators.py). Status: M3d, v0.6.0 (model schema 4).
 
 Command reference (options, exit codes, troubleshooting): [`sherpa scan`](../commands/scan.md).
 
@@ -41,6 +41,9 @@ generated = ["gen/**"]                 # own generator family "custom"; extends 
 | `git.dirs[]` | depth 1 + 2 (`""` = root): files, LOC sum, generator outputs, commits and authors touching something below (once per commit) | aggregate |
 | `git.hotspots[]` | top N by `commits_90d × loc`, text only, non-generated only | Tornhill |
 | `modules[]` | one module per manifest: `id`, `path`, `kind`, files/LOC/test files/generator outputs, `deps`/`dependents`/`tested_by` (in-repo only), churn per module, up to 3 hotspots | manifest parsers (T1) |
+| `modules[].sub_dirs[]` | directories inside the module, depths 1–4 below its path: files, files in the module's language (`source_files`), Python package flag, LOC, commits and authors — the raw material for sub-units of single-manifest repositories | ADR-0020 |
+| `modules[].coupling[]` | temporal coupling: up to 3 partner modules that changed in the same commits, with the shared count and the share of this module's commits; floors 5 shared and 30 %, commits touching more than `coupling.cap` modules excluded | Tornhill, ADR-0021 |
+| `coupling` | how coupling was measured: `cap` = max(5, ⌈modules/2⌉), `skipped_commits` above the cap (squash merges, mass renames), `measured_commits`, the floors | ADR-0021 |
 | `generators[]` | one entry per (generator family, owning module): `home`, generated files/LOC, up to 5 sources and configs (closest to `home` first), regeneration command, `skill` | `scan/generators.py` |
 | `conventions` | languages by LOC, CI files, container files | file tree |
 
@@ -95,7 +98,11 @@ directory of the outputs — the central place for a skill. Example: `ef-migrati
     ~50 modules with correct `tested_by` via `ProjectReference` in 2.6 s.
 11. **Test modules in every language.** .NET via project property, test package or name; otherwise via a test
     directory in the module path (`tests/suite`). This makes `tested_by` work for Python/Node/Go as well.
-12. **Glob classification in constant time per path** (`GlobSet`): exact names via dict, `*<suffix>` via
+12. **Change coupling excludes big commits** (ADR-0021). On a squash-merge trunk every commit is one PR that
+    touches docs, tests and several modules — measured naively, everything is coupled to everything at 100 %.
+    CodeScene and code-maat exclude large changesets for the same reason; sherpa's cap is max(5, half the
+    modules), and the model records how many commits it skipped so the number stays honest.
+13. **Glob classification in constant time per path** (`GlobSet`): exact names via dict, `*<suffix>` via
     `endswith`, the rest via anchored regex, path globs only when their literal occurs. A naive regex alternation
     cost 0.8 s on 15k paths, `GlobSet` 0.05 s — the scan is not slower with generators than without (2.75 s).
 

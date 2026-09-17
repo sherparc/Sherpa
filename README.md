@@ -98,7 +98,7 @@ sherpa adopt — home .claude · targets claude: 7 harness files
 gaps:
   - .claude/agents/pay-expert.md: 175 lines, no knowledge manifest — rotation candidate, facts belong in an owner doc
   - .claude/docs/modules/legacy.md: no unit matches by name or path mentions — moved, renamed or not a module doc
-state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 5657bca7cbac → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
+state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 0d2bdd9cfe6a → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
 ```
 
 The next `sherpa plan` shows `[covered by .claude/agents/pay-expert.md]` on the agent entry and `apply` creates
@@ -106,7 +106,7 @@ nothing there ([golden](tests/goldens/active-plan-covered-console.txt)). The sam
 `.sherpa/state.json` from the files — same `harness_rev` as `apply` wrote (ADR-0017).
 
 - `sherpa scan` 🟢 **Live** — deterministic codebase model (git churn, hotspots, modules, dependencies, generators)
-- `sherpa plan` 🟢 **Live** — proposals and reasoned no's with evidence as YAML; decisions survive a re-plan
+- `sherpa plan` 🟢 **Live** — proposals and reasoned no's with evidence as YAML; decisions survive a re-plan or come from the command line (`--accept agent:pay`)
 - `sherpa apply` 🟢 **Live** — dry run first, managed blocks, state file, outcome hook, checker with rollback; targets `claude` and `agents-md` from one neutral core
 - `sherpa status` · `sherpa check` 🟢 **Live** — drift per file and block, structural rules, outcome labels per harness version
 - `sherpa adopt` 🟢 **Live** — take an existing harness into the state without changing a byte; files that already fill a plan entry cover it; a lost state is rebuilt from the files
@@ -151,6 +151,7 @@ agent_min_commits_90d = 20    # … and floors; all values in docs/reference/con
 
 - **T0 git** — trunk detection, commits/authors in 90- and 30-day windows, LOC per file, hotspots (`commits_90d × loc`, generated files excluded), directory churn.
 - **T1 modules** — from manifests for .NET (`.csproj`), Python (`pyproject.toml`), Node (`package.json`), Go (`go.mod`), Rust (`Cargo.toml`), Java (`pom.xml`, Gradle); in-repo dependencies in both directions, test modules and `tested_by`, module churn, conventions (languages, CI, containers).
+- **Change coupling** — which modules change together (Tornhill's temporal coupling), measured only on commits below a size cap so squash-merge trunks stay honest; one row in every facts block: `changes together with: core (15 of 24 commits, 62 %)`. Sub-directories per module make a single-package repository a plan with units too.
 - **Generator families** — EF/Django/Alembic migrations, protobuf, OpenAPI, GraphQL codegen, ResX, `go generate`, snapshots, bundles, lockfiles: per family output, sources, config, central place and regeneration command — by path only, in 30 ms for 15k files.
 - **T2 language adapters** (M3b) — anchors and patterns per language; T0/T1 work without them.
 
@@ -224,7 +225,7 @@ flowchart LR
 | M3t | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files | ✅ |
 | M3c | `adopt`: existing harnesses taken over unchanged, covered entries, rebuildable state | ✅ |
 | M2b | distribution: release wheel per tag, `doctor`, `self-update`, daily hint | ✅ |
-| M3d | retro fruit: stamp without rev, sub-units for single-manifest repos, change coupling, `plan --accept/--reject` | 🚧 |
+| M3d | retro fruit: stamp without rev, sub-units for single-manifest repos, change coupling with a size cap, `plan --accept/--reject`, capped root index | ✅ |
 | M5 · M6-lite · M4 · M6 | outcome evaluation, provider layer, auto-evals, LLM enrichment | ⏳ |
 | M3b · M7 | language adapters (anchors, patterns), librarians & multi-repo | ⏳ |
 
@@ -237,7 +238,7 @@ Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generat
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 282 tests, ~98 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 296 tests, ~98 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 

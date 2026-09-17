@@ -26,3 +26,5 @@ no ADR is not decided.
 | [0018](0018-distribution-github-releases.md) | Distribution through GitHub Releases: wheel per tag, `self-update` via the owning installer, a daily hint that never blocks, `doctor` first | accepted |
 | [0019](0019-stamp-without-rev.md) | The facts stamp carries the window end only; the rev lives in the state and the plan header (M3d) | accepted |
 | [0020](0020-sub-units-for-single-manifest-repos.md) | Sub-units for single-manifest repositories by a depth rule, `[plan] units` overrides it (M3d) | accepted |
+| [0021](0021-change-coupling-with-size-cap.md) | Change coupling per module with floors, measured only on commits below a size cap (max(5, half the modules)); the model records what it skipped | accepted |
+| [0022](0022-adopt-recognises-older-renderings.md) | `adopt` recognises older stamp formats as sherpa's rendering (`LEGACY_STAMPS`), so a rebuilt state after an upgrade keeps ownership | accepted |
