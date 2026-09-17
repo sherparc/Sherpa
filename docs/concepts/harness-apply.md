@@ -98,6 +98,11 @@ what a file's line means:
 | `! exists, not managed by sherpa — sherpa adopt takes it over` | a file with that path but no state record and no markers |
 | `! exists with sherpa markers but no state record — sherpa adopt` | markers present, no record (a deleted state, a copied file) — somebody's content until adopt says otherwise |
 | `! block facts not written by sherpa (skipped)` | a block with one of Sherpa's names that has no hash in the record — not Sherpa's, never touched |
+| `! changed since the preview (skipped)` | the file no longer reads as the preview saw it — the bytes were computed from that read, so nothing is written (ADR-0030) |
+| `! symlink in the path — never written through (skipped)` | a link in the path, wherever it points — the bytes would land in another file (ADR-0031) |
+
+Every file is written whole or not at all — a sibling temp file and a rename (`sherpa.atomic`, ADR-0032) — and a
+write error half-way rolls back the files written before it, the same way a new checker FAIL does.
 
 Hashes ignore line endings (`\r\n` = `\n`): a CRLF checkout is not a hand edit.
 

@@ -27,8 +27,11 @@ sherpa apply [REPO] [--yes | -y] [--dry-run] [--no-check]
    and the state — one action per file: `+ new`, `~ updated`, `= unchanged`, `! skipped`.
 4. Prints the list. Stops here with `--dry-run`, or when there is nothing to write, or when there is no terminal
    to ask; otherwise asks `apply? [y/N]` (skipped with `--yes`).
-5. Runs the checker ([`sherpa check`](check.md)) before and after writing. A write that introduces a **new** FAIL
-   is rolled back completely; pre-existing FAILs are reported and do not block.
+5. Re-reads every file it is about to write and skips one that changed since the preview — an editor, a second
+   agent (ADR-0030); a path with a symlink in it is never written through (ADR-0031). Each file is written
+   whole or not at all, and a write error half-way rolls back what was written (ADR-0032). Runs the checker
+   ([`sherpa check`](check.md)) before and after writing. A write that introduces a **new** FAIL is rolled back
+   completely; pre-existing FAILs are reported and do not block.
 6. Writes `.sherpa/state.json` with one record per file, `harness_rev` and `applied_at`.
 
 Ownership modes, file contents and the reasoning: [concepts/harness-apply.md](../concepts/harness-apply.md).
@@ -124,9 +127,15 @@ the always-part), detail. The detail lines and what each means:
 | `adopted — yours, never touched (skipped)` | recorded as `origin: adopted` by [`sherpa adopt`](adopt.md); only shown when a plan entry was accepted on top of it |
 | `exists with sherpa markers but no state record — sherpa adopt` | markers but no record (deleted state, copied file): treated as yours (ADR-0016) |
 | `block facts not written by sherpa (skipped)` | a block with Sherpa's name that Sherpa never wrote — yours |
+| `changed since the preview (skipped)` | the file moved between the preview and your `y` — nothing written, run `sherpa apply` again (ADR-0030) |
+| `symlink in the path — never written through (skipped)` | the file or one of its directories is a symlink; sherpa writes only real files (ADR-0031) — `AGENTS.md → CLAUDE.md` is managed as `CLAUDE.md` |
 
-After the write: the checker summary, then `N files written · harness_rev <12 hex> → .sherpa/state.json`. On
-a rollback: `check: 1 new FAIL — rolled back, nothing written` followed by the findings.
+After the write: the checker summary, files skipped since the preview (`! CLAUDE.md  changed since the preview
+(skipped)`), then `N files written · harness_rev <12 hex> → .sherpa/state.json`. On a rollback:
+`check: 1 new FAIL — rolled back, nothing written` followed by the findings; on a write error:
+`write failed: .claude/docs/modules/two.md: [Errno 28] No space left on device — rolled back, nothing written`.
+Should the rollback fail too, the line `rollback failed for: <paths> — restore with \`git checkout -- <path>\`
+or \`git clean\`, then \`sherpa adopt\` rebuilds the state` names the way out.
 
 ## The state and `harness_rev`
 

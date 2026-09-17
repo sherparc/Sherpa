@@ -35,3 +35,7 @@ no ADR is not decided.
 | [0027](0027-sub-units-for-a-dominant-root-module.md) | The depth rule also runs on a root module holding ≥ `root_share` (0.5) of the files next to other modules | accepted |
 | [0028](0028-outcome-evaluation-needs-a-denominator.md) | Outcome evaluation (M5) shows `n` and the `unknown` share per revision; a comparison only from 30 labelled executions per revision | accepted |
 | [0029](0029-proximity-file-budget.md) | C7 budgets for proximity files: nested `CLAUDE.md`/`AGENTS.md` ≤ 8 KiB, root ≤ 32 KiB (Hermes' ceiling) | accepted |
+| [0030](0030-write-compares-before-it-swaps.md) | `apply` re-reads each file before writing and skips one that changed since the preview (`changed since the preview`); no lock file | accepted |
+| [0031](0031-never-write-through-a-symlink.md) | `apply` never writes through a symlink, in or out of the repository (`symlink in the path — never written through`), as `git apply` does | accepted |
+| [0032](0032-atomic-file-writes-and-rollback-on-error.md) | Harness files are written whole or not at all (`sherpa.atomic`), and an `OSError` half-way rolls the written files back and names what a failed rollback left | accepted |
+| [0033](0033-differing-base-files-are-yours-after-adopt.md) | A base file (checker copy, hook, ignore file) that differs from sherpa's copy is yours after `adopt` and listed as a gap with the way to a fresh one — amends ADR-0017 §2 | accepted |

@@ -50,7 +50,7 @@ activity in a unit changes no block), so the two facts are two lines.
 
 ```json
 {
-  "sherpa": "0.7.0",
+  "sherpa": "0.7.1",
   "harness_rev": "c38498363846",
   "applied_at": "2026-09-16T22:07:12Z",
   "plan": {"stale": true, "trunk": "origin/main", "plan_rev": "2c22d796e3…", "current_rev": "9bac74de60…"},

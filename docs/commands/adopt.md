@@ -48,7 +48,7 @@ sherpa adopt [REPO] [--dry-run]
    | has sherpa markers; a block equals its rendering | `generated`, that block's hash — `apply` keeps it current |
    | has sherpa markers; a block equals its rendering except for an **older stamp format** (`origin/main@<rev>, as of <date>` from sherpa ≤ 0.5.0) | `generated`, the hash of the bytes on disk — sherpa's rendering of its day (ADR-0022); the next `apply` rewrites it in the current form (`~ block facts updated`) |
    | has sherpa markers; a block differs otherwise | that block is **not** recorded: a hand edit stays as it is; the console says `block facts differs (hand edit) — stays` |
-   | is a base file sherpa names itself (`sherpa-check.py`, `sherpa-outcome.py`, the telemetry ignore file) and differs | `generated` with the current hash — sherpa's by name; the next `apply` refreshes it (`~ updated`) |
+   | is a base file sherpa names itself (`sherpa-check.py`, `sherpa-outcome.py`, the telemetry ignore file) and differs | `adopted` — a hand edit or an older copy, adopt cannot tell (ADR-0033); the gap line says `differs from sherpa <version>'s copy — yours; delete it and run `apply` for the current one` |
    | is at sherpa's path for a plan entry and differs, no markers | `adopted`, linked to that entry — **covers** it |
    | is a root or nested `CLAUDE.md`/`AGENTS.md` without markers, or `settings.json` without the hook | not recorded — `apply` may still append its block or merge the hook (ADR-0016) |
 
@@ -86,7 +86,7 @@ gaps:
   - .claude/docs/modules/legacy.md: no unit matches by name or path mentions — moved, renamed or not a module doc
   - 2 proposed owner docs without an existing doc — `apply` creates them
   - 1 file of unknown kind — recorded as yours, listed above with `?`
-state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 223215100f49 → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
+state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 592b1a201d0c → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
 ```
 
 | Mark | Meaning |
