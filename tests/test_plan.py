@@ -17,7 +17,6 @@ from sherpa.plan import PROPOSE, SKIP, Check, Entry, build_plan, render_console,
 from sherpa.plan.rules import Unit, units_of
 from sherpa.scan import scan
 from tests.conftest import commit, git
-from tests.test_t1_modules import poly_repo  # noqa: F401 — fixture
 
 GOLDENS = Path(__file__).parent / "goldens"
 
@@ -440,7 +439,7 @@ def check_golden(name: str, text: str) -> None:
     )
 
 
-def test_poly_fixture_golden(poly_repo: Path):  # noqa: F811
+def test_poly_fixture_golden(poly_repo: Path):
     m = scan(poly_repo, fetch=False)
     p = build_plan(m)
     assert [e.kind for e in p.entries if e.default == PROPOSE] == ["outcome"] + ["owner-doc"] * 8
@@ -474,8 +473,7 @@ def test_poly_fixture_golden(poly_repo: Path):  # noqa: F811
     check_golden("poly-console.txt", render_console(p, "harness-plan.yaml"))
 
 
-@pytest.fixture
-def active_repo(tmp_path: Path) -> Path:
+def build_active_repo(tmp_path: Path) -> Path:
     """5 Python modules; ``svc/pay`` with 24 commits by 2 authors and 40 files; Django migrations in ``svc/pay``;
     a test module more active than any business module; ``svc/old`` dormant (only one old commit)."""
     work = tmp_path / "seed"
@@ -542,7 +540,7 @@ def test_active_fixture_acceptance(active_repo: Path):
 # ---------------------------------------------------------------- CLI
 
 
-def test_cli_plan_scans_when_model_missing_then_reuses_and_keeps_decisions(poly_repo: Path, capsys):  # noqa: F811
+def test_cli_plan_scans_when_model_missing_then_reuses_and_keeps_decisions(poly_repo: Path, capsys):
     assert main(["plan", str(poly_repo), "--no-fetch"]) == 0
     out, err = capsys.readouterr()
     assert "model scanned" in err and out.startswith("harness-plan.yaml — 9 proposals")
@@ -556,14 +554,14 @@ def test_cli_plan_scans_when_model_missing_then_reuses_and_keeps_decisions(poly_
     assert "decision: reject" in plan_path.read_text(encoding="utf-8")
 
 
-def test_cli_plan_rescan_and_stdout(poly_repo: Path, capsys):  # noqa: F811
+def test_cli_plan_rescan_and_stdout(poly_repo: Path, capsys):
     assert main(["plan", str(poly_repo), "--rescan", "--no-fetch", "--out", "-"]) == 0
     out, err = capsys.readouterr()
     assert out.startswith("# harness-plan") and "model scanned" in err and "harness-plan.yaml — " in err
     assert not (poly_repo / ".sherpa" / "harness-plan.yaml").exists()
 
 
-def test_cli_plan_stale_model_triggers_rescan(poly_repo: Path, capsys):  # noqa: F811
+def test_cli_plan_stale_model_triggers_rescan(poly_repo: Path, capsys):
     mp = poly_repo / ".sherpa" / "codebase-model.json"
     mp.parent.mkdir()
     mp.write_text('{"schema_version": 2}')
@@ -572,7 +570,7 @@ def test_cli_plan_stale_model_triggers_rescan(poly_repo: Path, capsys):  # noqa:
     assert "rebuilding the model" in err and "schema_version 2" in err
 
 
-def test_cli_plan_invalid_decision_is_an_error(poly_repo: Path, capsys):  # noqa: F811
+def test_cli_plan_invalid_decision_is_an_error(poly_repo: Path, capsys):
     assert main(["plan", str(poly_repo), "--no-fetch"]) == 0
     pp = poly_repo / ".sherpa" / "harness-plan.yaml"
     pp.write_text(pp.read_text(encoding="utf-8").replace("decision: null", "decision: maybe", 1), encoding="utf-8")

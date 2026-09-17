@@ -104,8 +104,7 @@ FILES: dict[str, str | bytes] = {
 }
 
 
-@pytest.fixture
-def poly_repo(tmp_path: Path) -> Path:
+def build_poly_repo(tmp_path: Path) -> Path:
     work = tmp_path / "seed"
     work.mkdir()
     git(work, "init", "-q", "-b", "main")

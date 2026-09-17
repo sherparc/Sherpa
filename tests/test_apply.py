@@ -22,7 +22,7 @@ from sherpa.cli import main
 from sherpa.plan import PROPOSE, Check, Entry, build_plan
 from sherpa.scan import scan
 from tests.conftest import commit
-from tests.test_plan import active_repo, check_golden, mod, model  # noqa: F401 — fixture and builders
+from tests.test_plan import check_golden, mod, model
 
 
 def entry(kind, target, scope="", default=PROPOSE, decision=None, **evidence) -> Entry:
@@ -348,7 +348,7 @@ def applied(repo: Path) -> None:
     assert main(["apply", str(repo), "--yes"]) == 0
 
 
-def test_apply_is_idempotent_and_deterministic(active_repo: Path, capsys):  # noqa: F811
+def test_apply_is_idempotent_and_deterministic(active_repo: Path, capsys):
     applied(active_repo)
     out = capsys.readouterr().out
     assert "18 to add, 0 to change, 0 unchanged, 0 skipped." in out and "check: 0 FAIL, 0 WARN" in out
@@ -384,7 +384,7 @@ def test_harness_rev_changes_only_with_managed_content():
     assert rev != state_mod.harness_rev(files, version="9.9.9")
 
 
-def test_rescan_updates_the_facts_block_and_keeps_human_text(active_repo: Path, capsys):  # noqa: F811
+def test_rescan_updates_the_facts_block_and_keeps_human_text(active_repo: Path, capsys):
     applied(active_repo)
     doc = active_repo / ".agents" / "docs" / "modules" / "pay.md"
     doc.write_text(
@@ -455,7 +455,7 @@ def test_state_round_trip_and_schema_guard(tmp_path: Path):
 # ---------------------------------------------------------------- status
 
 
-def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, capsys):  # noqa: F811
+def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, capsys):
     applied(active_repo)
     capsys.readouterr()
     assert main(["status", str(active_repo)]) == 0
@@ -522,7 +522,7 @@ def test_cli_apply_needs_plan_and_model(tmp_path: Path, capsys):
     assert "codebase-model.json not found" in capsys.readouterr().err
 
 
-def test_cli_apply_dry_run_asks_and_aborts(active_repo: Path, capsys, monkeypatch):  # noqa: F811
+def test_cli_apply_dry_run_asks_and_aborts(active_repo: Path, capsys, monkeypatch):
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
     capsys.readouterr()
     assert main(["apply", str(active_repo)]) == 0  # no terminal → dry run only
@@ -538,7 +538,7 @@ def test_cli_apply_dry_run_asks_and_aborts(active_repo: Path, capsys, monkeypatc
     assert "18 files written" in capsys.readouterr().out and (active_repo / "CLAUDE.md").exists()
 
 
-def test_cli_check(active_repo: Path, capsys):  # noqa: F811
+def test_cli_check(active_repo: Path, capsys):
     applied(active_repo)
     capsys.readouterr()
     assert main(["check", str(active_repo)]) == 0
@@ -549,7 +549,7 @@ def test_cli_check(active_repo: Path, capsys):  # noqa: F811
 # ---------------------------------------------------------------- goldens (the README shows these)
 
 
-def test_active_fixture_goldens(active_repo: Path, capsys):  # noqa: F811
+def test_active_fixture_goldens(active_repo: Path, capsys):
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
     capsys.readouterr()
     assert main(["apply", str(active_repo), "--dry-run"]) == 0
@@ -731,7 +731,7 @@ def test_resolve_layout_detects_asks_and_remembers(tmp_path: Path, monkeypatch):
     )
 
 
-def test_cli_apply_refuses_ambiguous_home_without_terminal(active_repo: Path, capsys):  # noqa: F811
+def test_cli_apply_refuses_ambiguous_home_without_terminal(active_repo: Path, capsys):
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
     (active_repo / ".claude").mkdir()
     (active_repo / ".agents").mkdir()
@@ -740,7 +740,7 @@ def test_cli_apply_refuses_ambiguous_home_without_terminal(active_repo: Path, ca
     assert 'Set [apply] home = ".agents" or ".claude" in sherpa.toml' in capsys.readouterr().err
 
 
-def test_existing_nested_agents_md_gets_the_block_appended(active_repo: Path, capsys):  # noqa: F811
+def test_existing_nested_agents_md_gets_the_block_appended(active_repo: Path, capsys):
     nested = active_repo / "svc" / "pay" / "AGENTS.md"
     nested.write_text("# pay — team notes\n\nRun `make test` first.\n", encoding="utf-8")
     root = active_repo / "AGENTS.md"

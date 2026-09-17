@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -50,6 +51,43 @@ def commit(
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", msg, date=date, author=author)
     return git(repo, "rev-parse", "HEAD")
+
+
+def copy_repo(built: Path, into: Path) -> Path:
+    """A per-test copy of a session-built fixture directory (seed, ``origin.git``, the clone): one ``copytree``
+    instead of dozens of git subprocesses — the difference between 45 s and 6 min on the Windows runner. The
+    clone's ``origin`` is re-pointed at the copied bare repository so pushes and fetches stay inside the test."""
+    dst = into / built.name
+    shutil.copytree(built, dst, symlinks=True)
+    for clone in (
+        d for d in dst.iterdir() if d.is_dir() and d.name not in ("seed", "origin.git") and (d / ".git").exists()
+    ):
+        git(clone, "remote", "set-url", "origin", str(dst / "origin.git"))
+    return dst
+
+
+def _session_repo(name: str, module: str, builder: str):
+    """Two fixtures from one builder function: ``<name>_built`` (session scope, built once) and ``<name>``
+    (a fresh copy per test). The builder lives in the test module that documents the fixture; it is imported
+    lazily so conftest stays importable first."""
+
+    @pytest.fixture(scope="session", name=f"{name}_built")
+    def built(tmp_path_factory: pytest.TempPathFactory) -> Path:
+        import importlib
+
+        build = getattr(importlib.import_module(module), builder)
+        return build(tmp_path_factory.mktemp(name, numbered=False))
+
+    @pytest.fixture(name=name)
+    def per_test(request: pytest.FixtureRequest, tmp_path: Path) -> Path:
+        src: Path = request.getfixturevalue(f"{name}_built")
+        return copy_repo(src.parent, tmp_path) / src.name
+
+    return built, per_test
+
+
+active_repo_built, active_repo = _session_repo("active_repo", "tests.test_plan", "build_active_repo")
+poly_repo_built, poly_repo = _session_repo("poly_repo", "tests.test_t1_modules", "build_poly_repo")
 
 
 @pytest.fixture
