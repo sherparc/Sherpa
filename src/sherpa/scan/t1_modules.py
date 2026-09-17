@@ -317,6 +317,11 @@ def find_modules(paths: list[str], contents: dict[str, bytes | None]) -> list[Ra
 # --------------------------------------------------------------------------- resolution + aggregation
 
 
+def is_source(path: str) -> bool:
+    """A file in a language the T1 layer knows (``_EXT_LANG``) — code, not data, goldens or docs."""
+    return posixpath.splitext(path)[1].lower() in _EXT_LANG
+
+
 def is_test_file(path: str) -> bool:
     parts = path.split("/")
     if any(p in TEST_DIR_NAMES for p in parts[:-1]):

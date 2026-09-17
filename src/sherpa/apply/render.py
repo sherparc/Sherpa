@@ -18,6 +18,7 @@ from sherpa.apply.state import BLOCKS, JSON_HOOKS, MANAGED
 from sherpa.config import TARGETS
 from sherpa.model import DirStat, Model, ModuleStat, SubDir
 from sherpa.plan import PROPOSE, Entry, Plan
+from sherpa.scan.t1_modules import is_source, is_test_file
 
 ASSETS = Path(__file__).parent / "assets"
 CLAUDE = ".claude"
@@ -340,7 +341,11 @@ class Renderer:
             if row := self.coupling_row(u):
                 rows.append(row)
         elif isinstance(u, SubDir):
-            rows.append(("part of", f"`{self.parent_module(e)}` — {u.files} files, {u.commits_90d} commits/90d"))
+            rows += [
+                ("part of", f"`{self.parent_module(e)}` — {u.files} files, {u.commits_90d} commits/90d"),
+                ("hotspots", _list(self.hotspots_under(e.scope))),
+                ("tests naming it", _list(self.tests_naming(e.scope), "none found by name")),
+            ]
         gens = self.generator_skills(e)
         if gens:
             rows.append(("generated code", ", ".join(f"{fam} → `{p}` (never edit the output)" for fam, p in gens)))
@@ -361,6 +366,40 @@ class Renderer:
 
     def parent_module(self, e: Entry) -> str | None:
         return next((mid for (path, mid) in self.sub_dirs if path == e.scope), None)
+
+    def sub_units_of(self, module_id: str) -> list[tuple[Entry, SubDir]]:
+        """The sub-units (ADR-0020) of a module that the plan turned into units, by path."""
+        out = [
+            (e, s)
+            for e in self.units
+            for (path, mid), s in self.sub_dirs.items()
+            if mid == module_id and e.scope == path
+        ]
+        return sorted(out, key=lambda es: es[0].scope)
+
+    def hotspots_under(self, path: str) -> list[str]:
+        """Top 3 files below ``path`` by commits × LOC — the same score as the module hotspots, on the sub-unit."""
+        prefix = path + "/"
+        scored = [
+            (-(f.commits_90d * (f.loc or 0)), f.path)
+            for f in self.model.git.files
+            if f.path.startswith(prefix) and f.commits_90d >= 1 and f.loc and not f.generated
+        ]
+        return [p for _, p in sorted(scored)[:3]]
+
+    def tests_naming(self, path: str) -> list[str]:
+        """Test files whose name carries the sub-unit's last segment (``tests/test_apply.py`` for ``src/app/apply``)
+        — a name match, not a dependency; the row says so."""
+        name = path.rsplit("/", 1)[-1].lower()
+        hits = [
+            f.path
+            for f in self.model.git.files
+            if is_test_file(f.path)
+            and is_source(f.path)  # test code, not goldens or fixtures under tests/
+            and name in f.path.rsplit("/", 1)[-1].lower()
+            and not f.path.startswith(path + "/")
+        ]
+        return sorted(hits)[:3]
 
     @staticmethod
     def coupling_row(u: ModuleStat) -> tuple[str, str] | None:
@@ -385,12 +424,14 @@ class Renderer:
         u = self.unit(e)
         rows: list[tuple[str, str]] = [("path", f"`{e.scope or '.'}`")]
         if isinstance(u, ModuleStat):
+            subs = self.sub_units_of(u.id)
+            in_subs = sum(s.files for _, s in subs)
+            files = f"{u.files} / {u.loc}" + (f" ({u.generated_files} generated)" if u.generated_files else "")
+            if subs:  # one owner per fact: the sub-units' files are counted here and described there
+                files += f" — {in_subs} files in {len(subs)} sub-units, described in their own owner docs"
             rows += [
                 ("kind", f"{u.kind} module (`{u.manifest}`)" + (", test module" if u.is_test else "")),
-                (
-                    "files / LOC",
-                    f"{u.files} / {u.loc}" + (f" ({u.generated_files} generated)" if u.generated_files else ""),
-                ),
+                ("files / LOC", files),
                 ("commits 90d / 30d", f"{u.commits_90d} / {u.commits_30d} · {u.authors_90d} authors"),
                 ("depends on", _list(u.deps)),
                 ("dependents", _list(u.dependents)),
@@ -399,11 +440,21 @@ class Renderer:
             ]
             if row := self.coupling_row(u):
                 rows.append(row)
+            if subs:
+                docs_dir = f"{self.home}/docs/modules"
+                links = [
+                    f"[{sub.scope}]({_relpath(docs_dir, self.docs[sub.target])}) "
+                    f"({s.files} files, {s.commits_90d} commits/90d)"
+                    for sub, s in subs
+                ]
+                rows.append(("contains", ", ".join(links)))
         elif isinstance(u, SubDir):
             rows += [
                 ("kind", f"directory inside module `{self.parent_module(e)}`" + (" (package)" if u.package else "")),
                 ("files / LOC", f"{u.files} / {u.loc} ({u.source_files} source files)"),
                 ("commits 90d / 30d", f"{u.commits_90d} / {u.commits_30d} · {u.authors_90d} authors"),
+                ("hotspots", _list(self.hotspots_under(e.scope))),
+                ("tests naming it", _list(self.tests_naming(e.scope), "none — a name match, not a dependency")),
             ]
         elif isinstance(u, DirStat):
             rows += [

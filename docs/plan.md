@@ -327,6 +327,12 @@ subprocesses: no test reaches the network.
     field once a corpus repository with sub-units shows a pair above the floors? Measure first.
 14. Remaining fruit from §7.2 not in M3d: test and build commands per unit in the facts; a `status` line for
     adopted files changed since adopt. Both small; schedule with M5, which touches `status` anyway.
+15. **Owner-doc floor for sub-units by files is the wrong metric for Python packages.** Sherpa's own `plan` (3
+    files, ~1.0k LOC) and `scan` (4 files, ~0.9k LOC) are reasoned no's under `owner_doc_min_files = 5`, while
+    they carry most of the logic; the repository's hotspot score would have named them first. ADR-0014 was
+    calibrated on modules (a three-file module is a tool), not on packages with few large files. Proposal: a
+    second way over the floor for sub-units only — ≥ 5 files **or** ≥ 500 LOC — as an amendment to ADR-0014,
+    with the LOC value in `sherpa.toml`. Decide after one more corpus repository with sub-units (Q13).
 
 Decided (2026-09-16): plan format YAML and check-in of plan/state → ADR-0005; generator principle → ADR-0011;
 units, visibility, decision keeping → ADR-0012. Decided (2026-09-17): state as a rebuildable index, atomic
@@ -401,6 +407,12 @@ had not seen; both were built into M3d before it shipped.
 | G6 | **The sub-unit rule had no data to run on.** `DirStat` stopped at depth 2; Sherpa's own sub-units are depth 3, the Python default `src/<pkg>/<sub>` layout too. | `t0_git.py` `DIR_DEPTH = 2`; `sherpa plan .` → `1 owner-doc sherpa-harness`. | ADR-0020 could not be implemented in `plan/` alone. Built: `sub_dirs` per module in the model (v4), depths 1–4 relative to the module path, with source-file counts and the package flag. |
 | G7 | **Naive change coupling is dominated by squash merges.** Sherpa's trunk: 14 commits in 90 d, every one touches docs, tests, README and several modules → 100 % coupling everywhere. GitHub's default merge option produces this shape. | `git log origin/main --no-merges --name-only` on this repository. | A `changes together with` row that reads 100 % is wrong. Built: size cap max(5, ⌈modules/2⌉) with the skipped count in the model (ADR-0021). |
 | G8 | **The index cap needs a rank, the index had none.** `agents_md_targets` sorted nested files alphabetically; `plan.ranking` was unused in `apply`. | `render.py` `sorted(nested, key=scope)`. | A cap on an alphabetical list keeps `a…` and drops the hotspot. Built: order by `ranking.commits_90d`, top 20, "and N more". |
+
+Seen in the dogfood after the slice (Sherpa's own harness, first sub-unit `src/sherpa/apply`), fixed in the
+same PR: the sub-unit facts block had four rows and no hotspots, although `git.files` carries them — now
+hotspots under the path and the test files naming it; the root doc counted the sub-units' files without
+saying where they are described — now `files / LOC … — N files in K sub-units, described in their own owner
+docs` plus a `contains` row with links. What stays open is the floor (§6 Q15).
 
 ### 8.2 Fruit taken and left
 

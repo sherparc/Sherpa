@@ -214,7 +214,7 @@ def test_directory_unit_and_accepted_librarian():
 
 
 def test_coupling_row_and_sub_unit_facts():
-    from sherpa.model import Coupling
+    from sherpa.model import Coupling, FileStat
     from tests.test_plan import sub
 
     subs = [sub("src/app/pay", 3, files=6, c90=12, c30=4, authors=2), sub("src/app/core", 3, files=5, c90=3)]
@@ -233,16 +233,40 @@ def test_coupling_row_and_sub_unit_facts():
             ),
         ]
     )
+    files = [
+        FileStat("src/app/pay/engine.py", 400, False, 9, 3, 2, None),
+        FileStat("src/app/pay/models.py", 200, False, 4, 1, 1, None),
+        FileStat("src/app/pay/gen.py", 900, True, 9, 1, 1, None),  # generated: never a hotspot
+        FileStat("src/app/pay/quiet.py", 900, False, 0, 0, 0, None),  # no commits: never a hotspot
+        FileStat("tests/test_pay.py", 100, False, 2, 1, 1, None),
+        FileStat("tests/unit/pay_test.py", 50, False, 1, 1, 1, None),
+        FileStat("src/app/pay/tests/test_local.py", 10, False, 1, 1, 1, None),  # inside the unit: not "naming it"
+        FileStat("tests/goldens/pay-console.txt", 10, False, 1, 1, 1, None),  # a golden: data under tests/, not code
+    ]
+    m = replace(m, git=replace(m.git, files=files))
     p = build_plan(m)
     by_path = {t.path: t for t in targets_for(p, m)}
     facts = by_path[".agents/docs/modules/app.md"].blocks["facts"]
     assert "| changes together with | `shared-lib` (15 of 30 commits, 50 %), `web` (9 of 30 commits, 30 %) |" in facts
     assert "changes together with" in by_path["AGENTS.md"].blocks["harness"]  # the root proximity block too
+    # the root doc knows its sub-units and says where their files are described (one owner per fact)
+    assert "| files / LOC | 60 / 600 — 11 files in 2 sub-units, described in their own owner docs |" in facts
+    assert (
+        "| contains | [src/app/core](src-app-core.md) (5 files, 3 commits/90d), "
+        "[src/app/pay](src-app-pay.md) (6 files, 12 commits/90d) |" in facts
+    )
     pay = by_path[".agents/docs/modules/src-app-pay.md"].blocks["facts"]
     assert "| kind | directory inside module `app` (package) |" in pay
     assert "| files / LOC | 6 / 60 (6 source files) |" in pay and "| commits 90d / 30d | 12 / 4 · 2 authors |" in pay
+    assert "| hotspots | `src/app/pay/engine.py`, `src/app/pay/models.py`, `src/app/pay/tests/test_local.py` |" in pay
+    assert "| tests naming it | `tests/test_pay.py`, `tests/unit/pay_test.py` |" in pay
+    core = by_path[".agents/docs/modules/src-app-core.md"].blocks["facts"]
+    assert "| hotspots | — |" in core and "| tests naming it | none — a name match, not a dependency |" in core
     nested = by_path["src/app/pay/AGENTS.md"].blocks["facts"]
     assert "| part of | `app` — 6 files, 12 commits/90d |" in nested
+    assert (
+        "| hotspots | `src/app/pay/engine.py`, `src/app/pay/models.py`, `src/app/pay/tests/test_local.py` |" in nested
+    )
     assert "changes together with" not in nested  # coupling is measured per module, not per sub-unit
 
 
