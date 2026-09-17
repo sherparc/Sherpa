@@ -899,3 +899,213 @@ def test_existing_nested_agents_md_gets_the_block_appended(active_repo: Path, ca
     assert "targets: agents-md · home: .agents" in out and not (active_repo / "CLAUDE.md").exists()  # detected
     assert "note: no target with hooks" in out  # honest: no outcome labels without Claude Code
     assert main(["check", str(active_repo)]) == 0
+
+
+def test_write_skips_a_file_that_changed_since_the_preview(tmp_path: Path):
+    """Compare-and-swap (ADR-0030): the bytes were computed from the preview's read; a file that moved in
+    between is never overwritten — managed, blocks and hooks alike — and its record stays as it was."""
+    repo = tmp_path
+    plan = build_plan(model([mod("a", "a", c90=1)]))
+    doc = Target(".claude/docs/modules/a.md", MANAGED, None, "# a\n")
+    root = Target("CLAUDE.md", BLOCKS, None, "", blocks={"facts": "one"}, append=True)
+    (repo / "CLAUDE.md").write_text("# Theirs\n", encoding="utf-8")
+    hooks = Target(
+        ".claude/settings.json", JSON_HOOKS, None, "", hooks={"Stop": [{"hooks": [{"command": "x sherpa-outcome.py"}]}]}
+    )
+    r = write(plan_files([doc, root, hooks], repo, State()), repo, State(), plan)
+    assert r.written == 3 and not r.rolled_back
+    # second round: every file is planned as an update, then edited by somebody else before the write
+    doc2 = Target(doc.path, MANAGED, None, "# a v2\n")
+    root2 = Target(root.path, BLOCKS, None, "", blocks={"facts": "two"}, append=True)
+    hooks2 = Target(
+        hooks.path, JSON_HOOKS, None, "", hooks={"PreToolUse": [{"hooks": [{"command": "y sherpa-outcome.py"}]}]}
+    )
+    actions = plan_files([doc2, root2, hooks2], repo, r.state)
+    assert [a.op for a in actions] == [UPDATED, UPDATED, UPDATED]
+    (repo / doc.path).write_text("# a, mine now\n", encoding="utf-8")
+    (repo / "CLAUDE.md").write_text(
+        "Prose written while sherpa was waiting.\n" + (repo / "CLAUDE.md").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (repo / hooks.path).write_text('{"hooks": {}, "theirs": true}\n', encoding="utf-8")
+    r2 = write(actions, repo, r.state, plan)
+    assert r2.written == 0 and not r2.rolled_back
+    assert [(a.op, a.detail) for a in r2.actions] == [(SKIPPED, apply.CHANGED_SINCE_PREVIEW)] * 3
+    assert (repo / doc.path).read_text(encoding="utf-8") == "# a, mine now\n"
+    assert (repo / "CLAUDE.md").read_text(encoding="utf-8").startswith("Prose written while sherpa was waiting.\n")
+    assert "\none\n" in (repo / "CLAUDE.md").read_text(encoding="utf-8")
+    assert (repo / hooks.path).read_text(encoding="utf-8") == '{"hooks": {}, "theirs": true}\n'
+    assert r2.state.files == r.state.files  # records untouched: the next run plans against what is there now
+    out = apply.render_result(r2)
+    assert "  ! CLAUDE.md  changed since the preview (skipped)" in out and "0 files written" in out
+    # the next preview sees the hand edits as such
+    r3 = plan_files([doc2, root2, hooks2], repo, r2.state)
+    assert r3[0].detail == "hand-edited (skipped)"
+
+
+def test_write_skips_a_file_that_appeared_since_the_preview(tmp_path: Path):
+    doc = Target(".claude/docs/modules/a.md", MANAGED, None, "# a\n")
+    plan = build_plan(model([mod("a", "a", c90=1)]))
+    actions = plan_files([doc], tmp_path, State())
+    assert actions[0].op == NEW and actions[0].old is None
+    (tmp_path / doc.path).parent.mkdir(parents=True)
+    (tmp_path / doc.path).write_text("theirs\n", encoding="utf-8")
+    r = write(actions, tmp_path, State(), plan)
+    assert r.written == 0 and r.actions[0].op == SKIPPED and r.actions[0].detail == apply.CHANGED_SINCE_PREVIEW
+    assert (tmp_path / doc.path).read_text(encoding="utf-8") == "theirs\n"
+    assert doc.path not in r.state.files
+
+
+def test_rollback_never_touches_a_file_skipped_since_the_preview(tmp_path: Path):
+    """A rollback restores only what was written; the skipped file keeps the bytes somebody else put there."""
+    repo = tmp_path
+    plan = build_plan(model([mod("a", "a", c90=1)]))
+    ok = Target(".claude/docs/modules/ok.md", MANAGED, None, "# ok\n")
+    r = write(plan_files([ok], repo, State()), repo, State(), plan)
+    ok2 = Target(ok.path, MANAGED, None, "# ok v2\n")
+    bad = Target(".claude/docs/modules/bad.md", MANAGED, None, "<!-- sherpa:begin x -->\nnever closed\n")
+    actions = plan_files([ok2, bad], repo, r.state)
+    (repo / ok.path).write_text("# ok, mine\n", encoding="utf-8")
+    r2 = write(actions, repo, r.state, plan)
+    assert r2.rolled_back and r2.written == 0
+    assert (repo / ok.path).read_text(encoding="utf-8") == "# ok, mine\n"
+    assert not (repo / bad.path).exists()
+
+
+def _symlink(link: Path, to: Path) -> None:
+    try:
+        link.symlink_to(to, target_is_directory=to.is_dir())
+    except (OSError, NotImplementedError) as e:  # Windows without the privilege
+        pytest.skip(f"symlinks not available here: {e}")
+
+
+def test_plan_never_writes_through_a_symlink(tmp_path: Path):
+    """ADR-0031: a symlink anywhere in the path — to a file outside the repo, to a sibling inside it, or a
+    directory — is skipped in the preview; the bytes behind the link stay as they are."""
+    repo = tmp_path / "repo"
+    (repo / ".claude" / "docs").mkdir(parents=True)
+    outside = tmp_path / "outside.md"
+    outside.write_text("theirs, outside\n", encoding="utf-8")
+    _symlink(repo / "AGENTS.md", outside)  # file link out of the repo
+    (repo / "CLAUDE.md").write_text("# Theirs\n", encoding="utf-8")
+    extern = tmp_path / "elsewhere"
+    extern.mkdir()
+    _symlink(repo / ".claude" / "docs" / "modules", extern)  # directory link out of the repo
+    targets = [
+        Target("AGENTS.md", BLOCKS, None, "", blocks={"harness": "x"}, append=True),
+        Target("CLAUDE.md", BLOCKS, None, "", blocks={"harness": "x"}, append=True),
+        Target(".claude/docs/modules/a.md", MANAGED, None, "# a\n"),
+    ]
+    actions = plan_files(targets, repo, State())
+    assert [(a.op, a.detail) for a in actions[:1]] == [(SKIPPED, apply.THROUGH_SYMLINK)]
+    assert actions[1].op == UPDATED  # the real file next to the link is fine
+    assert (actions[2].op, actions[2].detail) == (SKIPPED, apply.THROUGH_SYMLINK)
+    plan = build_plan(model([mod("a", "a", c90=1)]))
+    r = write(actions, repo, State(), plan)
+    assert r.written == 1 and outside.read_text(encoding="utf-8") == "theirs, outside\n" and not list(extern.iterdir())
+    assert set(r.state.files) == {"CLAUDE.md"}
+    out = render_actions(actions, plan)
+    assert "! AGENTS.md" in out and "symlink in the path — never written through (skipped)" in out
+
+
+def test_plan_never_writes_through_a_symlink_to_a_sibling(tmp_path: Path):
+    """``AGENTS.md → CLAUDE.md`` is a common pattern: one file, one record — the link is skipped, the target managed."""
+    (tmp_path / "CLAUDE.md").write_text("# Theirs\n", encoding="utf-8")
+    _symlink(tmp_path / "AGENTS.md", tmp_path / "CLAUDE.md")
+    targets = [
+        Target("CLAUDE.md", BLOCKS, None, "", blocks={"harness": "x"}, append=True),
+        Target("AGENTS.md", BLOCKS, None, "", blocks={"harness": "y"}, append=True),
+    ]
+    plan = build_plan(model([mod("a", "a", c90=1)]))
+    r = write(plan_files(targets, tmp_path, State()), tmp_path, State(), plan)
+    assert r.written == 1 and set(r.state.files) == {"CLAUDE.md"}
+    text = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+    assert text.count("sherpa:begin") == 1 and "\nx\n" in text
+
+
+def test_write_skips_a_path_that_became_a_symlink_since_the_preview(tmp_path: Path):
+    doc = Target(".claude/docs/modules/a.md", MANAGED, None, "# a\n")
+    plan = build_plan(model([mod("a", "a", c90=1)]))
+    actions = plan_files([doc], tmp_path, State())
+    assert actions[0].op == NEW
+    outside = tmp_path / "outside.md"
+    outside.write_text("theirs\n", encoding="utf-8")
+    (tmp_path / doc.path).parent.mkdir(parents=True)
+    _symlink(tmp_path / doc.path, outside)
+    r = write(actions, tmp_path, State(), plan)
+    assert r.written == 0 and r.actions[0].detail == apply.CHANGED_SINCE_PREVIEW
+    assert outside.read_text(encoding="utf-8") == "theirs\n" and not r.state.files
+
+
+def test_write_rolls_back_when_a_write_fails_half_way(tmp_path: Path, monkeypatch):
+    """ADR-0032: an OSError on the second file removes the first again; the state stays as it was."""
+    repo = tmp_path
+    plan = build_plan(model([mod("a", "a", c90=1)]))
+    one = Target(".claude/docs/modules/one.md", MANAGED, None, "# one\n")
+    two = Target(".claude/docs/modules/two.md", MANAGED, None, "# two\n")
+    r = write(plan_files([two], repo, State()), repo, State(), plan)
+    before = (repo / ".sherpa/state.json").read_bytes()
+    real = apply.atomic.write_text
+
+    def failing(path: Path, text: str) -> None:
+        if path.name == "two.md":
+            raise OSError(28, "No space left on device")
+        real(path, text)
+
+    monkeypatch.setattr(apply.atomic, "write_text", failing)
+    two2 = Target(two.path, MANAGED, None, "# two v2\n")
+    r2 = write(plan_files([one, two2], repo, r.state), repo, r.state, plan)
+    assert r2.rolled_back and r2.written == 0 and r2.left == []
+    assert r2.error == ".claude/docs/modules/two.md: [Errno 28] No space left on device"
+    assert not (repo / one.path).exists()  # the new file is gone again
+    assert (repo / two.path).read_text(encoding="utf-8") == "# two\n"  # the old one untouched
+    assert (repo / ".sherpa/state.json").read_bytes() == before
+    out = apply.render_result(r2)
+    assert (
+        out
+        == "write failed: .claude/docs/modules/two.md: [Errno 28] No space left on device — rolled back, nothing written\n"
+    )
+
+
+def test_write_names_what_a_failed_rollback_left_behind(tmp_path: Path, monkeypatch):
+    repo = tmp_path
+    plan = build_plan(model([mod("a", "a", c90=1)]))
+    one = Target(".claude/docs/modules/one.md", MANAGED, None, "# one\n")
+    two = Target(".claude/docs/modules/two.md", MANAGED, None, "# two\n")
+    r = write(plan_files([one], repo, State()), repo, State(), plan)
+    calls = {"n": 0}
+    real = apply.atomic.write_text
+
+    def failing(path: Path, text: str) -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            real(path, text)  # one.md v2 lands
+        else:
+            raise OSError(30, "Read-only file system")  # two.md fails, and so does restoring one.md
+
+    monkeypatch.setattr(apply.atomic, "write_text", failing)
+    one2 = Target(one.path, MANAGED, None, "# one v2\n")
+    r2 = write(plan_files([one2, two], repo, r.state), repo, r.state, plan)
+    assert r2.rolled_back and r2.left == [".claude/docs/modules/one.md"]
+    assert (repo / one.path).read_text(encoding="utf-8") == "# one v2\n"
+    out = apply.render_result(r2)
+    assert "rollback failed for: .claude/docs/modules/one.md — restore with `git checkout -- <path>`" in out
+    assert "`sherpa adopt` rebuilds the state" in out
+
+
+def test_write_is_atomic_per_file(tmp_path: Path, monkeypatch):
+    """The target is never observed truncated: the bytes go to a sibling temp file, then ``os.replace``."""
+    repo = tmp_path
+    doc = repo / ".claude/docs/modules/a.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("# old\n", encoding="utf-8")
+    seen = []
+    real_replace = os.replace
+
+    def spying_replace(src, dst):
+        seen.append((Path(src).name, Path(dst).read_text(encoding="utf-8")))
+        real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", spying_replace)
+    apply.atomic.write_text(doc, "# new\n")
+    assert seen == [(f".a.md.{os.getpid()}.tmp", "# old\n")]  # the old file was intact right before the swap
+    assert doc.read_text(encoding="utf-8") == "# new\n" and sorted(p.name for p in doc.parent.iterdir()) == ["a.md"]

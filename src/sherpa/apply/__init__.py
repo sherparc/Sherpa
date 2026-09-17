@@ -14,6 +14,12 @@ nested ``CLAUDE.md``/``AGENTS.md`` get sherpa's block appended; a file the state
 touched either (ADR-0007).
 
 Determinism: same plan, model and files → same actions, same bytes; the second run is all ``=``.
+
+The bytes ``write()`` puts down were computed from the preview's read; a file that changed in between (an editor,
+a second agent) is skipped with ``changed since the preview`` instead of overwritten (ADR-0030). A path with a
+symlink in it is never written through (ADR-0031): the bytes would land in a file that is not the target. Every
+file is written whole or not at all (``sherpa.atomic``), and an ``OSError`` half-way rolls the written files back
+like a new checker FAIL does (ADR-0032).
 """
 
 from __future__ import annotations
@@ -22,7 +28,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sherpa import __version__
+from sherpa import __version__, atomic
 from sherpa.apply import state as state_mod
 from sherpa.apply.render import HOOK_COMMAND, Renderer, Target
 from sherpa.apply.state import ADOPTED, BLOCKS, JSON_HOOKS, MANAGED, FileRecord, State
@@ -55,6 +61,8 @@ class Result:
     findings: list[Finding] = field(default_factory=list)  # checker output after the write
     rolled_back: bool = False
     written: int = 0
+    error: str | None = None  # the OSError that stopped the write (ADR-0032)
+    left: list[str] = field(default_factory=list)  # files the rollback could not restore
 
     def counts(self) -> dict[str, int]:
         return {op: sum(a.op == op for a in self.actions) for op in (NEW, UPDATED, UNCHANGED, SKIPPED)}
@@ -86,7 +94,21 @@ def targets_for(
 
 
 def plan_files(targets: list[Target], repo: Path, state: State) -> list[Action]:
-    return [_plan_one(t, _read(repo / t.path), state.files.get(t.path)) for t in targets]
+    return [_plan_one(t, _read(repo / t.path), state.files.get(t.path), repo) for t in targets]
+
+
+THROUGH_SYMLINK = "symlink in the path — never written through (skipped)"
+
+
+def _through_symlink(repo: Path, rel: str) -> bool:
+    """True when any component of ``rel`` below the repo root is a symlink (ADR-0031): the bytes would land in
+    another file — outside the repository, or inside it under a second record — so the path is not written to."""
+    p = repo
+    for part in rel.split("/"):
+        p = p / part
+        if p.is_symlink():
+            return True
+    return False
 
 
 def _read(path: Path) -> str | None:
@@ -95,7 +117,9 @@ def _read(path: Path) -> str | None:
     return path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
 
 
-def _plan_one(t: Target, current: str | None, rec: FileRecord | None) -> Action:
+def _plan_one(t: Target, current: str | None, rec: FileRecord | None, repo: Path) -> Action:
+    if _through_symlink(repo, t.path):
+        return Action(t, SKIPPED, THROUGH_SYMLINK, None, current, None)
     if rec is not None and rec.origin == ADOPTED:
         if current is None:
             return Action(t, SKIPPED, "adopted file is gone — `sherpa adopt` drops the record", None, None, None)
@@ -246,6 +270,35 @@ def _has_sherpa_hook(group: dict) -> bool:
 
 # ---------------------------------------------------------------- phase 2: write, check, roll back
 
+CHANGED_SINCE_PREVIEW = "changed since the preview (skipped)"
+
+
+def _reconcile(a: Action, repo: Path) -> Action:
+    """Compare-and-swap (ADR-0030): ``a.new`` was computed from ``a.old``; if the file no longer reads as
+    ``a.old`` — an editor, a second agent — or a symlink appeared in its path (ADR-0031), writing ``a.new``
+    would overwrite somebody's bytes. Skip instead and keep the previous record; the next run plans against
+    what is there now."""
+    if a.new is None:
+        return a
+    if _through_symlink(repo, a.path) or _read(repo / a.path) != a.old:
+        return Action(a.target, SKIPPED, CHANGED_SINCE_PREVIEW, None, a.old, None)
+    return a
+
+
+def _roll_back(written: list[Action], repo: Path) -> list[str]:
+    """Restore every written file to ``old`` (or remove it); returns the paths that could not be restored."""
+    left = []
+    for a in written:
+        p = repo / a.path
+        try:
+            if a.old is None:
+                p.unlink(missing_ok=True)
+            else:
+                atomic.write_text(p, a.old)
+        except OSError:
+            left.append(a.path)
+    return left
+
 
 def write(
     actions: list[Action],
@@ -261,26 +314,25 @@ def write(
     from sherpa.check import check as run_check
 
     before = {f for f in run_check(repo) if f.level == FAIL} if check else set()
+    actions = [_reconcile(a, repo) for a in actions]
     written: list[Action] = []
-    for a in actions:
-        if a.new is None:
-            continue
-        p = repo / a.path
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(a.new, encoding="utf-8", newline="\n")
-        written.append(a)
-    result = Result(actions, previous, written=len(written))
+    result = Result(actions, previous)
+    try:
+        for a in actions:
+            if a.new is None:
+                continue
+            atomic.write_text(repo / a.path, a.new)  # whole or not at all (ADR-0032)
+            written.append(a)
+    except OSError as e:
+        result.error = f"{a.path}: {e}"
+        result.rolled_back, result.left = True, _roll_back(written, repo)
+        return result
+    result.written = len(written)
     if check:
         result.findings = run_check(repo)
         new_fails = {f for f in result.findings if f.level == FAIL} - before
         if new_fails:
-            for a in written:
-                p = repo / a.path
-                if a.old is None:
-                    p.unlink(missing_ok=True)
-                else:
-                    p.write_text(a.old, encoding="utf-8", newline="\n")
-            result.rolled_back = True
+            result.rolled_back, result.left = True, _roll_back(written, repo)
             result.written = 0
             result.findings = sorted(new_fails, key=str)
             return result
@@ -332,17 +384,28 @@ def render_result(r: Result) -> str:
     n_fail = sum(f.level == FAIL for f in r.findings)
     n_warn = len(r.findings) - n_fail
     if r.rolled_back:
-        lines = [f"check: {n_fail} new FAIL — rolled back, nothing written"]
-        lines.extend(f"  {f}" for f in r.findings)
+        if r.error is not None:
+            lines = [f"write failed: {r.error} — rolled back, nothing written"]
+        else:
+            lines = [f"check: {n_fail} new FAIL — rolled back, nothing written"]
+            lines.extend(f"  {f}" for f in r.findings)
+        if r.left:
+            lines.append(
+                "rollback failed for: " + ", ".join(r.left) + " — restore with `git checkout -- <path>` or "
+                "`git clean`, then `sherpa adopt` rebuilds the state"
+            )
         return "\n".join(lines) + "\n"
     lines = [f"check: {n_fail} FAIL, {n_warn} WARN"]
     lines.extend(f"  {f}" for f in r.findings if f.level == FAIL)
+    lines.extend(f"  ! {a.path}  {a.detail}" for a in r.actions if a.detail == CHANGED_SINCE_PREVIEW)
     lines.append(f"{r.written} files written · harness_rev {r.state.harness_rev} → .sherpa/state.json")
     return "\n".join(lines) + "\n"
 
 
 __all__ = [
+    "CHANGED_SINCE_PREVIEW",
     "HOOK_COMMAND",
+    "THROUGH_SYMLINK",
     "Action",
     "Result",
     "StalePlan",

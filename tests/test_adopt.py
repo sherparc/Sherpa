@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from sherpa import atomic
+from sherpa import __version__, atomic
 from sherpa.apply import state as state_mod
 from sherpa.apply.adopt import Found, kind_of, link
 from sherpa.apply.render import selected
@@ -192,7 +192,9 @@ def test_adopt_rebuilds_a_lost_or_torn_state(active_repo: Path, capsys):
     assert f"0 adopted, 0 rebuilt, {len(state.files)} kept, 0 dropped" in capsys.readouterr().out
 
 
-def test_adopt_keeps_hand_edits_and_refreshes_base_files_by_name(active_repo: Path, capsys):
+def test_adopt_keeps_hand_edits_in_blocks_and_in_base_files(active_repo: Path, capsys):
+    """ADR-0033: a differing base file is yours after adopt — the next apply keeps it and says so; the gap
+    line names the way to a fresh copy."""
     applied(active_repo)
     nested = active_repo / "svc/pay/AGENTS.md"
     text = nested.read_text(encoding="utf-8")
@@ -205,13 +207,24 @@ def test_adopt_keeps_hand_edits_and_refreshes_base_files_by_name(active_repo: Pa
     assert main(["adopt", str(active_repo)]) == 0
     out = capsys.readouterr().out
     assert "0 of 1 blocks match the plan; block facts differs (hand edit) — stays" in out
-    assert "= .agents/scripts/sherpa-check.py" in out and "sherpa's by name — `apply` refreshes it" in out
+    assert "a .agents/scripts/sherpa-check.py" in out and "differs from sherpa's copy — yours" in out
+    assert (
+        f"  - .agents/scripts/sherpa-check.py: differs from sherpa {__version__}'s copy — yours; delete it and run "
+        "`apply` for the current one" in out
+    )
     state = state_mod.load(active_repo / state_mod.STATE_PATH)
     assert state.files["svc/pay/AGENTS.md"].blocks == {}
+    assert state.files[".agents/scripts/sherpa-check.py"].origin == ADOPTED
+    edited = script.read_text(encoding="utf-8")
     assert main(["apply", str(active_repo), "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "! svc/pay/AGENTS.md" in out and "block facts not written by sherpa" in out
-    assert "~ .agents/scripts/sherpa-check.py" in out
+    assert "! .agents/scripts/sherpa-check.py" in out and "adopted — yours, never touched (skipped)" in out
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    assert script.read_text(encoding="utf-8") == edited  # the hand edit survives the write
+    script.unlink()  # the documented way to a fresh copy
+    assert main(["adopt", str(active_repo)]) == 0 and main(["apply", str(active_repo), "--yes"]) == 0
+    assert f'SHERPA_VERSION = "{__version__}"' in script.read_text(encoding="utf-8")
 
 
 def test_adopt_recognises_an_older_stamp_and_apply_refreshes_it(active_repo: Path, capsys):

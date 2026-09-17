@@ -8,10 +8,11 @@ things happen, all deterministic and all from the files:
    unknown). Unknown is a kind, not a guess.
 2. **Reconcile** — where the plan renders a file at the same path, the file is compared with the rendering:
    byte-equal → recorded as ``generated`` (the state is rebuilt from the source of truth); marked blocks that
-   equal their rendering → recorded per block; anything else stays what it is. Base files sherpa names itself
-   (checker copy, outcome hook, telemetry ignore) are sherpa's by name, so an older copy gets refreshed by the
-   next ``apply``. Files ``apply`` may still add to — a root or nested ``CLAUDE.md``/``AGENTS.md`` without
-   markers, ``settings.json`` without the hook — are left unrecorded so that ``apply`` can append its block.
+   equal their rendering → recorded per block; anything else stays what it is — a base file sherpa names itself (checker
+   copy, outcome hook, telemetry ignore) included: adopt cannot tell an older copy from a hand edit, so a
+   differing one is yours and listed as a gap with the way to a fresh one (ADR-0033). Files ``apply`` may still
+   add to — a root or nested ``CLAUDE.md``/``AGENTS.md`` without markers, ``settings.json`` without the hook —
+   are left unrecorded so that ``apply`` can append its block.
 3. **Link** — an adopted agent or doc is linked to a unit of the plan: by name (file stem = unit slug) or by the
    unit path it mentions most (at least twice, unambiguous). A linked file **covers** the plan entry: ``sherpa
    plan`` shows ``[covered by …]``, ``apply`` renders nothing for it.
@@ -249,7 +250,7 @@ def adopt(
             if unit not in proposed_agents:
                 a.gaps.append(f"{f.path}: agent for `{unit}` — the plan proposes none (below the threshold); yours")
     a.dropped = sorted(p for p in previous.files if p not in files and not (repo / p).is_file())
-    _gaps(a, found, files, plan)
+    _gaps(a, found, files, plan, {t.path for t in targets if t.mode == MANAGED and t.entry is None}, version)
     a.covered = sum(1 for r in files.values() if r.origin == ADOPTED and r.entry in set(keys.values()))
     return a
 
@@ -273,8 +274,8 @@ def _reconcile(t: Target, f: Found) -> tuple[FileRecord | None, str]:
             return FileRecord(
                 MANAGED, GENERATED, t.entry, content_hash(f.text)
             ), "sherpa's, older stamp — `apply` refreshes it"
-        if t.entry is None:  # checker copy, hook, ignore file: sherpa's by name, refreshed by the next apply
-            return FileRecord(MANAGED, GENERATED, None, content_hash(f.text)), "sherpa's by name — `apply` refreshes it"
+        if t.entry is None:  # checker copy, hook, ignore file that differs: a hand edit or an older copy — yours
+            return FileRecord(MANAGED, ADOPTED, None, content_hash(f.text)), "differs from sherpa's copy — yours"
         return FileRecord(MANAGED, ADOPTED, t.entry, content_hash(f.text)), "at sherpa's path, yours — covers the entry"
     if t.mode == JSON_HOOKS:
         if "sherpa-outcome.py" in f.text:
@@ -316,7 +317,9 @@ def _link_entry(f: Found, units: dict[str, str], keys: dict[tuple[str, str], str
     return f"{kind}:{unit}:{units[unit]}", f"→ {kind} {unit} ({why})"
 
 
-def _gaps(a: Adoption, found: list[Found], files: dict[str, FileRecord], plan: Plan) -> None:
+def _gaps(
+    a: Adoption, found: list[Found], files: dict[str, FileRecord], plan: Plan, base_paths: set[str], version: str
+) -> None:
     for f in found:
         if f.kind == "agent" and f.lines > BUDGETS["agent"] and not f.manifest:
             a.gaps.append(
@@ -325,6 +328,10 @@ def _gaps(a: Adoption, found: list[Found], files: dict[str, FileRecord], plan: P
         rec = files.get(f.path)
         if f.kind == "doc" and rec is not None and rec.origin == ADOPTED and rec.entry is None:
             a.gaps.append(f"{f.path}: no unit matches by name or path mentions — moved, renamed or not a module doc")
+        if rec is not None and rec.origin == ADOPTED and rec.entry is None and f.path in base_paths:
+            a.gaps.append(
+                f"{f.path}: differs from sherpa {version}'s copy — yours; delete it and run `apply` for the current one"
+            )
     present = {r.entry for r in files.values() if r.entry}  # generated or adopted, either way a doc exists
     open_docs = [
         e

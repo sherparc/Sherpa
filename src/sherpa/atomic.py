@@ -2,8 +2,8 @@
 
 ``.sherpa/state.json`` and ``harness-plan.yaml`` are indexes over the repository, not the source of truth — but a
 half-written index breaks every later command. Write to a sibling temp file and ``os.replace`` it: a crash leaves
-the old file intact or the new one complete, never a torn one. Harness files themselves go through ``apply``'s
-write-and-roll-back path; this helper is for the index files only.
+the old file intact or the new one complete, never a torn one. Harness files go through the same helper since
+ADR-0032: a write that fails half-way leaves the previous file, never a truncated one.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 
 def write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp")
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     try:
         with tmp.open("w", encoding="utf-8", newline="\n") as f:
             f.write(text)
