@@ -200,20 +200,24 @@ flowchart LR
     R[(repo · origin/trunk)] -->|git, manifests| S[sherpa scan]
     S --> M[codebase-model.json]
     M --> P[sherpa plan]
-    P --> Y[harness-plan.yaml<br/>proposals + reasoned no's]
+    P --> Y[harness-plan.yaml<br/>proposals + reasoned no's<br/>--accept / --reject]
     Y -->|approval| A[sherpa apply]
-    A --> H[.agents/** owner docs · skills<br/>.claude/** agents · hooks<br/>AGENTS.md · CLAUDE.md per module]
+    A --> H["{home}/** owner docs · skills · checker<br/>(home = .agents or .claude)"]
+    A --> T["adapters per target<br/>claude: .claude/agents · hooks · CLAUDE.md<br/>agents-md: AGENTS.md root + nested"]
     A --> ST[.sherpa/state.json · harness_rev]
-    H -->|outcome hook| O[.sherpa/telemetry/outcomes.ndjson]
+    T -->|outcome hook| O[.sherpa/telemetry/outcomes.ndjson]
     ST --> Q[sherpa status]
     O --> Q
+    H --> C[sherpa check<br/>rollback on a new FAIL]
+    T --> C
     H -.->|existing| AD[sherpa adopt] -.-> ST
-    P -. optional, comments only .-> L[LLM provider<br/>OpenAI-compatible · Anthropic]
+    P -. planned, M6-lite: comments only .-> L[LLM provider<br/>OpenAI-compatible · Anthropic]
 ```
 
 - Python 3.12, stdlib-first, one runtime dependency (PyYAML for the plan).
-- LLMs only in `plan` (stage 2, enriching); scanner and applier stay deterministic.
-- Provider layer without LangChain: local vLLM/Ollama/OpenRouter via the OpenAI API plus Anthropic natively.
+- Scanner, planner and applier are deterministic today; no LLM call anywhere in the shipped pipeline.
+- Planned (M6-lite): LLMs only in `plan` stage 2, enriching comments, never the entries themselves.
+- Planned (M6-lite): a provider layer without LangChain — local vLLM/Ollama/OpenRouter via the OpenAI API plus Anthropic natively.
 
 ## Roadmap
 
@@ -228,8 +232,14 @@ flowchart LR
 | M3d | retro fruit: stamp without rev, sub-units for single-manifest repos, change coupling with a size cap, `plan --accept/--reject`, capped root index | ✅ |
 | M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
 | M7a | runtime plugins: Sherpa installable inside Claude Code (plugin) and Hermes (bundle) — `/sherpa-plan` with per-entry approval, `/sherpa-apply`, `/sherpa-status`; thin, the CLI does the work | ⏳ |
-| M5 · M6-lite · M4 · M6 | outcome evaluation, provider layer, auto-evals, LLM enrichment | ⏳ |
-| M3b · M7 | language adapters (anchors, patterns), librarians & multi-repo | ⏳ |
+| M5 | outcome evaluation: `status` shows labels per `harness_rev`, trend, share of `unknown` | ⏳ |
+| M6-lite | provider layer: thin, framework-free — bring your own key, local models via the OpenAI API, Anthropic natively | ⏳ |
+| M4 | auto-evals from the dependency graph, `status` with a baseline | ⏳ |
+| M6 | `plan` stage 2: LLM enrichment on top of the provider layer | ⏳ |
+| M3b | language adapters `dotnet` + `python` (T2: anchors, patterns) | ⏳ |
+| M7 | librarians, multi-repo | ⏳ |
+
+Order from here: M3h → M7a → M5 → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9).
 
 Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an ADR: [docs/adr/](docs/adr/README.md)
 
