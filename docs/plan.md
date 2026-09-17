@@ -1,7 +1,7 @@
 # Sherpa — Plan
 
-> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 6 after M3c: adopt, covered entries, rebuildable state — ADR-0017) · **Author:** Claude (Opus 5) with Andrei
-> **Status:** v0.4.0 — M0, M1, M1a, M2, M3a, M3t, M3c done; next: M2b distribution
+> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 7: retro after M3c — §7, four measured gaps, one slice of low-hanging fruit, a proposed reorder of M3b–M6) · **Author:** Claude (Opus 5) with Andrei
+> **Status:** v0.4.0 — M0, M1, M1a, M2, M3a, M3t, M3c done; order from here: M2b → M3d → M5 → M6-lite → M4 → M6 → M3b → M7 (§7.3)
 > **Origin of the patterns:** production Claude Code harnesses built and analysed in practice (owner docs, agents with
 > knowledge manifests, librarians, deterministic checkers) plus the industry patterns in §2. Sherpa is a generic
 > product; no customer project is named anywhere in this repo.
@@ -235,7 +235,8 @@ says it), evals per agent (no generic eval convention yet; M4), and any content-
 | M3a ✅ | `apply` with dry-run default, managed blocks, state, **outcome minimum** (hook, labels, `harness_rev`), checker with rollback, `status`, `check` | second run = all `=`, state and tree hash unchanged; hand-edited blocks skipped, other blocks still regenerated; rollback on a new FAIL tested; 213 tests, 98 %; 61 files for a 15k-file monorepo plan in 0.15 s |
 | M3t ✅ | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files, `[apply]` config, ask when both homes exist | five-module fixture with both targets: 18 files, second run all `=`; existing root and nested `AGENTS.md` get the block appended; a 122-module corpus repo: 243 files in 0.2 s; 222 tests |
 | M3c ✅ | `sherpa adopt` (§2.6) — reads `.claude/`, `.agents/` and AGENTS.md hierarchies; covered entries; rebuildable state (ADR-0017) | existing-harness fixture: 6 files adopted, 0 bytes changed, 2 entries covered, gaps listed; torn state rebuilt with the same `harness_rev`; a 16-module corpus repo with 12 hand-written AGENTS.md: 0.22 s, 32 files rebuilt after a lost state; 230 tests, 98 % |
-| M3b | adapters `dotnet` + `python` (T2: anchors, patterns) | a scan yields the anchors a harness checker verifies today; owner docs get anchors |
+| M3d | low-hanging fruit from the retro (§7): stamp without rev, sub-units for single-manifest repos, change coupling, `plan --accept/--reject`, capped root index, privacy note | a trunk move rewrites only blocks whose numbers changed (test: two consecutive revs, no activity → `nothing to do.`); Sherpa's own plan lists `scan`, `plan`, `apply` as units; a coupling row on the corpus with ≥ 2 co-changing modules; root `AGENTS.md` of the 122-module repo ≤ 40 lines |
+| M3b | adapters `dotnet` + `python` (T2: anchors, patterns) — **proposed after M6-lite** (§7.3) | a scan yields the anchors a harness checker verifies today; owner docs get anchors |
 | M4 | auto-evals from the graph, `status` with baseline | eval run on the fixture ≥ 90 %; regression is reported |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev`, trend, share of `unknown` | first 10 executions on a corpus repo with a label ≠ `unknown`; regression between two harness versions visible |
 | M6 | `plan` stage 2: LLM enrichment, provider layer (local vLLM + Anthropic) | plan diff stage 1 vs. 2 documented; the same schema pass with both providers; stage-1 entries unchanged |
@@ -278,7 +279,7 @@ Many tests, small units, everything reproducible:
 | Corpus | real repos under `tests/corpus/` (ignored) | smoke: scan runs through, schema valid, runtime < 60 s; never in CI |
 | Schema | `codebase-model`, `harness-plan`, `harness-state` | JSON Schema under `src/sherpa/schemas/`; validation in tests always, at runtime when `jsonschema` is installed (dev extra) |
 
-Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M3a: 213 tests, 98 %.
+Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M3c: 231 tests, 98 %.
 
 ## 6. Open questions (decision: Andrei)
 
@@ -299,9 +300,64 @@ Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milest
    are the next adapters once a corpus repo uses them.
 9. Interactive per-entry approval in the CLI was rejected for M3a (ADR-0013); `/sherpa-plan` in Claude Code (M7)
    is the better place. Reopen if the YAML editing turns out to be the friction point in customer tests.
+10. Stamp without the rev (§7.1 G1): blocks change only when a number changes; the date (window end) stays.
+    Alternative: keep the rev but compare blocks without the stamp line — more code, same effect.
+11. Sub-units for single-manifest repositories (§7.1 G2): depth rule as proposed, or an explicit `[plan] units =
+    ["src/sherpa/*"]` in `sherpa.toml` only? Proposal: the rule with the config as an override.
+12. ~~Milestone order (§7.3)?~~ Decided 2026-09-17: M2b → M3d → M5 → M6-lite → M4 → M6 → M3b → M7. Tree-sitter
+    (M3b) stays an optional extra (`sherpa[adapters]`), never a core dependency; it moves forward only if M4
+    evals from the graph score < 90 % on the corpus or a customer needs skills from code patterns.
 
 Decided (2026-09-16): plan format YAML and check-in of plan/state → ADR-0005; generator principle → ADR-0011;
 units, visibility, decision keeping → ADR-0012. Decided (2026-09-17): state as a rebuildable index, atomic
 writes, adopt as the rebuild → ADR-0017; block ownership, single-source checker,
 Terraform-style selection → ADR-0013; owner-doc floor by files → ADR-0014; target layer → ADR-0015; never
 overwrite, only add → ADR-0016.
+
+## 7. Retro after M3c (2026-09-17) — what the numbers say against the plan
+
+Method: every claim below was measured on the fixtures, on Sherpa's own repository or on the corpus (four
+ecosystems, 54 to 20k files); nothing is a feeling. Findings are ordered by cost of ignoring them.
+
+### 7.1 Four gaps the plan did not see
+
+| # | Finding | Evidence | Consequence |
+|---|---|---|---|
+| G1 | **Every trunk move rewrites every block.** The facts stamp is `origin/main@<rev>, as of <date>` and sits in every facts block, proximity block, agent scope and skill (`render.py`, four places). | A merge with no activity in a unit still changes its block (the rev moved); `apply` then reports `~` for all 243 files of the 122-module repo. The state's `plan.rev` already records the rev. | Harness churn in every PR after `apply`; teams will stop running it. Fix: stamp = `as of <date>` only; the rev stays in `state.json` and the plan header. Blocks then change only where a number changed. One line plus goldens; an ADR because it touches the determinism story (the date still moves with every scan — acceptable, it is the window end). |
+| G2 | **Single-manifest repositories get one unit.** `units_of` takes modules from manifests and adds depth-1 directory units only when no root module exists. A repository with one `pyproject.toml`/`package.json` at the root — the most common shape — is one unit. | Sherpa itself: `scan`, `plan`, `apply` are the subsystems; the plan says `1 owner-doc sherpa-harness`. The 1-module corpus repo: the same. The plan's strongest case (units, ranks, no's) never appears there. | Rule to add (ADR): when the root module is the only module, directory units come from the first depth below the source root where ≥ 2 directories meet `owner_doc_min_files` (Python: packages with `__init__.py`; generic: directories), tests excluded. The root module keeps the repo-level owner doc. |
+| G3 | **The root `AGENTS.md`/`CLAUDE.md` index grows with the repo and is loaded on every turn.** | 122-module repo: 76 index lines in the root file → ~1.2k tokens in every prompt of every runtime that reads it. `MAX_NAMED = 12` exists for plan notes, nothing for the index. | Cap the index at the top N by rank (N = 20) plus one line "and 56 more under `<home>/docs/modules/`" — the runtimes load the nearest file by themselves, the index is for discovery only. |
+| G4 | **Change coupling is measured nowhere, although it is the fact an agent needs most when it lands in a module.** `git log --name-only` is already parsed for churn (`t0_git.py`); the commit → modules mapping is free. | Tornhill's temporal coupling: "in 15 of 24 commits touching `pay`, `core` changed too (62 %)". Neither `deps` (static) nor hotspots (per file) carry this. Corpus check: cheap to add, deterministic per rev. | Model v4 field `coupling` per module (top 3 partners with count and share, floor: ≥ 5 shared commits and ≥ 30 %), one row in the facts and proximity blocks: `changes together with`. The first measured fact the market's AGENTS.md files do not have. |
+
+### 7.2 Low-hanging fruit (each < half a day, all deterministic)
+
+| Item | Why now | Where |
+|---|---|---|
+| `sherpa plan --accept <kind>:<target> --reject …` | today a decision means editing YAML; CI and scripts have no way to decide. Q9 rejected an interactive prompt, not flags. | `cli.py`, `yamlio.merge_decisions`; keys as in the state (`agent:pay`) |
+| test and build commands per unit in the facts | T1 knows the ecosystem (`pytest`, `dotnet test <csproj>`, `npm test`, `go test ./...`, `cargo test`, `mvn test`): the line an agent runs first. `tested_by` names the module, not the command. | `render.facts_rows`, `proximity_block`; per-ecosystem table in `t1_modules` |
+| privacy note for the outcome hook | `outcomes.ndjson` stores the first 160 characters of every prompt locally; documented nowhere as such. Git-ignored, but a team should know. | `docs/commands/apply.md` (hook section), `concepts/harness-apply.md`, the hook's docstring |
+| `sherpa status` line for adopted files that changed | today silent by design; a count ("3 adopted files changed since adopt") costs nothing and tells the team when to re-adopt for a fresh `harness_rev`. | `status.report` |
+| Windows CI at 7.5 min vs. 38 s on Linux | every fixture builds a git repository with dozens of subprocess calls; `pytest -x` masks nothing, but the feedback loop is slow. | session-scoped fixture repos copied per test (`shutil.copytree` is ~50× cheaper than the commits) |
+
+### 7.3 Order of the remaining milestones — a proposal
+
+The plan runs M3b (language adapters, tree-sitter) before M4 (evals), M5 (outcome evaluation) and M6 (LLM).
+Measured against value per effort that order is wrong:
+
+- M3b is the largest slice and the plan itself says T0+T1 suffice for owners, churn and evals; anchors and code
+  patterns improve skills, not the harness's spine.
+- M4's eval runner and the §0 runtime both need a model binding; M6 builds it. Building M6's provider layer
+  first — thin, `complete(messages, schema) → dict`, OpenAI-compatible plus Anthropic, no enrichment yet —
+  gives M4 its runner and the runtime its first brick.
+- M5 (labels per `harness_rev`, trend, share of `unknown`) is pure arithmetic over data the hook already
+  collects; it is small and it answers "does the harness help?" — the product's central claim.
+
+Decided (Andrei, 2026-09-17): **M2b → M3d → M5 → M6-lite (provider layer) → M4 (evals with the runner) → M6
+(enrichment) → M3b → M7** (§6 Q12).
+
+### 7.4 What holds
+
+- Determinism, trunk discipline, never overwrite, one owner per fact, dry run first: every test that proves them
+  is still green after M3c, and adopt's rebuild reproduced `apply`'s `harness_rev` on the first try.
+- Speed: the largest corpus repo scans in 3.8 s, plans in 0.12 s, applies in 0.2 s, adopts in 0.37 s.
+- The corpus rule (four foreign repos, never named) caught the Windows path bug and the empty-state case that
+  the fixtures did not.
