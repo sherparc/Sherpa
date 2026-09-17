@@ -40,6 +40,19 @@ def is_repo(repo: Path) -> bool:
         return False
 
 
+def ignored(repo: Path, paths: list[str]) -> set[str]:
+    """The subset of ``paths`` (repo-relative) that git ignores; empty outside a repository."""
+    if not paths or not is_repo(repo):
+        return set()
+    r = subprocess.run(
+        ["git", "-C", str(repo), "check-ignore", "--stdin", "-z"],
+        input="\0".join(paths) + "\0",
+        capture_output=True,
+        text=True,
+    )
+    return {x for x in r.stdout.split("\0") if x} if r.returncode in (0, 1) else set()
+
+
 def has_remote(repo: Path, name: str = REMOTE) -> bool:
     try:
         return name in _git(repo, "remote").splitlines()

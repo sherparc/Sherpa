@@ -262,6 +262,8 @@ def _check_drift(root: Path) -> list[Finding]:
         if not p.is_file():
             out.append(Finding(WARN, "C8", rel, "missing (in state, not on disk)"))
             continue
+        if rec.get("origin") == "adopted":
+            continue  # yours by definition (ADR-0007): a changed hash is not drift
         text = read_text(p)
         if rec.get("hash") and content_hash(text) != rec["hash"]:
             out.append(Finding(WARN, "C8", rel, "hand-edited (hash differs from state)"))

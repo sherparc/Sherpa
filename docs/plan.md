@@ -1,7 +1,7 @@
 # Sherpa — Plan
 
-> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 4 after M3a: managed blocks, single-source checker, outcome hook — ADR-0013) · **Author:** Claude (Opus 5) with Andrei
-> **Status:** v0.4.0 — M0, M1, M1a, M2, M3a, M3t done; next: M3c `adopt`, then M2b distribution
+> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 6 after M3c: adopt, covered entries, rebuildable state — ADR-0017) · **Author:** Claude (Opus 5) with Andrei
+> **Status:** v0.4.0 — M0, M1, M1a, M2, M3a, M3t, M3c done; next: M2b distribution
 > **Origin of the patterns:** production Claude Code harnesses built and analysed in practice (owner docs, agents with
 > knowledge manifests, librarians, deterministic checkers) plus the industry patterns in §2. Sherpa is a generic
 > product; no customer project is named anywhere in this repo.
@@ -19,6 +19,11 @@ provider layer is already decided thin and framework-free (ADR-0004). Until then
 door open: runtime-neutral formats where possible (owner docs, skills), runtime-specific parts (agent front
 matter, hooks, `CLAUDE.md`) isolated in `apply/render.py`. The milestones below are executed in order first.
 
+Noted for the runtime (2026-09-17, from an agent runtime's session-store recovery design): sessions get the
+same split as the harness state (ADR-0017) — the transcript is canonical and append-only with a spool file when
+the store is corrupt, search indexes are derived and rebuildable, one `repair` command with an automatic backup,
+and derived structures detach without blocking live operation. Not built before the runtime is.
+
 ## 1. Non-goals (deliberate)
 
 | Non-goal | Why |
@@ -35,7 +40,7 @@ matter, hooks, `CLAUDE.md`) isolated in `apply/render.py`. The milestones below 
 ```
 sherpa doctor ──► ✓/✗ per prerequisite (git, origin, trunk, Python, runtime) with a fix   — first contact
 sherpa scan   ──► .sherpa/codebase-model.json   deterministic, 0 LLM     (T0 git · T1 manifests · generator families · T2 adapters optional)
-sherpa adopt  ──► .sherpa/state.json            take an existing .claude/ into the state, change nothing (§2.6)
+sherpa adopt  ──► .sherpa/state.json            take an existing harness into the state, change nothing; rebuild a lost state (§2.6)
 sherpa plan   ──► .sherpa/harness-plan.yaml     deterministic rules, LLM enrichment optional (M6)
 sherpa apply  ──► .claude/** + .sherpa/state.json   dry run first, then deterministic, idempotent, markers
 sherpa status ──► diff state ↔ file system, eval regression, outcome labels per harness version
@@ -197,22 +202,26 @@ labels per harness version, trend) in M5. Observed in practice: when the signal 
 execution stays `unknown` and nothing can be measured. Playbooks/instincts only once ≥ 30 labelled executions
 exist. Learning without a signal is a promise, not a feature.
 
-### 2.6 Adopt — take over existing harnesses, do not overwrite (ADR-0007)
+### 2.6 Adopt — take over existing harnesses, do not overwrite (ADR-0007, ADR-0017) ✅
 
-Many target repos already have a `.claude/` — a mature one holds a dozen agents and several librarians. The
-model is `terraform import`: an existing resource is brought into the state without being changed.
+Many target repos already have a `.claude/` or an `AGENTS.md` hierarchy — a mature one holds a dozen agents and
+several librarians. The model is `terraform import`: an existing resource is brought into the state without
+being changed. Built in M3c (`docs/commands/adopt.md`):
 
-`sherpa adopt`:
-1. reads `.claude/**`, classifies every file (agent, skill, command, doc, hook, eval, unknown) by path and front
-   matter;
-2. writes them as `origin: adopted`, `hand-edited: true` into the state — `apply` never touches them; nested
-   `AGENTS.md` files and `.agents/` are read the same way (ADR-0015);
-3. links them to modules of the model (an agent naming path `src/Shop.Pricing` → module `Shop.Pricing`);
-4. reports gaps as plan entries: agent without eval, module with churn without owner doc, owner doc without a
-   module (candidate for `MOVED:`), agent > 250 lines without a manifest (fat agent, rotation candidate).
+1. inventory of `.claude/**`, `.agents/**` and every `CLAUDE.md`/`AGENTS.md`, classified by path only (agent,
+   skill, command, doc, hook, settings, script, eval, root, nested, unknown); git-ignored files are not the harness;
+2. reconciliation against the plan's rendering: what equals the rendering is recorded as `generated` (this is
+   the rebuild of a lost state — same `harness_rev` as `apply` wrote), a block that differs stays unrecorded
+   (a hand edit and an older rendering are indistinguishable, and the console says so), base files are sherpa's
+   by name, everything else is `origin: adopted` and never touched by `apply`;
+3. links from adopted agents and docs to units — name, front matter name, then the unit path mentioned most
+   (≥ 2, unambiguous) — and **covered** plan entries: `plan` shows `[covered by …]`, `apply` renders nothing for
+   them, agents and proximity files point at the adopted doc; `decision: accept` overrides;
+4. gaps from the same inventory: agent over budget without a manifest (rotation candidate), doc matching no unit,
+   agent for a unit below the threshold, proposed owner docs with nothing there, unknown files.
 
-With that Sherpa runs on repos with an existing harness from day one and delivers the analysis there that is done
-by hand today — the regression case in §3 becomes executable.
+Deliberately not done: `hand-edited: true` as a field (an adopted file is hand-edited by definition — `origin`
+says it), evals per agent (no generic eval convention yet; M4), and any content-based classification.
 
 ## 3. Milestones (vertical slices, foreign repos)
 
@@ -225,7 +234,7 @@ by hand today — the regression case in §3 becomes executable.
 | M2b | distribution + onboarding: `sherpa doctor`, `release.yml` (tag → wheel → GitHub release), `sherpa self-update`, daily update hint (can be disabled), package index (private, later PyPI) | `doctor` reports every missing prerequisite with a fix; a customer installs with `uv tool install`, `self-update` fetches the next version; the hint never blocks |
 | M3a ✅ | `apply` with dry-run default, managed blocks, state, **outcome minimum** (hook, labels, `harness_rev`), checker with rollback, `status`, `check` | second run = all `=`, state and tree hash unchanged; hand-edited blocks skipped, other blocks still regenerated; rollback on a new FAIL tested; 213 tests, 98 %; 61 files for a 15k-file monorepo plan in 0.15 s |
 | M3t ✅ | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files, `[apply]` config, ask when both homes exist | five-module fixture with both targets: 18 files, second run all `=`; existing root and nested `AGENTS.md` get the block appended; a 122-module corpus repo: 243 files in 0.2 s; 222 tests |
-| M3c | `sherpa adopt` (§2.6) — reads `.claude/`, `.agents/` and AGENTS.md hierarchies | on a repo with an existing harness: every agent taken over as `origin: adopted`, 0 files changed, gaps as plan entries |
+| M3c ✅ | `sherpa adopt` (§2.6) — reads `.claude/`, `.agents/` and AGENTS.md hierarchies; covered entries; rebuildable state (ADR-0017) | existing-harness fixture: 6 files adopted, 0 bytes changed, 2 entries covered, gaps listed; torn state rebuilt with the same `harness_rev`; a 16-module corpus repo with 12 hand-written AGENTS.md: 0.22 s, 32 files rebuilt after a lost state; 230 tests, 98 % |
 | M3b | adapters `dotnet` + `python` (T2: anchors, patterns) | a scan yields the anchors a harness checker verifies today; owner docs get anchors |
 | M4 | auto-evals from the graph, `status` with baseline | eval run on the fixture ≥ 90 %; regression is reported |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev`, trend, share of `unknown` | first 10 executions on a corpus repo with a label ≠ `unknown`; regression between two harness versions visible |
@@ -292,6 +301,7 @@ Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milest
    is the better place. Reopen if the YAML editing turns out to be the friction point in customer tests.
 
 Decided (2026-09-16): plan format YAML and check-in of plan/state → ADR-0005; generator principle → ADR-0011;
-units, visibility, decision keeping → ADR-0012. Decided (2026-09-17): block ownership, single-source checker,
+units, visibility, decision keeping → ADR-0012. Decided (2026-09-17): state as a rebuildable index, atomic
+writes, adopt as the rebuild → ADR-0017; block ownership, single-source checker,
 Terraform-style selection → ADR-0013; owner-doc floor by files → ADR-0014; target layer → ADR-0015; never
 overwrite, only add → ADR-0016.

@@ -56,9 +56,11 @@ def build_parser() -> argparse.ArgumentParser:
     ck.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
     ck.add_argument("--json", action="store_true", help="findings as JSON")
 
-    sub.add_parser("adopt", help="take over an existing harness into the state (M3, not implemented yet)").add_argument(
-        "repo", nargs="?", default="."
+    ad = sub.add_parser(
+        "adopt", help="take an existing harness into the state without changing a byte; rebuilds a lost state"
     )
+    ad.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
+    ad.add_argument("--dry-run", action="store_true", help="only report, write neither state nor plan marks")
     return p
 
 
@@ -121,6 +123,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     out = None if args.out == "-" else (Path(args.out) if args.out else repo / PLAN_OUT)
     previous = yamlio.load(out) if out and out.exists() else None
     plan, kept = yamlio.merge_decisions(plan, previous)
+    plan, covered = yamlio.mark_covered(plan, _load_state(repo))
 
     if out is None:
         sys.stdout.write(yamlio.dumps(plan))
@@ -128,8 +131,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
         return EXIT_OK
     yamlio.write(plan, out)
     sys.stdout.write(render_console(plan, out.name))
-    tail = f" ({kept} decisions kept)" if kept else ""
-    print(f"→ {out}{tail}", file=sys.stdout)
+    tails = [t for t, n in (("decisions kept", kept), ("covered by adopted files", covered)) if n for t in [f"{n} {t}"]]
+    print(f"→ {out}" + (f" ({', '.join(tails)})" if tails else ""), file=sys.stdout)
     return EXIT_OK
 
 
@@ -156,6 +159,7 @@ def _resolve_layout(repo: Path, state, *, ask: bool) -> tuple[str, tuple[str, ..
     """Home and targets (ADR-0015): sherpa.toml beats the state beats detection. Both ``.agents`` and ``.claude``
     present and nothing decided yet → ask on a terminal, refuse otherwise."""
     from sherpa import config
+    from sherpa.apply.render import check_script
 
     cfg = config.load(repo).apply
     has_claude = (repo / ".claude").is_dir() or (repo / "CLAUDE.md").is_file()
@@ -164,12 +168,16 @@ def _resolve_layout(repo: Path, state, *, ask: bool) -> tuple[str, tuple[str, ..
     if not home:
         both = (repo / ".agents").is_dir() and (repo / ".claude").is_dir()
         neither = not (repo / ".agents").is_dir() and not (repo / ".claude").is_dir()
-        if both and not (ask and sys.stdin.isatty()):
+        footprint = [h for h in config.HOMES if (repo / check_script(h)).is_file()]
+        tty = ask and sys.stdin.isatty()
+        if both and len(footprint) == 1:
+            home = footprint[0]  # sherpa's own checker copy says where the core lives (a lost state, ADR-0017)
+        elif both and not tty:
             raise ValueError(
                 "both .agents/ and .claude/ exist — where should owner docs and skills live? "
                 'Set [apply] home = ".agents" or ".claude" in sherpa.toml'
             )
-        if (both or neither) and ask and sys.stdin.isatty():
+        elif (both or neither) and tty:
             what = "both .agents/ and .claude/ exist" if both else "no harness directory yet"
             answer = input(f"{what} — owner docs and skills under [1] .agents (default, cross-tool)  [2] .claude ? ")
             home = ".claude" if answer.strip() in ("2", ".claude") else ".agents"
@@ -246,6 +254,44 @@ def cmd_status(args: argparse.Namespace) -> int:
     return EXIT_ERROR if report.fails else EXIT_OK
 
 
+def cmd_adopt(args: argparse.Namespace) -> int:
+    """Inventory, reconcile against the plan's rendering, link to units, write the state and the plan's covered
+    marks. Nothing under the harness changes (ADR-0007); a torn state is rebuilt from the files (ADR-0017)."""
+    from sherpa import apply
+    from sherpa.apply import adopt as adopt_mod
+    from sherpa.apply import state as state_mod
+    from sherpa.plan import yamlio
+
+    repo = Path(args.repo).resolve()
+    plan, model = _load_plan_and_model(repo)
+    _refuse_stale(repo, plan)
+    try:
+        state = _load_state(repo)
+    except ValueError as e:
+        print(f"sherpa adopt: {e} — rebuilding", file=sys.stderr)
+        state = state_mod.State()
+    home, targets = _resolve_layout(repo, state, ask=not args.dry_run)
+    rendered = apply.targets_for(plan, model, home=home, targets=targets)
+    a = adopt_mod.adopt(repo, plan, rendered, state, home=home, runtime_targets=targets)
+    sys.stdout.write(adopt_mod.render(a, home=home, targets=targets))
+    new_state = adopt_mod.new_state(a, plan, state, home=home, targets=targets)
+    if args.dry_run:
+        print(f"dry run: {a.counts()} · harness_rev {new_state.harness_rev} (state not written)", file=sys.stdout)
+        return EXIT_OK
+    if not a.files and not state.files:
+        print("nothing to adopt — no harness files here; `sherpa apply` creates one.", file=sys.stdout)
+        return EXIT_OK
+    new_state.write(repo / state_mod.STATE_PATH)
+    plan, covered = yamlio.mark_covered(plan, new_state)
+    yamlio.write(plan, repo / PLAN_OUT)
+    print(
+        f"state: {a.counts()} · harness_rev {new_state.harness_rev} → {state_mod.STATE_PATH.as_posix()} · "
+        f"{covered} plan entries covered → {PLAN_OUT.as_posix()}",
+        file=sys.stdout,
+    )
+    return EXIT_OK
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     from sherpa import check
 
@@ -273,6 +319,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_status(args)
         if args.cmd == "check":
             return cmd_check(args)
+        if args.cmd == "adopt":
+            return cmd_adopt(args)
     except (GitError, ValueError, OSError) as e:
         print(f"sherpa {args.cmd}: {e}", file=sys.stderr)
         return EXIT_ERROR

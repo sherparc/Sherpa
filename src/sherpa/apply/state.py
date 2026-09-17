@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sherpa import __version__
+from sherpa import __version__, atomic
 
 STATE_SCHEMA_VERSION = 1
 STATE_PATH = Path(".sherpa") / "state.json"
@@ -62,8 +62,7 @@ class State:
         return json.dumps(self.to_dict(), indent=2, ensure_ascii=False) + "\n"
 
     def write(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.dumps(), encoding="utf-8", newline="\n")
+        atomic.write_text(path, self.dumps())  # never a torn state (ADR-0017)
 
     @classmethod
     def from_dict(cls, d: dict) -> State:
@@ -94,7 +93,15 @@ def _record_dict(r: FileRecord) -> dict:
 
 
 def load(path: Path) -> State:
-    return State.from_dict(json.loads(path.read_text(encoding="utf-8")))
+    """Raises ``ValueError`` with the way out when the file is torn or foreign: the state is an index over the
+    harness files and ``sherpa adopt`` rebuilds it from them (ADR-0017)."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("top level is not an object")
+        return State.from_dict(data)
+    except (ValueError, KeyError, TypeError) as e:
+        raise ValueError(f"{path} is unreadable ({e}) — `sherpa adopt` rebuilds it from the harness files") from e
 
 
 def harness_rev(files: dict[str, FileRecord], version: str = __version__) -> str:

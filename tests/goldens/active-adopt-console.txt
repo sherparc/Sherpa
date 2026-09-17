@@ -1,0 +1,14 @@
+sherpa adopt — home .claude · targets claude: 7 harness files
+  a .claude/agents/ops.md           agent    no unit matches
+  a .claude/agents/pay-expert.md    agent    → agent pay (mentions svc/pay 170×)
+  a .claude/commands/deploy.md      command  yours
+  a .claude/docs/modules/legacy.md  doc      no unit matches
+  a .claude/docs/modules/pay.md     doc      at sherpa's path, yours — covers the entry
+  ? .claude/notes.txt               unknown  yours
+  · CLAUDE.md                       root     no sherpa markers — `apply` appends its block (ADR-0016)
+gaps:
+  - .claude/agents/pay-expert.md: 175 lines, no knowledge manifest — rotation candidate, facts belong in an owner doc
+  - .claude/docs/modules/legacy.md: no unit matches by name or path mentions — moved, renamed or not a module doc
+  - 2 proposed owner docs without an existing doc — `apply` creates them
+  - 1 file of unknown kind — recorded as yours, listed above with `?`
+state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 9ff76cfb703d → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml

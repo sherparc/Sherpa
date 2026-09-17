@@ -10,7 +10,8 @@ A *managed* file is sherpa's as a whole — a hash mismatch means a hand edit an
 file is seeded once; afterwards only the marked blocks are sherpa's, each with its own hash, and a hand-edited
 block is skipped on its own. ``.claude/settings.json`` gets sherpa's hook entries merged in; everything else in
 it stays. A file that exists without a state record is never touched (``sherpa adopt``), except that root and
-nested ``CLAUDE.md``/``AGENTS.md`` get sherpa's block appended.
+nested ``CLAUDE.md``/``AGENTS.md`` get sherpa's block appended; a file the state records as ``adopted`` is never
+touched either (ADR-0007).
 
 Determinism: same plan, model and files → same actions, same bytes; the second run is all ``=``.
 """
@@ -24,7 +25,7 @@ from pathlib import Path
 from sherpa import __version__
 from sherpa.apply import state as state_mod
 from sherpa.apply.render import HOOK_COMMAND, Renderer, Target
-from sherpa.apply.state import BLOCKS, JSON_HOOKS, MANAGED, FileRecord, State
+from sherpa.apply.state import ADOPTED, BLOCKS, JSON_HOOKS, MANAGED, FileRecord, State
 from sherpa.check import Finding, block_contents, content_hash
 from sherpa.config import TARGETS
 from sherpa.model import Model
@@ -95,6 +96,10 @@ def _read(path: Path) -> str | None:
 
 
 def _plan_one(t: Target, current: str | None, rec: FileRecord | None) -> Action:
+    if rec is not None and rec.origin == ADOPTED:
+        if current is None:
+            return Action(t, SKIPPED, "adopted file is gone — `sherpa adopt` drops the record", None, None, None)
+        return Action(t, SKIPPED, "adopted — yours, never touched (skipped)", None, current, None)
     if t.mode == MANAGED:
         return _plan_managed(t, current, rec)
     if t.mode == JSON_HOOKS:

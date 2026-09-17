@@ -1,6 +1,6 @@
 # Sherpa
 
-Generic harness generator. CLI `sherpa` (`scan | plan | apply | status | check`), Python 3.12, stdlib-first.
+Generic harness generator. CLI `sherpa` (`scan | plan | apply | adopt | status | check`), Python 3.12, stdlib-first.
 Plan and architecture: `docs/plan.md`. Documentation: `docs/index.md` (landing), `docs/commands/` (reference per
 command), `docs/concepts/` (rules and formats), `docs/reference/` (configuration, files, exit codes). Decisions:
 `docs/adr/` (index in `docs/adr/README.md`). Field semantics: `src/sherpa/schemas/`. The repo carries its own
@@ -19,7 +19,9 @@ files `sherpa apply .` generates (owner doc, hook, checker, the block at the end
   merge; rewrite only its own bytes that nobody changed since (hash in the state). Sherpa owns only what is
   between `sherpa:begin`/`sherpa:end` markers or whole files it deployed (ADR-0013). The core is runtime-neutral (`home`); runtime-specific files
   live in one adapter each in `apply/render.py` (ADR-0015) — a new runtime is a new adapter, never a change to the core. `src/sherpa/check.py` stays a single stdlib-only file — it is
-  deployed as a copy into target repos.
+  deployed as a copy into target repos. The harness files are the source of truth and `.sherpa/state.json` a
+  rebuildable index over them (ADR-0017): index files are written through `sherpa.atomic`, and `adopt` rebuilds a
+  lost state — never add a second way to recover.
 - Tests: `.venv/bin/pytest -q` from the repo root; lint `.venv/bin/ruff check . && .venv/bin/ruff format --check .` —
   both must be green before every commit (CI runs Linux and Windows; macOS is commented out in the matrix and is only
   enabled, after asking, for large changes to Git/path/encoding logic). Every new function comes with tests; fixture
