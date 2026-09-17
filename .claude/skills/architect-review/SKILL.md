@@ -106,5 +106,7 @@ candidate with the evidence that it is real.
 ## After the review
 
 Andrei decides what enters the plan. Accepted findings become a retro section and open questions in
-`docs/plan.md`, decisions become ADRs, and the work follows `milestone-step`. This skill ends when the review
-is in the chat.
+`docs/plan.md`, decisions become ADRs, and the work follows `milestone-step`. When Andrei asks for the plan
+draft, it takes the shape of the last retro in `docs/plan.md` §7: a numbered gap table (finding · evidence ·
+consequence), a low-hanging-fruit table (item · why now · where), a "what holds" list, and the questions as
+new §6 entries — so two retros read the same way. This skill ends when the review is in the chat.
