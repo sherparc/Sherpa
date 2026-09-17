@@ -80,10 +80,17 @@ TEST_FILE_GLOBS = (
 TEST_DIR_NAMES = ("tests", "test", "__tests__", "spec")
 DOTNET_TEST_PACKAGES = ("xunit", "nunit", "mstest", "tunit", "microsoft.net.test.sdk")
 
+# Matched against the full path and the file name. Azure DevOps registers a pipeline under any name, so the
+# directory carries the convention: `pipelines/`, `.pipelines/`, `.azure-pipelines/`, `.azuredevops/` (ADR-0044).
 CI_FILES = (
     ".github/workflows/*",
     ".gitlab-ci.yml",
     "azure-pipelines*.yml",
+    "azure-pipelines*.yaml",
+    "*pipelines/*.yml",
+    "*pipelines/*.yaml",
+    ".azuredevops/*.yml",
+    ".azuredevops/*.yaml",
     "Jenkinsfile",
     ".circleci/config.yml",
     "bitbucket-pipelines.yml",
