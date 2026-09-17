@@ -13,7 +13,7 @@ from sherpa import __version__
 from sherpa.cli import main
 from sherpa.config import PlanConfig, load
 from sherpa.model import Conventions, DirStat, GeneratorStat, GitLayer, Model, ModuleStat, TrunkInfo, Windows
-from sherpa.plan import PROPOSE, SKIP, Check, Entry, build_plan, render_console, yamlio
+from sherpa.plan import PROPOSE, SKIP, Check, Entry, Plan, build_plan, render_console, yamlio
 from sherpa.plan.rules import Unit, units_of
 from sherpa.scan import scan
 from tests.conftest import commit, git
@@ -369,6 +369,27 @@ def test_merge_decisions_keeps_by_key_and_counts():
     assert yamlio.merge_decisions(p, stale)[1] == 0
 
 
+def test_decide_by_address_short_and_full_ambiguous_unknown_and_conflict():
+    p = build_plan(big_model(3, 3))
+    kinds = {e.kind for e in p.entries}
+    assert "agent" in kinds and all(e.address == f"{e.kind}:{e.target}:{e.scope}" for e in p.entries)
+    d, n = yamlio.decide(p, ["agent:M00"], ["owner-doc:M01:src/M01"])
+    by = {e.address: e.decision for e in d.entries}
+    assert n == 2 and by["agent:M00:src/M00"] == "accept" and by["owner-doc:M01:src/M01"] == "reject"
+    assert yamlio.decide(p, [], []) == (p, 0)
+    with pytest.raises(ValueError, match="no such entry — entries of that kind: agent:M00:src/M00"):
+        yamlio.decide(p, ["agent:Nope"], [])
+    with pytest.raises(ValueError, match="no such entry — entries of that kind: none of that kind"):
+        yamlio.decide(p, ["eval:M00"], [])
+    with pytest.raises(ValueError, match="both --accept and --reject"):
+        yamlio.decide(p, ["agent:M00"], ["agent:M00"])
+    # two entries of one kind and target in different scopes: the short address is ambiguous
+    twin = replace(p.entries[1], scope="other/M00")
+    p2 = Plan(p.repo, p.model, p.thresholds, p.ranking, [*p.entries, twin], p.sherpa, p.schema_version, p.notes)
+    with pytest.raises(ValueError, match="ambiguous — owner-doc:M00:src/M00, owner-doc:M00:other/M00; give the scope"):
+        yamlio.decide(p2, [f"{twin.kind}:M00"], [])
+
+
 def test_small_units_without_dependents_get_no_owner_doc():
     p = build_plan(
         model(modules=[mod("tiny", "t", c90=3, files=2), mod("lib", "l", c90=3, files=2, dependents=("x",))])
@@ -552,6 +573,14 @@ def test_cli_plan_scans_when_model_missing_then_reuses_and_keeps_decisions(poly_
     out, err = capsys.readouterr()
     assert err == "" and "(1 decisions kept)" in out and " [reject]" in out
     assert "decision: reject" in plan_path.read_text(encoding="utf-8")
+    # decisions by flag: the same YAML a hand would write, kept on the next plan, refused when unknown
+    assert main(["plan", str(poly_repo), "--accept", "librarian:Shop.Pricing", "--reject", "agent:Shop.Pricing"]) == 0
+    out, _ = capsys.readouterr()
+    assert "(1 decisions kept, 2 decided now)" in out
+    assert main(["plan", str(poly_repo)]) == 0
+    assert "(3 decisions kept)" in capsys.readouterr()[0]
+    assert main(["plan", str(poly_repo), "--accept", "agent:Nope"]) == 1
+    assert "sherpa plan: --accept agent:Nope: no such entry" in capsys.readouterr()[1]
 
 
 def test_cli_plan_rescan_and_stdout(poly_repo: Path, capsys):

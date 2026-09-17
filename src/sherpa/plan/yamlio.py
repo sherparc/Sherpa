@@ -144,6 +144,36 @@ def merge_decisions(plan: Plan, previous: dict[str, Any] | None) -> tuple[Plan, 
     ), n
 
 
+def decide(plan: Plan, accept: list[str], reject: list[str]) -> tuple[Plan, int]:
+    """``sherpa plan --accept agent:pay --reject owner-doc:web``: decisions by address, for scripts and CI.
+
+    An address is ``kind:target`` or ``kind:target:scope`` (``Entry.address``); without the scope it must match
+    exactly one entry. Unknown or ambiguous addresses are errors that list what exists. Returns the plan and the
+    number of decisions set; the YAML is still the record — a flag writes the same ``decision:`` a hand would."""
+    wanted: list[tuple[str, str]] = [(a, "accept") for a in accept] + [(r, "reject") for r in reject]
+    if not wanted:
+        return plan, 0
+    by_address = {e.address: e for e in plan.entries}
+    resolved: dict[str, str] = {}
+    for addr, decision in wanted:
+        if addr in by_address:
+            hits = [addr]
+        else:
+            hits = [a for a in by_address if a.startswith(addr + ":")]
+        if not hits:
+            near = ", ".join(a for a in by_address if a.split(":")[0] == addr.split(":")[0]) or "none of that kind"
+            raise ValueError(f"--{decision} {addr}: no such entry — entries of that kind: {near}")
+        if len(hits) > 1:
+            raise ValueError(f"--{decision} {addr}: ambiguous — {', '.join(hits)}; give the scope")
+        if resolved.get(hits[0], decision) != decision:
+            raise ValueError(f"{hits[0]}: both --accept and --reject given")
+        resolved[hits[0]] = decision
+    entries = [replace(e, decision=resolved[e.address]) if e.address in resolved else e for e in plan.entries]
+    return Plan(
+        plan.repo, plan.model, plan.thresholds, plan.ranking, entries, plan.sherpa, plan.schema_version, plan.notes
+    ), len(resolved)
+
+
 def plan_from_dict(d: dict[str, Any]) -> Plan:
     """The stored plan back as a ``Plan`` — ``sherpa apply`` and ``status`` work on what the human approved."""
     validate(d)

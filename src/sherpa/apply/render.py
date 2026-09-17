@@ -55,8 +55,8 @@ class Target:
 
 
 def entry_key(e: Entry) -> str:
-    """State key of an entry; ":" because targets may contain "/" (Go module paths)."""
-    return f"{e.kind}:{e.target}:{e.scope}"
+    """State key of an entry = its address (``Entry.address``); one format for plan, state and ``--accept``."""
+    return e.address
 
 
 def selected(plan: Plan) -> list[Entry]:
