@@ -10,11 +10,14 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from sherpa import atomic
+from sherpa.apply.state import ADOPTED, State
 from sherpa.plan import DECISIONS, Check, Entry, Plan
 
 PLAN_NAME = "harness-plan.yaml"
@@ -49,6 +52,8 @@ def _entry_dict(e: Entry) -> dict[str, Any]:
     }
     if e.reason is not None:
         d["reason"] = e.reason
+    if e.covered is not None:
+        d["covered"] = e.covered
     return d
 
 
@@ -80,8 +85,7 @@ def dumps(plan: Plan) -> str:
 
 
 def write(plan: Plan, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(dumps(plan), encoding="utf-8", newline="\n")
+    atomic.write_text(path, dumps(plan))  # never a torn plan (ADR-0017)
 
 
 def loads(text: str) -> dict[str, Any]:
@@ -133,7 +137,7 @@ def merge_decisions(plan: Plan, previous: dict[str, Any] | None) -> tuple[Plan, 
         d = keep.get(e.key)
         if d is not None:
             n += 1
-            e = Entry(e.kind, e.target, e.scope, e.default, e.evidence, e.checks, e.cost, e.reason, d)
+            e = replace(e, decision=d)
         entries.append(e)
     return Plan(
         plan.repo, plan.model, plan.thresholds, plan.ranking, entries, plan.sherpa, plan.schema_version, plan.notes
@@ -168,7 +172,23 @@ def entry_from_dict(d: dict[str, Any]) -> Entry:
         d.get("cost", ""),
         d.get("reason"),
         d.get("decision"),
+        d.get("covered"),
     )
+
+
+def mark_covered(plan: Plan, state: State) -> tuple[Plan, int]:
+    """An adopted file linked to an entry covers it (ADR-0007): the plan shows the file, ``apply`` renders nothing
+    for the entry unless a human accepts it explicitly. Recomputed from the state on every plan."""
+    by_key: dict[str, str] = {}
+    for path, rec in sorted(state.files.items()):
+        if rec.origin == ADOPTED and rec.entry:
+            by_key.setdefault(rec.entry, path)
+    entries, n = [], 0
+    for e in plan.entries:
+        covered = by_key.get(f"{e.kind}:{e.target}:{e.scope}")
+        n += covered is not None
+        entries.append(replace(e, covered=covered))
+    return replace(plan, entries=entries), n
 
 
 def _split_check(text: str) -> tuple[str, bool, str]:

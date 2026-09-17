@@ -8,7 +8,7 @@
 | `sherpa.toml` | all | optional; [configuration](configuration.md) |
 | `.sherpa/codebase-model.json` | `plan`, `apply`, `status` | rescanned by `plan` when missing, stale or of an old schema |
 | `.sherpa/harness-plan.yaml` | `plan` (decisions), `apply`, `status` | the previous plan's `decision:` values are carried over |
-| `.sherpa/state.json` | `apply`, `status`, `check` (C8), the outcome hook (`harness_rev`) | empty state when missing |
+| `.sherpa/state.json` | `apply`, `status`, `adopt`, `check` (C8), the outcome hook (`harness_rev`) | empty state when missing; a torn one is an error that names `sherpa adopt` as the fix |
 | `.claude/**`, `.agents/**`, every `CLAUDE.md` and `AGENTS.md` | `apply` (current content), `check`, `status` | nested proximity files included |
 | `.sherpa/telemetry/outcomes.ndjson` | `status` | written by the outcome hook |
 
@@ -17,8 +17,8 @@
 | Path | Written by | Commit it? |
 |---|---|---|
 | `.sherpa/codebase-model.json` | `scan`, `plan` | **no** — regenerated from the trunk; add to `.gitignore` |
-| `.sherpa/harness-plan.yaml` | `plan` | **yes** — it carries the team's decisions (ADR-0005) |
-| `.sherpa/state.json` | `apply` | **yes** — what sherpa owns and the harness version (ADR-0005) |
+| `.sherpa/harness-plan.yaml` | `plan`, `adopt` (`covered:` marks) | **yes** — it carries the team's decisions (ADR-0005) |
+| `.sherpa/state.json` | `apply`, `adopt` | **yes** — what sherpa owns and the harness version (ADR-0005); written atomically, rebuildable by `adopt` (ADR-0017) |
 | `<home>/docs/modules/*.md`, `<home>/skills/*/SKILL.md`, `<home>/scripts/sherpa-check.py` (`home` = `.agents` or `.claude`) | `apply` | yes — the neutral core |
 | `.claude/agents/*.md`, `.claude/hooks/sherpa-outcome.py`, `.claude/settings.json` (hook entries), `.claude/skills/*/SKILL.md` stubs | `apply`, target `claude` | yes |
 | `CLAUDE.md`, `<unit>/CLAUDE.md` (block `harness`) | `apply`, target `claude` | yes |
@@ -41,7 +41,7 @@ Suggested `.gitignore` in a target repository:
 |---|---|---|
 | 0 | success — including a dry run, an aborted question and "nothing to do" | all |
 | 1 | error: git (no repository, no origin, no trunk), configuration, plan or state file invalid or missing, stale plan, rollback after a new checker FAIL, checker FAIL | all |
-| 2 | command not implemented yet (`adopt`) | `adopt` |
+| 2 | command not implemented yet (`doctor`) | — |
 
 Errors go to stderr as `sherpa <command>: <message>`; the message names the fix where there is one
 (`— run `sherpa plan` first`, `Fix: 'git remote set-head origin -a' or 'trunk' in sherpa.toml`).

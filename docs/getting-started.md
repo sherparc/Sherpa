@@ -98,6 +98,18 @@ there). Sherpa owns exactly the marked blocks inside those files (`<!-- sherpa:b
 docs' `structure`, `rules`, `key services` sections — the next `apply` refreshes the facts block and leaves your
 text alone.
 
+### Already have a harness?
+
+```bash
+sherpa adopt         # after plan, before apply
+```
+
+Every file under `.claude/`, `.agents/` and every `AGENTS.md`/`CLAUDE.md` enters the state as yours — nothing is
+changed, `apply` never touches it. An agent or doc that is about one of the plan's units **covers** that entry
+(`sherpa plan` shows `[covered by …]`), so Sherpa does not create a second one; gaps that an analysis by hand
+would find (fat agents without a manifest, docs matching no module) are listed. Details:
+[commands/adopt.md](commands/adopt.md).
+
 ## 5. Commit
 
 Commit `.sherpa/harness-plan.yaml`, `.sherpa/state.json`, `.agents/**`, `.claude/**` and the `AGENTS.md`/`CLAUDE.md` files. Do **not** commit
@@ -110,6 +122,7 @@ Commit `.sherpa/harness-plan.yaml`, `.sherpa/state.json`, `.agents/**`, `.claude
 sherpa status        # what changed since the last apply: drift per file and block, checker findings, outcome labels
 sherpa plan          # after merges: rescans when the trunk moved, keeps your decisions
 sherpa apply         # refreshes the facts blocks; the second run in a row prints "nothing to do."
+sherpa adopt         # lost or torn .sherpa/state.json: rebuilt from the files, same harness_rev
 ```
 
 From the first `apply` on, every Claude Code execution in the repo gets an outcome label (`success`, `failed`,

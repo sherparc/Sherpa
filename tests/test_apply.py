@@ -538,13 +538,12 @@ def test_cli_apply_dry_run_asks_and_aborts(active_repo: Path, capsys, monkeypatc
     assert "18 files written" in capsys.readouterr().out and (active_repo / "CLAUDE.md").exists()
 
 
-def test_cli_check_and_adopt(active_repo: Path, capsys):  # noqa: F811
+def test_cli_check(active_repo: Path, capsys):  # noqa: F811
     applied(active_repo)
     capsys.readouterr()
     assert main(["check", str(active_repo)]) == 0
     assert capsys.readouterr().out.startswith(f"sherpa check {active_repo.resolve()}: 0 FAIL, 0 WARN\n")
     assert main(["check", str(active_repo), "--json"]) == 0 and capsys.readouterr().out == "[]\n"
-    assert main(["adopt", str(active_repo)]) == 2
 
 
 # ---------------------------------------------------------------- goldens (the README shows these)

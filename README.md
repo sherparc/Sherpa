@@ -10,7 +10,7 @@ Sherpa analyses your codebase deterministically (like CodeScene) and plans the k
 
 [![CI](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml/badge.svg)](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
-![Status: scan, plan and apply live; adopt in progress](https://img.shields.io/badge/status-scan%20%2B%20plan%20%2B%20apply%20live%20%C2%B7%20adopt%20in%20progress-orange)
+![Status: scan, plan, apply and adopt live](https://img.shields.io/badge/status-scan%20%2B%20plan%20%2B%20apply%20%2B%20adopt%20live-brightgreen)
 
 </div>
 
@@ -83,14 +83,35 @@ manifest that points at the owner doc ([golden](tests/goldens/active-agent-pay.m
 gets its skill; the outcome hook labels every Claude Code execution with the harness version from day one. Run it again: eighteen `=`, `nothing to do.`
 Sherpa owns only the marked blocks — write anything else into those files, it stays.
 
+Already have a harness? `sherpa adopt` takes it into the state without changing a byte — like `terraform import`
+(golden [active-adopt-console.txt](tests/goldens/active-adopt-console.txt)):
+
+```console
+$ sherpa adopt .
+sherpa adopt — home .claude · targets claude: 7 harness files
+  a .claude/agents/ops.md           agent    no unit matches
+  a .claude/agents/pay-expert.md    agent    → agent pay (mentions svc/pay 170×)
+  a .claude/docs/modules/pay.md     doc      at sherpa's path, yours — covers the entry
+  ? .claude/notes.txt               unknown  yours
+  · CLAUDE.md                       root     no sherpa markers — `apply` appends its block (ADR-0016)
+gaps:
+  - .claude/agents/pay-expert.md: 175 lines, no knowledge manifest — rotation candidate, facts belong in an owner doc
+  - .claude/docs/modules/legacy.md: no unit matches by name or path mentions — moved, renamed or not a module doc
+state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 9ff76cfb703d → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
+```
+
+The next `sherpa plan` shows `[covered by .claude/agents/pay-expert.md]` on the agent entry and `apply` creates
+nothing there ([golden](tests/goldens/active-plan-covered-console.txt)). The same command rebuilds a lost or torn
+`.sherpa/state.json` from the files — same `harness_rev` as `apply` wrote (ADR-0017).
+
 - `sherpa scan` 🟢 **Live** — deterministic codebase model (git churn, hotspots, modules, dependencies, generators)
 - `sherpa plan` 🟢 **Live** — proposals and reasoned no's with evidence as YAML; decisions survive a re-plan
 - `sherpa apply` 🟢 **Live** — dry run first, managed blocks, state file, outcome hook, checker with rollback; targets `claude` and `agents-md` from one neutral core
 - `sherpa status` · `sherpa check` 🟢 **Live** — drift per file and block, structural rules, outcome labels per harness version
-- `sherpa adopt` 🟡 **In progress (M3c)** — take over existing harnesses without changing a file
+- `sherpa adopt` 🟢 **Live** — take an existing harness into the state without changing a byte; files that already fill a plan entry cover it; a lost state is rebuilt from the files
 - `sherpa doctor` ⚪ **Planned (M2b)** — check the environment, update hint
 
-Documentation: [docs/index.md](docs/index.md) — [getting started](docs/getting-started.md), one reference page per command ([scan](docs/commands/scan.md), [plan](docs/commands/plan.md), [apply](docs/commands/apply.md), [status](docs/commands/status.md), [check](docs/commands/check.md)), [configuration](docs/reference/configuration.md); milestones: [docs/plan.md](docs/plan.md).
+Documentation: [docs/index.md](docs/index.md) — [getting started](docs/getting-started.md), one reference page per command ([scan](docs/commands/scan.md), [plan](docs/commands/plan.md), [apply](docs/commands/apply.md), [adopt](docs/commands/adopt.md), [status](docs/commands/status.md), [check](docs/commands/check.md)), [configuration](docs/reference/configuration.md); milestones: [docs/plan.md](docs/plan.md).
 
 ## Quick start
 
@@ -199,7 +220,8 @@ flowchart LR
 | M2 | `plan` stage 1: units, rank + floor, generator families → skills, reasoned no's, decision keeping | ✅ |
 | M3a | `apply`: dry run, managed blocks, state, outcome hook, checker with rollback; `status`, `check` | ✅ |
 | M3t | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files | ✅ |
-| M3c / M2b | `adopt`; distribution: release wheels, `self-update`, `doctor` | 🚧 |
+| M3c | `adopt`: existing harnesses taken over unchanged, covered entries, rebuildable state | ✅ |
+| M2b | distribution: release wheels, `self-update`, `doctor` | 🚧 |
 | M3b | language adapters (anchors, patterns) | ⏳ |
 | M4–M7 | auto-evals, outcome evaluation, LLM stage, librarians & multi-repo | ⏳ |
 
@@ -212,7 +234,7 @@ Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generat
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 222 tests, ~98 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 230 tests, ~98 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 

@@ -50,6 +50,10 @@ Without drift the second line reads `drift: none — files match the state and t
 | `-` | in the state, not on disk | `sherpa apply` recreates it, or remove the record if the deletion was intended |
 | `?` | orphan: in the state, no longer in the plan (the entry was rejected or the module disappeared) | delete the file and its state record by hand — Sherpa never deletes |
 
+Files recorded as `origin: adopted` ([`sherpa adopt`](adopt.md)) never appear as drift — a hand edit to them is
+the intended state of affairs; only a deleted one is listed (`-`) until the next `adopt` drops the record. A
+note counts them: `note: 6 adopted files are yours and never touched (ADR-0007)`.
+
 ### Outcomes
 
 One line per `harness_rev` seen in the labels, the current one first and marked. `success` = the last test run

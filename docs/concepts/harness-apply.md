@@ -4,7 +4,8 @@
 > the state belong to [`harness-state.schema.json`](../../src/sherpa/schemas/harness-state.schema.json) (v1); code in
 > [`src/sherpa/apply/`](../../src/sherpa/apply/) (`render.py` files, `__init__.py` actions and write, `state.py`,
 > `status.py`) and [`src/sherpa/check.py`](../../src/sherpa/check.py). Principles: ADR-0008 (dry run, outcome
-> minimum), ADR-0013 (managed blocks, single-source checker). Status: M3a, v0.4.0 — `adopt` follows.
+> minimum), ADR-0013 (managed blocks, single-source checker), ADR-0007/0017 (adopt, rebuildable state).
+> Status: M3c, v0.4.0.
 
 Command reference (options, exit codes, troubleshooting): [`sherpa apply`](../commands/apply.md).
 
@@ -124,6 +125,21 @@ Hashes ignore line endings (`\r\n` = `\n`): a CRLF checkout is not a hand edit.
 `harness_rev` = hash over all managed file and block hashes plus the sherpa version — the number a harness change
 has to be measured against. `applied_at` is the only clock in the whole apply; the state is rewritten only when
 something changed. Plan and state are checked in (ADR-0005), the model is not.
+
+## Adopt — existing harnesses and a rebuildable state
+
+The harness files are the source of truth; the state is an index over them (ADR-0017). `sherpa adopt` is the
+one operation that builds that index from the files instead of from a write: every file under the homes and
+every `CLAUDE.md`/`AGENTS.md` is classified by path, compared with the plan's rendering where there is one, and
+recorded as sherpa's (`generated`) only where the bytes prove it — a whole file that equals its rendering, a
+block that equals its rendering, a base file sherpa names itself. Everything else is `adopted`: yours, never
+touched by `apply`, never drift in `status`, no C8. Adopted agents and docs are linked to units (name, then path
+mentions) and **cover** the plan entries they fill; `selected()` leaves a covered entry out unless a human
+accepts it. The rules, the console marks and the gaps are in [commands/adopt.md](../commands/adopt.md).
+
+Index files (`state.json`, `harness-plan.yaml`) are written atomically (temp file + `os.replace`); a torn or
+foreign state fails every reader with the way out in the message, and `adopt` rebuilds it — after an unchanged
+`apply`, with the same `harness_rev`.
 
 ## Outcome minimum — the hook (ADR-0008)
 

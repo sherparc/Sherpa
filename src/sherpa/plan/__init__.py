@@ -47,6 +47,7 @@ class Entry:
     cost: str
     reason: str | None = None  # skip only: what is missing + flip criterion
     decision: str | None = None  # set by a human: accept | reject; survives a re-plan
+    covered: str | None = None  # path of an adopted file that already fills this entry (ADR-0007); from the state
 
     @property
     def key(self) -> tuple[str, str, str]:
@@ -95,6 +96,8 @@ def render_console(plan: Plan, out_name: str) -> str:
         for e in plan.entries:
             sign = "+" if e.default == PROPOSE else "-"
             mark = f" [{e.decision}]" if e.decision else ""
+            if e.covered:
+                mark += f" [covered by {e.covered}]"
             lines.append(f"  {sign} {e.kind:<{w_kind}}  {e.target:<{w_target}}  {e.summary}{mark}")
     lines.extend(f"  {n}" for n in plan.notes)
     return "\n".join(lines) + "\n"

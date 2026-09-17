@@ -105,6 +105,11 @@ that is not rejected and every `skip` that is accepted. Decisions survive re-pla
 were kept (`(2 decisions kept)`). An entry that disappears from the plan (a module was deleted) takes its decision
 with it; an entry that changes kind or scope is a new entry.
 
+`covered:` is set by [`sherpa adopt`](adopt.md) and recomputed from the state on every plan: the path of an
+existing file that already fills the entry (an agent or owner doc of that unit). A covered proposal is shown as
+`[covered by <path>]` and `apply` renders nothing for it; `decision: accept` overrides that when you want
+sherpa's version next to yours. The console tail counts them (`(2 covered by adopted files)`).
+
 ## Configuration
 
 `[plan]` in `REPO/sherpa.toml` — every threshold, with defaults, in

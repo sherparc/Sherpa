@@ -60,8 +60,14 @@ def entry_key(e: Entry) -> str:
 
 
 def selected(plan: Plan) -> list[Entry]:
-    """Terraform model: every proposal unless rejected, every no that was accepted."""
-    return [e for e in plan.entries if (e.default == PROPOSE and e.decision != "reject") or e.decision == "accept"]
+    """Terraform model: every proposal unless rejected, every no that was accepted. An entry covered by an adopted
+    file (ADR-0007) is rendered only when a human accepts it explicitly — a second agent for the same unit is a
+    decision, never a default."""
+    return [
+        e
+        for e in plan.entries
+        if e.decision == "accept" or (e.default == PROPOSE and e.decision != "reject" and not e.covered)
+    ]
 
 
 def slug(text: str) -> str:
@@ -111,6 +117,12 @@ class Renderer:
         self.slugs = self._slugs()
         self.units = [e for e in self.entries if e.kind in ("owner-doc", "test-infra")]
         self.docs = {e.target: self.doc_path(e) for e in self.units}  # unit → owner doc path
+        # A unit whose owner doc is an adopted file (ADR-0007): no doc is rendered, agents and proximity files
+        # point at the adopted one, and the proximity files still carry the measured facts.
+        for e in plan.entries:
+            if e.kind in ("owner-doc", "test-infra") and e.covered and e not in self.entries:
+                self.units.append(e)
+                self.docs[e.target] = e.covered
 
     # ------------------------------------------------------------ naming
 

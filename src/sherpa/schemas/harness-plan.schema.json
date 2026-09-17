@@ -156,6 +156,10 @@
           "cost": {
             "type": "string"
           },
+          "covered": {
+            "type": "string",
+            "description": "Repo-relative path of an adopted file that already fills this entry (sherpa adopt, ADR-0007); apply renders nothing for it unless decision is accept."
+          },
           "reason": {
             "type": "string",
             "description": "Skip only: what is missing, then \"Flips when: …\"."

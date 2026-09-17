@@ -16,7 +16,7 @@ from pathlib import Path
 
 from sherpa import __version__
 from sherpa.apply.render import check_script
-from sherpa.apply.state import State
+from sherpa.apply.state import ADOPTED, State
 from sherpa.check import FAIL, Finding
 from sherpa.check import check as run_check
 
@@ -45,17 +45,25 @@ def report(repo: Path, state: State, actions: list) -> Report:
 
     r = Report(state.harness_rev or "none", state.applied_at or "never")
     targeted = {a.path for a in actions}
+    adopted = {path for path, rec in state.files.items() if rec.origin == ADOPTED}
     missing = {path for path in state.files if not (repo / path).is_file()}
     for a in actions:
+        if a.path in adopted:
+            continue  # yours (ADR-0007): listed below only when gone
         if a.path in missing:
             r.drift.append((MISSING, a.path, "in the state, not on disk — apply recreates it"))
         elif a.op in (NEW, UPDATED, SKIPPED):
             r.drift.append((a.op, a.path, a.detail))
     for path in sorted(state.files):
-        if path in missing and path not in targeted:
+        if path in adopted:
+            if path in missing:
+                r.drift.append((MISSING, path, "adopted file is gone — `sherpa adopt` drops the record"))
+        elif path in missing and path not in targeted:
             r.drift.append((MISSING, path, "in the state, not on disk"))
         elif path not in targeted:
             r.drift.append((ORPHAN, path, "in the state, no longer in the plan"))
+    if adopted:
+        r.notes.append(f"{len(adopted)} adopted files are yours and never touched (ADR-0007)")
     r.drift.sort(key=lambda d: d[1])
     r.findings = [f for f in run_check(repo) if f.rule != "C8"]  # drift above is the same information, sharper
     r.outcomes, r.corrections = _outcomes(repo / OUTCOMES)

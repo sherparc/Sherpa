@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from sherpa import __version__
-from sherpa.cli import EXIT_ERROR, EXIT_NOT_IMPLEMENTED, EXIT_OK, main
+from sherpa.cli import EXIT_ERROR, EXIT_OK, main
 from sherpa.model import validate
 from sherpa.scan import parse_as_of, scan
 from tests.conftest import commit, git
@@ -120,5 +120,6 @@ def test_cli_scan_bad_trunk_exit_1(clone: Path, capsys):
     assert "does not exist" in capsys.readouterr().err
 
 
-def test_cli_adopt_unimplemented(tmp_path: Path):
-    assert main(["adopt", str(tmp_path)]) == EXIT_NOT_IMPLEMENTED  # never run inside the sherpa repo itself
+def test_cli_adopt_needs_a_plan(tmp_path: Path, capsys):
+    assert main(["adopt", str(tmp_path)]) == 1
+    assert "run `sherpa plan` first" in capsys.readouterr().err

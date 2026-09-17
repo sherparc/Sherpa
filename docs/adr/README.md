@@ -22,3 +22,4 @@ no ADR is not decided.
 | [0014](0014-owner-doc-floor-by-files.md) | Owner docs need ≥ 5 files unless something depends on the unit; small units listed as no's | accepted |
 | [0015](0015-target-layer-neutral-core.md) | Runtime-neutral core under `.agents`/`.claude` (`home`), adapters per target (`claude`, `agents-md`), nested AGENTS.md/CLAUDE.md per unit, ask when both homes exist | accepted |
 | [0016](0016-never-overwrite-only-add.md) | In the user's repository Sherpa never overwrites what exists — it creates, appends, merges, and rewrites only its own unchanged bytes | accepted |
+| [0017](0017-state-is-a-rebuildable-index.md) | The state is a rebuildable index over the harness files: atomic writes, `adopt` rebuilds a lost or torn state, readers name the way out | accepted |

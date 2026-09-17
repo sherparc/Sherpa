@@ -121,6 +121,7 @@ the always-part), detail. The detail lines and what each means:
 | `block facts removed by hand (skipped)` | you deleted the markers; sherpa does not put them back |
 | `markers broken: block facts is never closed (skipped)` | fix the markers by hand (`sherpa check` C5 names the line) |
 | `exists, not managed by sherpa — sherpa adopt takes it over` | a file at that path without a state record — an existing harness; nothing is touched |
+| `adopted — yours, never touched (skipped)` | recorded as `origin: adopted` by [`sherpa adopt`](adopt.md); only shown when a plan entry was accepted on top of it |
 | `exists with sherpa markers but no state record — sherpa adopt` | markers but no record (deleted state, copied file): treated as yours (ADR-0016) |
 | `block facts not written by sherpa (skipped)` | a block with Sherpa's name that Sherpa never wrote — yours |
 
@@ -130,11 +131,12 @@ a rollback: `check: 1 new FAIL — rolled back, nothing written` followed by the
 ## The state and `harness_rev`
 
 `.sherpa/state.json` records, per file, the ownership mode (`managed`, `blocks`, `json-hooks`), the origin
-(`generated`; `adopted` once `sherpa adopt` exists), the plan entry and the hashes sherpa wrote — one per managed
+(`generated`, or `adopted` by [`sherpa adopt`](adopt.md)), the plan entry and the hashes sherpa wrote — one per managed
 file, one per block. `harness_rev` is a hash over all of them plus the sherpa version: it changes exactly when
 sherpa's share of the harness changes. The outcome hook stamps it on every label, so `sherpa status` can compare
 harness versions. `applied_at` is the only timestamp Sherpa ever writes and lives only here. Commit the state
-(ADR-0005). Schema: [`harness-state.schema.json`](../../src/sherpa/schemas/harness-state.schema.json).
+(ADR-0005). Schema: [`harness-state.schema.json`](../../src/sherpa/schemas/harness-state.schema.json). The state
+is written atomically and is an index over the files: lost or torn, `sherpa adopt` rebuilds it (ADR-0017).
 
 ## The outcome hook
 
@@ -175,7 +177,8 @@ Proven by `test_apply_is_idempotent_and_deterministic`: the second run is all `=
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Everything is `! exists, not managed by sherpa` | the repo already has a `.claude/` — those files have no state record | wait for `sherpa adopt` (M3c); until then rename or accept that they stay untouched |
+| Everything is `! exists, not managed by sherpa` | the repo already has a `.claude/` — those files have no state record | `sherpa adopt` takes them over and marks the entries they cover |
+| `sherpa apply: .sherpa/state.json is unreadable (…)` | a crash left a torn state, or the file is foreign | `sherpa adopt` rebuilds it from the harness files (ADR-0017) |
 | `both .agents/ and .claude/ exist — where should owner docs and skills live?` | two homes, nothing decided, no terminal | set `[apply] home` in `sherpa.toml`, or run `apply` interactively once — the answer is remembered |
 | No `CLAUDE.md`, no hook after apply | the repo had `AGENTS.md` and no `.claude/`, so only `agents-md` was detected | add `targets = ["claude", "agents-md"]` to `[apply]` |
 | `status` shows `~ block facts updated` right after `apply` | `apply` was run with an older model than the plan | run `sherpa plan` then `sherpa apply` |

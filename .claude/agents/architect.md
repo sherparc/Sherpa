@@ -24,7 +24,8 @@ knowledge:
 
 Sherpa is a harness generator: `scan` measures a repository deterministically, `plan` proposes owner docs,
 agents, librarians and skills with evidence and reasoned no's, `apply` creates the approved part and keeps its
-blocks current, `status`/`check` report drift and structural findings. Terraform's plan/apply/state model for
+blocks current, `adopt` takes an existing harness into the state unchanged (and rebuilds a lost state from the
+files), `status`/`check` report drift and structural findings. Terraform's plan/apply/state model for
 knowledge infrastructure. Everything outside `plan` stage 2 is deterministic — no LLM, no clock in outputs.
 
 Direction, held in the background while the milestone plan is executed in order: Sherpa becomes an **agent** in
@@ -50,12 +51,13 @@ parts (agents' front matter, hooks, `CLAUDE.md`) stay isolated in `apply/render.
 
 | Where | What |
 |---|---|
-| `src/sherpa/cli.py` | argparse entry: `scan`, `plan`, `apply`, `status`, `check`; exit codes 0/1/2 |
+| `src/sherpa/cli.py` | argparse entry: `scan`, `plan`, `apply`, `adopt`, `status`, `check`; exit codes 0/1/2 |
 | `src/sherpa/gitinfo.py` | git calls, trunk resolution (ADR-0003) |
 | `src/sherpa/scan/` | `t0_git.py` (files, dirs, hotspots), `t1_modules.py` (manifests, deps), `generators.py` (families, `GlobSet`) |
 | `src/sherpa/model.py`, `schemas/` | dataclasses and JSON schemas of model (v3), plan (v1), state (v1) |
 | `src/sherpa/plan/` | `rules.py` (units, rank and floor, reach), `yamlio.py` (format, decisions) |
-| `src/sherpa/apply/` | `render.py` (entry → files), `__init__.py` (actions, write, rollback), `state.py`, `status.py`, `assets/sherpa-outcome.py` (hook) |
+| `src/sherpa/apply/` | `render.py` (entry → files), `__init__.py` (actions, write, rollback), `adopt.py` (inventory, reconcile, link, gaps), `state.py`, `status.py`, `assets/sherpa-outcome.py` (hook) |
+| `src/sherpa/atomic.py` | atomic writes for the index files (ADR-0017) |
 | `src/sherpa/check.py` | single-file checker, deployed into target repos as a copy |
 | `tests/` | programmatic fixture repos (`conftest.py`, `active_repo`, `poly_repo`), goldens in `tests/goldens/` |
 | `docs/` | `index.md` landing, `commands/` reference, `concepts/` rules, `reference/` config and files, `adr/`, `plan.md` |
