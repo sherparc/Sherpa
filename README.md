@@ -258,7 +258,7 @@ Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generat
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
-CI runs on Linux and Windows with Python 3.12 and 3.13; macOS is prepared in the matrix and enabled for large changes. Test repos are built programmatically (no corpus in the repo). The repository carries its own harness — `sherpa status .` must be clean before a commit — and an architect agent under [.claude/agents/](.claude/agents/architect.md). Working rules for humans and agents: [CLAUDE.md](CLAUDE.md).
+CI runs with Python 3.12 and 3.13: Linux on every pull request, Linux and Windows on `main`, macOS weekly; a manual run covers all three. Test repos are built programmatically (no corpus in the repo). The repository carries its own harness — `sherpa status .` must be clean before a commit — and an architect agent under [.claude/agents/](.claude/agents/architect.md). Working rules for humans and agents: [CLAUDE.md](CLAUDE.md).
 
 `main` changes only through pull requests with squash merge. Once per clone, enable the guard that refuses direct pushes to `main`:
 

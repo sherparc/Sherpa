@@ -268,8 +268,8 @@ the status line), one or two sentences per row there, the full reasoning and the
 | M3b | adapters `dotnet` + `python` (T2: anchors, patterns) — **proposed after M6-lite** (§7.3) | a scan yields the anchors a harness checker verifies today; owner docs get anchors |
 | M7 | librarians, multi-repo (`/sherpa-plan` moved to M7a) | a second repo in the workspace |
 
-Every milestone ends with: CI green (`.github/workflows/ci.yml`: pytest on Linux and Windows, coverage ≥ 90 %,
-ruff), docs updated (`plan.md`, the concept doc in `docs/concepts/`, the command reference in `docs/commands/`,
+Every milestone ends with: CI green (`.github/workflows/ci.yml`: pytest on Linux for pull requests, Linux and
+Windows on `main`, macOS weekly, all three on a manual run — ADR-0037; coverage ≥ 90 %, ruff), docs updated (`plan.md`, the concept doc in `docs/concepts/`, the command reference in `docs/commands/`,
 `docs/index.md`), Sherpa applied to itself (`sherpa status .` clean — the repo carries its own harness under
 `.claude/`), Andrei sees the diff before the commit. The ritual is `.claude/skills/milestone-step/SKILL.md`.
 
