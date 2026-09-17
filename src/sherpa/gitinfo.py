@@ -53,6 +53,31 @@ def ignored(repo: Path, paths: list[str]) -> set[str]:
     return {x for x in r.stdout.split("\0") if x} if r.returncode in (0, 1) else set()
 
 
+def nested_repositories(repo: Path) -> list[str]:
+    """Directories below the root that are repositories of their own — a ``.git`` directory or worktree file
+    inside: submodules, clones kept in the tree, a harness checked out under ``.claude/``. Sherpa works with one
+    repository (ADR-0045), so ``apply`` and ``adopt`` refuse when this is not empty. Dependency and build
+    directories are not walked; of the dot-directories only the harness homes are."""
+    from sherpa.check import SKIP_DIRS
+
+    found: list[str] = []
+    stack = [repo]
+    while stack:
+        d = stack.pop()
+        try:
+            entries = sorted(d.iterdir())
+        except OSError:
+            continue
+        for p in entries:
+            if p.name == ".git" and d != repo:
+                found.append(d.relative_to(repo).as_posix())
+            elif p.is_dir() and p.name not in SKIP_DIRS:
+                if p.name.startswith(".") and p.name not in (".claude", ".agents"):
+                    continue
+                stack.append(p)
+    return sorted(found)
+
+
 def has_remote(repo: Path, name: str = REMOTE) -> bool:
     try:
         return name in _git(repo, "remote").splitlines()

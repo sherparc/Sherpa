@@ -14,7 +14,8 @@ sherpa status [REPO] [--json]
 1. Loads `.sherpa/state.json` (an empty state when there is none), `.sherpa/harness-plan.yaml` and
    `.sherpa/codebase-model.json`; notes whether the trunk moved since the plan was made (`plan: stale`).
 2. Renders what [`sherpa apply`](apply.md) would do now — the same pure comparison, nothing written.
-3. Runs the checker rules C1–C7 ([`sherpa check`](check.md)); C8 (drift) is replaced by the sharper per-block
+3. Runs the checker rules C1–C7 ([`sherpa check`](check.md)) — C1–C5 FAIL only in files sherpa generated,
+   WARN `(yours)` in adopted and unrecorded ones (ADR-0047); C8 (drift) is replaced by the sharper per-block
    view above.
 4. Counts the labels in `.sherpa/telemetry/outcomes.ndjson` per `harness_rev`.
 5. Notes when the deployed checker copy is older than the installed sherpa.
@@ -96,7 +97,7 @@ answer. Trend, regression between two harness versions and the share of `unknown
 | Exit | When |
 |---|---|
 | 0 | no checker FAIL — drift, warnings and orphans are informational |
-| 1 | at least one checker FAIL (C1–C6), or plan/model missing (`… not found — run `sherpa plan` first`) |
+| 1 | at least one checker FAIL (C1–C6, in a file sherpa generated), or plan/model missing (`… not found — run `sherpa plan` first`) |
 
 A torn or foreign `.sherpa/state.json` does not stop the report: the `state:` line names it with the way out
 (also on stderr, and as `"state": {"error": …}` in JSON), drift is `unknown` and the checker still runs (ADR-0034).

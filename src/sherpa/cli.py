@@ -63,6 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     ck = sub.add_parser("check", help="structural rules for .claude/** (exit 1 on FAIL)")
     ck.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
     ck.add_argument("--json", action="store_true", help="findings as JSON")
+    ck.add_argument("--strict", action="store_true", help="C1–C5 FAIL in every file, not only in sherpa's (ADR-0047)")
 
     ad = sub.add_parser(
         "adopt", help="take an existing harness into the state without changing a byte; rebuilds a lost state"
@@ -139,8 +140,10 @@ def cmd_plan(args: argparse.Namespace) -> int:
     out = None if args.out == "-" else (Path(args.out) if args.out else repo / PLAN_OUT)
     previous = yamlio.load(out) if out and out.exists() else None
     plan, kept = yamlio.merge_decisions(plan, previous)
+    plan, _, dropped_covers = yamlio.merge_covers(plan, previous, repo)
+    plan.notes.extend(dropped_covers)
     plan, decided = yamlio.decide(plan, args.accept, args.reject)
-    plan, covered = yamlio.mark_covered(plan, _load_state_or_empty(repo, "plan")[0])
+    plan, covered = yamlio.mark_covered(plan, _load_state_or_empty(repo, "plan")[0], repo)
 
     if out is None:
         sys.stdout.write(yamlio.dumps(plan))
@@ -148,7 +151,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
         return EXIT_OK
     yamlio.write(plan, out)
     sys.stdout.write(render_console(plan, out.name))
-    counts = (("decisions kept", kept), ("decided now", decided), ("covered by adopted files", covered))
+    counts = (("decisions kept", kept), ("decided now", decided), ("covered by existing files", covered))
     tails = [f"{n} {t}" for t, n in counts if n]
     print(f"→ {out}" + (f" ({', '.join(tails)})" if tails else ""), file=sys.stdout)
     return EXIT_OK
@@ -198,8 +201,9 @@ ASSUMED_HOME = (
 def _resolve_layout(repo: Path, state, *, ask: bool, preview: bool = False) -> tuple[str, tuple[str, ...], list[str]]:
     """Home and targets (ADR-0015): sherpa.toml beats the state beats detection. Both ``.agents`` and ``.claude``
     present and nothing decided yet → ask on a terminal, refuse otherwise — except a ``preview`` (dry run,
-    ``status``), which assumes ``.agents`` and says so instead of stopping (ADR-0036). The notes also name a
-    target directory that is a repository of its own (ADR-0037)."""
+    ``status``), which assumes ``.agents`` and says so instead of stopping (ADR-0036). A target directory that is
+    a repository of its own is refused — sherpa works with one repository (ADR-0045); a preview names it and
+    goes on."""
     from sherpa import config
     from sherpa.apply.render import check_script
 
@@ -235,18 +239,28 @@ def _resolve_layout(repo: Path, state, *, ask: bool, preview: bool = False) -> t
         detected = tuple(t for t, on in (("claude", has_claude), ("agents-md", has_agents)) if on)
         targets = detected or config.TARGETS
     targets = tuple(targets)
-    notes += _nested_repositories(repo, home, targets)
+    nested = _nested_repositories(repo)
+    if nested and not preview:
+        raise ValueError(nested[0])
+    notes += [f"note: {n} — this preview goes on; `apply` and `adopt` refuse." for n in nested]
     return home, targets, notes
 
 
-def _nested_repositories(repo: Path, home: str, targets: tuple[str, ...]) -> list[str]:
-    """A directory sherpa writes into that is a repository of its own — a ``.git`` directory or worktree file under
-    it — gets a note: what lands there is not tracked by this repository (ADR-0037). Named once per directory."""
-    dirs = [home] + ([".claude"] if "claude" in targets and home != ".claude" else [])
+def _nested_repositories(repo: Path) -> list[str]:
+    """Sherpa works with one repository (ADR-0045): a directory in the tree that is a repository of its own — a
+    submodule, a clone, a harness checked out under ``.claude/`` — is where ``apply`` would write files another
+    repository tracks and ``adopt`` would read files that are not this repository's harness. One line, the
+    refusal's text, naming up to five of them."""
+    from sherpa import gitinfo
+
+    nested = gitinfo.nested_repositories(repo)
+    if not nested:
+        return []
+    shown = ", ".join(f"{d}/" for d in nested[:5]) + (f" and {len(nested) - 5} more" if len(nested) > 5 else "")
+    what = "is a repository of its own" if len(nested) == 1 else "are repositories of their own"
     return [
-        f"note: {d}/ is a repository of its own ({d}/.git) — files written there are not tracked by this repository."
-        for d in dirs
-        if (repo / d / ".git").exists()
+        f"{shown} {what} ({nested[0]}/.git) — sherpa works with one repository: move the clone out of the tree, "
+        "or run sherpa in that repository"
     ]
 
 
@@ -348,7 +362,7 @@ def cmd_adopt(args: argparse.Namespace) -> int:
         print("nothing to adopt — no harness files here; `sherpa apply` creates one.", file=sys.stdout)
         return EXIT_OK
     new_state.write(repo / state_mod.STATE_PATH)
-    plan, covered = yamlio.mark_covered(plan, new_state)
+    plan, covered = yamlio.mark_covered(plan, new_state, repo)
     yamlio.write(plan, repo / PLAN_OUT)
     print(
         f"state: {a.counts()} · harness_rev {new_state.harness_rev} → {state_mod.STATE_PATH.as_posix()} · "
@@ -361,7 +375,7 @@ def cmd_adopt(args: argparse.Namespace) -> int:
 def cmd_check(args: argparse.Namespace) -> int:
     from sherpa import check
 
-    return check.main([args.repo] + (["--json"] if args.json else []))
+    return check.main([args.repo] + (["--json"] if args.json else []) + (["--strict"] if args.strict else []))
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:

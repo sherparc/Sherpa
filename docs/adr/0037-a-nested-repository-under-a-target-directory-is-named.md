@@ -1,6 +1,6 @@
 # ADR-0037 — A target directory that is a repository of its own is named in the preview and the write, never refused
 
-**Status:** accepted · **Date:** 2026-09-17 · **Deciders:** Andrei
+**Status:** superseded by ADR-0045 (a nested repository is refused, not named) · **Date:** 2026-09-17 · **Deciders:** Andrei
 
 ## Context
 

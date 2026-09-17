@@ -19,7 +19,12 @@ Rules (FAIL = exit 1, WARN informational):
                          a nested CLAUDE.md/AGENTS.md > 8 KiB, the root one > 32 KiB — runtimes inject them whole
   C8 drift (WARN)        with .sherpa/state.json: managed files/blocks whose hash differs, or that are missing
 
-Usage: ``python3 sherpa-check.py [repo] [--json]``; from sherpa: ``sherpa check [repo]``.
+Scope (ADR-0047): with a state, C1 to C5 FAIL only in files sherpa generated (``origin: generated`` in the
+state); in every other file under the homes — adopted or unrecorded, yours either way — they are WARN
+``(yours)``, so the exit code says whether *sherpa's* harness is consistent, not whether a note somebody
+vendored has a dead link. ``--strict`` makes them FAIL everywhere; without a state everything is strict.
+
+Usage: ``python3 sherpa-check.py [repo] [--json] [--strict]``; from sherpa: ``sherpa check [repo] [--strict]``.
 """
 
 from __future__ import annotations
@@ -193,48 +198,83 @@ def _kind_of(rel: str) -> str | None:
     return None
 
 
-def check(root: Path) -> list[Finding]:
+def _managed_paths(root: Path) -> set[str] | None:
+    """The files sherpa generated (``origin: generated`` in the state); None without a readable state — then
+    nothing is managed yet and every rule is strict. Adopted files are yours (ADR-0007): their findings are hints."""
+    state_path = root / ".sherpa" / "state.json"
+    if not state_path.is_file():
+        return None
+    try:
+        files = json.loads(read_text(state_path)).get("files")
+    except ValueError:
+        return None
+    if not isinstance(files, dict):
+        return None
+    return {p for p, rec in files.items() if isinstance(rec, dict) and rec.get("origin") == "generated"}
+
+
+def check(root: Path, *, strict: bool = False, managed_too: frozenset[str] | set[str] = frozenset()) -> list[Finding]:
+    """``managed_too``: paths treated as sherpa's although the state does not record them yet — ``apply`` checks
+    what it writes before it writes the state; on a first ``apply`` they are the only managed files."""
     root = root.resolve()
-    findings: list[Finding] = []
+    managed = None if strict else _managed_paths(root)
+    if managed_too and not strict:
+        managed = (managed or set()) | set(managed_too)
     claude = root / ".claude"
+    findings: list[Finding] = []
     for p in _md_files(root):
         rel = _rel(root, p)
         text = read_text(p)
-        kind = _kind_of(rel)
-        fm = front_matter(text)
-        if kind in ("agent", "skill"):
-            rule = "C1" if kind == "agent" else "C2"
-            if fm is None:
-                findings.append(Finding(FAIL, rule, rel, "no front matter (name, description required)"))
-            else:
-                for key in ("name", "description"):
-                    if not fm.get(key):
-                        findings.append(Finding(FAIL, rule, rel, f"front matter has no {key}"))
-        if kind == "agent" and isinstance(fm, dict) and isinstance(fm.get("knowledge"), dict):
-            for lst in fm["knowledge"].values():  # type: ignore[union-attr]
-                for item in lst if isinstance(lst, list) else []:
-                    if not (claude / item).exists():
-                        findings.append(Finding(FAIL, "C3", rel, f"knowledge path {item} does not exist"))
-        for m in _LINK.finditer(text) if "/archive/" not in rel else ():  # history may tell the old state
-            href = m.group(1).split("#", 1)[0]
-            if not href or "://" in href or href.startswith(("mailto:", "/")) or "." not in href.rsplit("/", 1)[-1]:
-                continue  # only file links; a target without an extension is a wiki page or an anchor, not a file
-            if not (p.parent / href).exists():
-                findings.append(Finding(FAIL, "C4", rel, f"link target {href} does not exist"))
-        try:
-            parse_blocks(text)
-        except ValueError as e:
-            findings.append(Finding(FAIL, "C5", rel, f"managed block markers: {e}"))
-        if kind and (n := text.count("\n") + 1) > BUDGETS[kind]:
-            findings.append(Finding(WARN, "C7", rel, f"{n} lines > budget {BUDGETS[kind]} ({kind})"))
-        if p.name in ("CLAUDE.md", "AGENTS.md"):
-            where = "root" if "/" not in rel else "nested"
-            if (size := len(text.encode("utf-8"))) > PROXIMITY_BUDGETS[where]:
-                msg = f"{size} bytes > budget {PROXIMITY_BUDGETS[where] // 1024} KiB ({where} proximity file)"
-                findings.append(Finding(WARN, "C7", rel, msg))
+        own = _check_file(rel, p, text, claude)
+        findings.extend(_scope(own, managed is None or rel in managed))
     findings.extend(_check_hooks(root))
     findings.extend(_check_drift(root))
     findings.sort(key=lambda f: (f.level != FAIL, f.rule, f.path, f.message))
+    return findings
+
+
+def _scope(found: list[Finding], managed: bool) -> list[Finding]:
+    """C1 to C5 in a file sherpa did not generate are WARN ``(yours)`` (ADR-0047)."""
+    if managed:
+        return found
+    return [Finding(WARN, f.rule, f.path, f.message + " (yours)") if f.level == FAIL else f for f in found]
+
+
+def _check_file(rel: str, p: Path, text: str, claude: Path) -> list[Finding]:
+    """C1 to C5 and C7 for one file."""
+    findings: list[Finding] = []
+    kind = _kind_of(rel)
+    fm = front_matter(text)
+    if kind in ("agent", "skill"):
+        rule = "C1" if kind == "agent" else "C2"
+        if fm is None:
+            findings.append(Finding(FAIL, rule, rel, "no front matter (name, description required)"))
+        else:
+            for key in ("name", "description"):
+                if not fm.get(key):
+                    findings.append(Finding(FAIL, rule, rel, f"front matter has no {key}"))
+    if kind == "agent" and isinstance(fm, dict) and isinstance(fm.get("knowledge"), dict):
+        for lst in fm["knowledge"].values():  # type: ignore[union-attr]
+            for item in lst if isinstance(lst, list) else []:
+                if not (claude / item).exists():
+                    findings.append(Finding(FAIL, "C3", rel, f"knowledge path {item} does not exist"))
+    for m in _LINK.finditer(text) if "/archive/" not in rel else ():  # history may tell the old state
+        href = m.group(1).split("#", 1)[0]
+        if not href or "://" in href or href.startswith(("mailto:", "/")) or "." not in href.rsplit("/", 1)[-1]:
+            continue  # only file links; a target without an extension is a wiki page or an anchor, not a file
+        if not (p.parent / href).exists():
+            findings.append(Finding(FAIL, "C4", rel, f"link target {href} does not exist"))
+    try:
+        parse_blocks(text)
+    except ValueError as e:
+        findings.append(Finding(FAIL, "C5", rel, f"managed block markers: {e}"))
+    if kind and (n := text.count("\n") + 1) > BUDGETS[kind]:
+        findings.append(Finding(WARN, "C7", rel, f"{n} lines > budget {BUDGETS[kind]} ({kind})"))
+    if p.name in ("CLAUDE.md", "AGENTS.md"):
+        where = "root" if "/" not in rel else "nested"
+        if (size := len(text.encode("utf-8"))) > PROXIMITY_BUDGETS[where]:
+            msg = f"{size} bytes > budget {PROXIMITY_BUDGETS[where] // 1024} KiB ({where} proximity file)"
+            findings.append(Finding(WARN, "C7", rel, msg))
     return findings
 
 
@@ -299,10 +339,10 @@ def render(findings: list[Finding], root: Path) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = [a for a in (argv if argv is not None else sys.argv[1:])]
-    as_json = "--json" in args
-    args = [a for a in args if a != "--json"]
+    as_json, strict = "--json" in args, "--strict" in args
+    args = [a for a in args if a not in ("--json", "--strict")]
     root = Path(args[0]) if args else Path(os.environ.get("CLAUDE_PROJECT_DIR") or ".")
-    findings = check(root)
+    findings = check(root, strict=strict)
     if as_json:
         sys.stdout.write(json.dumps([f.__dict__ for f in findings], indent=2) + "\n")
     else:

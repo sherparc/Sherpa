@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
-  "sherpa": "0.7.5",
-  "harness_rev": "1c3ef1f12f6f",
+  "sherpa": "0.7.6",
+  "harness_rev": "16ee3072dfd8",
   "home": ".claude",
   "targets": [
     "claude"
   ],
   "plan": {
     "trunk": "origin/main",
-    "rev": "493aefcdf447c96e2e05670fd7e6bb72b5834a11",
-    "as_of": "2026-09-17T14:43:44Z"
+    "rev": "0bf6651210d372b3ac9e29ad37e8b66b0d003a13",
+    "as_of": "2026-09-17T15:10:33Z"
   },
-  "applied_at": "2026-09-17T15:07:56Z",
+  "applied_at": "2026-09-17T16:59:09Z",
   "files": {
     ".claude/agents/architect.md": {
       "mode": "managed",
@@ -33,7 +33,7 @@
       "origin": "generated",
       "entry": "owner-doc:sherpa-harness:",
       "blocks": {
-        "facts": "4cd00e3303b23212"
+        "facts": "e11d74b7c6c8ac7b"
       }
     },
     ".claude/docs/modules/src-sherpa-apply.md": {
@@ -41,18 +41,18 @@
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
       "blocks": {
-        "facts": "0ac7fb9643f26f97"
+        "facts": "e3ef06c7586f38e1"
       }
     },
     ".claude/hooks/sherpa-outcome.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "3e688ffc09b6f4a7"
+      "hash": "37c0f8effd4ab0be"
     },
     ".claude/scripts/sherpa-check.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "a8e8e8fdfc2c634c"
+      "hash": "e0434817960d6d15"
     },
     ".claude/settings.json": {
       "mode": "json-hooks",
@@ -68,6 +68,14 @@
       "mode": "managed",
       "origin": "adopted",
       "hash": "beef64217dd2affe"
+    },
+    ".claude/skills/sherpa-harness-sync/SKILL.md": {
+      "mode": "blocks",
+      "origin": "generated",
+      "entry": "librarian:sherpa-harness:",
+      "blocks": {
+        "scope": "cf0ba38450baf7c1"
+      }
     },
     ".claude/skills/sync-kb/SKILL.md": {
       "mode": "managed",
@@ -91,7 +99,7 @@
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
       "blocks": {
-        "harness": "170116ed15ca6d50"
+        "harness": "6bb5459618d67581"
       }
     }
   }

@@ -313,8 +313,9 @@ def write(
     from sherpa.check import FAIL
     from sherpa.check import check as run_check
 
-    before = {f for f in run_check(repo) if f.level == FAIL} if check else set()
     actions = [_reconcile(a, repo) for a in actions]
+    ours = {a.path for a in actions if a.new is not None}  # scoped like the check after the write (ADR-0047)
+    before = {f for f in run_check(repo, managed_too=ours) if f.level == FAIL} if check else set()
     written: list[Action] = []
     result = Result(actions, previous)
     try:
@@ -329,7 +330,7 @@ def write(
         return result
     result.written = len(written)
     if check:
-        result.findings = run_check(repo)
+        result.findings = run_check(repo, managed_too=ours)
         new_fails = {f for f in result.findings if f.level == FAIL} - before
         if new_fails:
             result.rolled_back, result.left = True, _roll_back(written, repo)

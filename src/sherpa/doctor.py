@@ -1,7 +1,8 @@
 """``sherpa doctor`` — every prerequisite as one line with a fix; the first command a new user runs.
 
 Levels: ``ok`` (✓), ``warn`` (!) for things sherpa works without but the user should know, ``fail`` (✗) for what
-blocks ``scan``. Exit 1 only on a fail. Checks are pure functions over the environment so tests can run them one
+blocks a command — ``scan`` (python, git, repository, origin, trunk) or ``apply`` and ``adopt`` (a nested
+repository, ADR-0045). Exit 1 only on a fail. Checks are pure functions over the environment so tests can run them one
 by one; the update check is the only network access and honours ``SHERPA_NO_UPDATE_CHECK``.
 """
 
@@ -117,6 +118,47 @@ def check_runtime(repo: Path) -> Check:
     return Check("runtime", "ok", ", ".join(found))
 
 
+def check_layout(repo: Path) -> Check:
+    """Where the core will live: ``sherpa.toml``, then the state, then the directories. Both homes and nothing
+    decided is the one case ``apply --yes`` and ``adopt`` refuse (ADR-0036) — named here before it bites."""
+    from sherpa.apply import state as state_mod
+
+    cfg = config.load(repo).apply
+    if cfg.home:
+        return Check("layout", "ok", f"home {cfg.home} (sherpa.toml)")
+    try:
+        state_home = state_mod.load(repo / state_mod.STATE_PATH).home if (repo / state_mod.STATE_PATH).is_file() else ""
+    except ValueError:
+        state_home = ""
+    if state_home:
+        return Check("layout", "ok", f"home {state_home} (state)")
+    both = (repo / ".agents").is_dir() and (repo / ".claude").is_dir()
+    if both:
+        return Check(
+            "layout",
+            "warn",
+            "both .agents/ and .claude/ exist and nothing decides where the core lives",
+            '`[apply] home = ".agents"` or `".claude"` in sherpa.toml — `apply` asks on a terminal, refuses with --yes',
+        )
+    home = ".claude" if (repo / ".claude").is_dir() else ".agents"
+    return Check("layout", "ok", f"home {home} ({'found' if (repo / home).is_dir() else 'default'})")
+
+
+def check_nested(repo: Path) -> Check:
+    """Sherpa works with one repository (ADR-0045): a nested one anywhere in the tree stops ``apply`` and ``adopt``."""
+    nested = gitinfo.nested_repositories(repo)
+    if not nested:
+        return Check("repositories", "ok", "one — no nested repository in the tree")
+    shown = ", ".join(f"{d}/" for d in nested[:5]) + (f" and {len(nested) - 5} more" if len(nested) > 5 else "")
+    what = "is a repository of its own" if len(nested) == 1 else "are repositories of their own"
+    return Check(
+        "repositories",
+        "fail",
+        f"{shown} {what} ({nested[0]}/.git) — `apply` and `adopt` refuse, sherpa works with one repository",
+        "move the clone out of the tree, or run sherpa in that repository",
+    )
+
+
 def check_installer() -> Check:
     kind = update.installer()
     if kind == "editable":
@@ -154,6 +196,8 @@ def run(repo: Path, *, network: bool = True) -> list[Check]:
         checks.append(cfg)
         checks.append(check_trunk(repo, trunk))
         checks.append(check_runtime(repo))
+        checks.append(check_layout(repo))
+        checks.append(check_nested(repo))
     if network:
         checks.append(check_update())
     return checks

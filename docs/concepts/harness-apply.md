@@ -138,9 +138,13 @@ one operation that builds that index from the files instead of from a write: eve
 every `CLAUDE.md`/`AGENTS.md` is classified by path, compared with the plan's rendering where there is one, and
 recorded as sherpa's (`generated`) only where the bytes prove it — a whole file that equals its rendering, a
 block that equals its rendering, a base file sherpa names itself. Everything else is `adopted`: yours, never
-touched by `apply`, never drift in `status`, no C8. Adopted agents and docs are linked to units (name, then path
-mentions) and **cover** the plan entries they fill; `selected()` leaves a covered entry out unless a human
-accepts it. The rules, the console marks and the gaps are in [commands/adopt.md](../commands/adopt.md).
+touched by `apply`, never drift in `status`, no C8. Adopted agents and owner docs are linked to units (the
+entry's own `covered:`, then name, then path mentions — one file per entry, ties cover nothing) and **cover**
+the plan entries they fill; `selected()` leaves a covered entry out unless a human accepts it. The link is the
+team's decision: `covered:` written by hand is kept like one (ADR-0046). Sherpa works with one repository: a
+nested repository anywhere in the tree stops `apply` and `adopt`, the dry runs name it (ADR-0045). The rules, the
+console marks and the gaps are in
+[commands/adopt.md](../commands/adopt.md).
 
 Index files (`state.json`, `harness-plan.yaml`) are written atomically (temp file + `os.replace`). A torn or
 foreign state stops only `apply`; `plan`, `status` and `adopt` name the way out on stderr and run on an empty

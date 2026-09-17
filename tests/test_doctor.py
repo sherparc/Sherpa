@@ -107,6 +107,31 @@ def test_runtime_detection(tmp_path: Path, monkeypatch):
     assert "claude (Claude Code CLI)" in c.detail and "codex on PATH" in c.detail
 
 
+def test_layout_names_the_undecided_home(tmp_path: Path):
+    """ADR-0036 in the doctor: both homes and nothing decided is the case `apply --yes` refuses."""
+    assert doctor.check_layout(tmp_path).detail == "home .agents (default)"
+    (tmp_path / ".claude").mkdir()
+    assert doctor.check_layout(tmp_path).detail == "home .claude (found)"
+    (tmp_path / ".agents").mkdir()
+    c = doctor.check_layout(tmp_path)
+    assert c.level == "warn" and "nothing decides" in c.detail and "[apply] home" in c.fix
+    (tmp_path / "sherpa.toml").write_text('[apply]\nhome = ".claude"\n', encoding="utf-8")
+    assert doctor.check_layout(tmp_path) == doctor.Check("layout", "ok", "home .claude (sherpa.toml)")
+
+
+def test_nested_repositories_are_a_fail_with_the_way_out(tmp_path: Path):
+    """ADR-0045 in the doctor: what `apply` and `adopt` refuse is named before the user runs them."""
+    assert doctor.check_nested(tmp_path).level == "ok"
+    (tmp_path / ".claude" / ".git").mkdir(parents=True)
+    (tmp_path / "libs" / "x" / ".git").mkdir(parents=True)
+    c = doctor.check_nested(tmp_path)
+    assert c.level == "fail"
+    assert c.detail.startswith(
+        ".claude/, libs/x/ are repositories of their own (.claude/.git) — `apply` and `adopt` refuse"
+    )
+    assert c.fix == "move the clone out of the tree, or run sherpa in that repository"
+
+
 def test_installer_check(monkeypatch):
     assert doctor.check_installer().detail.endswith("`git pull` updates it")
     monkeypatch.setattr(update, "installer", lambda: "uv")
