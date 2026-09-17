@@ -29,7 +29,7 @@ import sys
 import time
 from pathlib import Path
 
-SHERPA_VERSION = "0.4.0"  # replaced on deploy
+SHERPA_VERSION = "0.5.0"  # replaced on deploy
 
 TEST_RE = re.compile(
     r"\b(pytest|python -m pytest|dotnet test|npm test|npm run test|pnpm test|yarn test|go test|cargo test|"

@@ -1,6 +1,6 @@
 # Sherpa
 
-Generic harness generator. CLI `sherpa` (`scan | plan | apply | adopt | status | check`), Python 3.12, stdlib-first.
+Generic harness generator. CLI `sherpa` (`scan | plan | apply | adopt | status | check | doctor | self-update`), Python 3.12, stdlib-first.
 Plan and architecture: `docs/plan.md`. Documentation: `docs/index.md` (landing), `docs/commands/` (reference per
 command), `docs/concepts/` (rules and formats), `docs/reference/` (configuration, files, exit codes). Decisions:
 `docs/adr/` (index in `docs/adr/README.md`). Field semantics: `src/sherpa/schemas/`. The repo carries its own
@@ -39,6 +39,9 @@ files `sherpa apply .` generates (owner doc, hook, checker, the block at the end
   enabled via `git config core.hooksPath .githooks`). Remote is `github.com/sherparc/Sherpa`.
 - Namespaces (ADR-0009): product and CLI are `sherpa`, the Python package `sherpa-harness`, the GitHub org `sherparc`.
 - Commit messages: one to three full sentences, never a `Co-Authored-By` trailer.
+- Releases (ADR-0018): bump `pyproject.toml` and `src/sherpa/__init__.py` together on the branch, merge, then
+  `git tag v<version> && git push origin v<version>` — `release.yml` builds the wheel and creates the GitHub
+  release; it refuses a tag that does not match both versions. Only `src/sherpa/` ships.
 - README is marketing and truth at once: it moves with every step (status, roadmap, numbers) and never claims what
   does not run — examples are real outputs, badges only for things that exist.
 

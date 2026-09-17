@@ -1,7 +1,7 @@
 # Sherpa — Plan
 
-> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 7: retro after M3c — §7, four measured gaps, one slice of low-hanging fruit, a proposed reorder of M3b–M6) · **Author:** Claude (Opus 5) with Andrei
-> **Status:** v0.4.0 — M0, M1, M1a, M2, M3a, M3t, M3c done; order from here: M2b → M3d → M5 → M6-lite → M4 → M6 → M3b → M7 (§7.3)
+> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 8: M2b done — GitHub Releases, `doctor`, `self-update`, the daily hint; §2.7 what ships; Q5, Q10, Q11 decided) · **Author:** Claude (Opus 5) with Andrei
+> **Status:** v0.5.0 — M0, M1, M1a, M2, M2b, M3a, M3t, M3c done; order from here: M3d → M5 → M6-lite → M4 → M6 → M3b → M7 (§7.3)
 > **Origin of the patterns:** production Claude Code harnesses built and analysed in practice (owner docs, agents with
 > knowledge manifests, librarians, deterministic checkers) plus the industry patterns in §2. Sherpa is a generic
 > product; no customer project is named anywhere in this repo.
@@ -35,15 +35,16 @@ and derived structures detach without blocking live operation. Not built before 
 | The template harness as the test case | It is the template. The proof must succeed on **foreign** repos. |
 | Language parsers as a requirement | T0+T1 (git + manifests) suffice for owners, churn, evals. Language adapters (T2) are plugins. |
 
-## 2. Architecture — six commands, three artefacts
+## 2. Architecture — eight commands, three artefacts
 
 ```
-sherpa doctor ──► ✓/✗ per prerequisite (git, origin, trunk, Python, runtime) with a fix   — first contact
+sherpa doctor ──► ✓/!/✗ per prerequisite (Python, git, origin, trunk, config, runtime, install, update) with a fix   — first contact
 sherpa scan   ──► .sherpa/codebase-model.json   deterministic, 0 LLM     (T0 git · T1 manifests · generator families · T2 adapters optional)
 sherpa adopt  ──► .sherpa/state.json            take an existing harness into the state, change nothing; rebuild a lost state (§2.6)
 sherpa plan   ──► .sherpa/harness-plan.yaml     deterministic rules, LLM enrichment optional (M6)
 sherpa apply  ──► .claude/** + .sherpa/state.json   dry run first, then deterministic, idempotent, markers
 sherpa status ──► diff state ↔ file system, eval regression, outcome labels per harness version
+sherpa self-update ──► the latest GitHub release via the installer that owns this copy (uv, pipx, pip); daily hint
 ```
 
 `.sherpa/` is Sherpa's working directory in the target repo. Configuration lives next to it in `sherpa.toml`
@@ -223,6 +224,18 @@ being changed. Built in M3c (`docs/commands/adopt.md`):
 Deliberately not done: `hand-edited: true` as a field (an adopted file is hand-edited by definition — `origin`
 says it), evals per agent (no generic eval convention yet; M4), and any content-based classification.
 
+### 2.7 What ships and what stays here (M2b ✅, ADR-0018)
+
+The product is `src/sherpa/` — and only that. `pyproject.toml` owns the list (the package, the schemas, the hook
+asset); `release.yml` builds the wheel `sherpa-harness` from it on every tag `v<version>`, installs it into a
+fresh venv, runs `sherpa --version` and `doctor`, and attaches it to the GitHub release. Everything else in the
+repository is development only: `tests/` with the goldens, `docs/` with this plan and the ADRs, the repository's
+own harness under `.claude/`, `scripts/` and the vault. A customer machine sees the wheel, `sherpa doctor` on
+first contact, and `sherpa self-update` for the next version — with a token through the Releases API, without
+one through the tag's git URL. The daily hint runs in a background thread and prints only what an earlier check
+cached: it can never slow or fail a command. Test corpus check: `doctor` on all four corpus repositories reports
+`0 problems`; the guessed-trunk hint fires exactly on the clone without `origin/HEAD`.
+
 ## 3. Milestones (vertical slices, foreign repos)
 
 | M | What | Acceptance |
@@ -231,7 +244,7 @@ says it), evals per agent (no generic eval convention yet; M4), and any content-
 | M1 ✅ | scanner T0 (every language): trunk, churn, hotspots, file tree, generated files, JSON schema | fixture repo → identical JSON on two runs; 58 tests, 98 % coverage; a 15k-file monorepo in 2.5 s |
 | M1a ✅ | scanner T1: modules from manifests (6 ecosystems), in-repo deps, `tested_by`, churn per module, conventions | polyglot fixture (`tests/test_t1_modules.py`); 105 tests, 99 %; ~50 modules of a 15k-file monorepo in 2.6 s |
 | M2 ✅ | `plan` stage 1: units, rank + floor, generator families → skills, visible no's within reach, `decision` keeping, plan schema, `[plan]` config | goldens on the polyglot and the active fixture (`tests/goldens/`); evidence = model fields only (tested); large monorepo: 2 librarians, test infra detected, migrations project → skill; 5-module fixture: 1 agent; 173 tests, 99 % |
-| M2b | distribution + onboarding: `sherpa doctor`, `release.yml` (tag → wheel → GitHub release), `sherpa self-update`, daily update hint (can be disabled), package index (private, later PyPI) | `doctor` reports every missing prerequisite with a fix; a customer installs with `uv tool install`, `self-update` fetches the next version; the hint never blocks |
+| M2b ✅ | distribution + onboarding: `sherpa doctor`, `release.yml` (tag → wheel → GitHub release), `sherpa self-update`, daily update hint (`SHERPA_NO_UPDATE_CHECK`), GitHub Releases as the index (ADR-0018) | `doctor`: nine checks with a fix each, exit 1 only on a fail; `self-update` through the owning installer (uv/pipx/pip), git-tag fallback without a token, clones refused; the hint is a background thread plus cache — zero wait; 282 tests, 98 % |
 | M3a ✅ | `apply` with dry-run default, managed blocks, state, **outcome minimum** (hook, labels, `harness_rev`), checker with rollback, `status`, `check` | second run = all `=`, state and tree hash unchanged; hand-edited blocks skipped, other blocks still regenerated; rollback on a new FAIL tested; 213 tests, 98 %; 61 files for a 15k-file monorepo plan in 0.15 s |
 | M3t ✅ | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files, `[apply]` config, ask when both homes exist | five-module fixture with both targets: 18 files, second run all `=`; existing root and nested `AGENTS.md` get the block appended; a 122-module corpus repo: 243 files in 0.2 s; 222 tests |
 | M3c ✅ | `sherpa adopt` (§2.6) — reads `.claude/`, `.agents/` and AGENTS.md hierarchies; covered entries; rebuildable state (ADR-0017) | existing-harness fixture: 6 files adopted, 0 bytes changed, 2 entries covered, gaps listed; torn state rebuilt with the same `harness_rev`; a 16-module corpus repo with 12 hand-written AGENTS.md: 0.22 s, 32 files rebuilt after a lost state; 230 tests, 98 % |
@@ -279,7 +292,9 @@ Many tests, small units, everything reproducible:
 | Corpus | real repos under `tests/corpus/` (ignored) | smoke: scan runs through, schema valid, runtime < 60 s; never in CI |
 | Schema | `codebase-model`, `harness-plan`, `harness-state` | JSON Schema under `src/sherpa/schemas/`; validation in tests always, at runtime when `jsonschema` is installed (dev extra) |
 
-Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M3c: 231 tests, 98 %.
+Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M2b: 282 tests, 98 %.
+The conftest sets `SHERPA_NO_UPDATE_CHECK` and a temporary cache directory for every test, in-process and in
+subprocesses: no test reaches the network.
 
 ## 6. Open questions (decision: Andrei)
 
@@ -290,7 +305,8 @@ Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milest
 3. Structured output: which providers enforce JSON Schema natively (vLLM: `guided_json`; Anthropic: tool use)?
    Relevant from M6.
 4. Two manifests in the same directory: today the alphabetically first wins — is that enough in the corpus?
-5. Package index for M2b: a private index (Cloudsmith/Gemfury free tier) or a static simple index behind a token?
+5. ~~Package index for M2b?~~ Decided 2026-09-17 (ADR-0018): GitHub Releases through the API with the user's
+   token, git-tag URL as the fallback; PyPI at the public release. No third service.
 6. ~~Owner-doc floor by files?~~ Decided 2026-09-17 (ADR-0014): `owner_doc_min_files = 5`, a dependent overrides
    the floor; small units are listed as no's and counted in a note so the reader sees them.
 7. ~~Order: M2b before M3?~~ Decided 2026-09-17: M3 first (the product truth "creates" needs `apply`); M2b after
@@ -300,10 +316,10 @@ Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milest
    are the next adapters once a corpus repo uses them.
 9. Interactive per-entry approval in the CLI was rejected for M3a (ADR-0013); `/sherpa-plan` in Claude Code (M7)
    is the better place. Reopen if the YAML editing turns out to be the friction point in customer tests.
-10. Stamp without the rev (§7.1 G1): blocks change only when a number changes; the date (window end) stays.
-    Alternative: keep the rev but compare blocks without the stamp line — more code, same effect.
-11. Sub-units for single-manifest repositories (§7.1 G2): depth rule as proposed, or an explicit `[plan] units =
-    ["src/sherpa/*"]` in `sherpa.toml` only? Proposal: the rule with the config as an override.
+10. ~~Stamp without the rev (§7.1 G1)?~~ Decided 2026-09-17 (ADR-0019): the stamp is `as of <date>` only; the rev
+    stays in the state and the plan header. Implemented in M3d.
+11. ~~Sub-units for single-manifest repositories (§7.1 G2)?~~ Decided 2026-09-17 (ADR-0020): the depth rule, with
+    `[plan] units = […]` in `sherpa.toml` as the override. Implemented in M3d.
 12. ~~Milestone order (§7.3)?~~ Decided 2026-09-17: M2b → M3d → M5 → M6-lite → M4 → M6 → M3b → M7. Tree-sitter
     (M3b) stays an optional extra (`sherpa[adapters]`), never a core dependency; it moves forward only if M4
     evals from the graph score < 90 % on the corpus or a customer needs skills from code patterns.
@@ -312,7 +328,8 @@ Decided (2026-09-16): plan format YAML and check-in of plan/state → ADR-0005; 
 units, visibility, decision keeping → ADR-0012. Decided (2026-09-17): state as a rebuildable index, atomic
 writes, adopt as the rebuild → ADR-0017; block ownership, single-source checker,
 Terraform-style selection → ADR-0013; owner-doc floor by files → ADR-0014; target layer → ADR-0015; never
-overwrite, only add → ADR-0016.
+overwrite, only add → ADR-0016; distribution through GitHub Releases → ADR-0018; stamp without rev → ADR-0019;
+sub-units with override → ADR-0020.
 
 ## 7. Retro after M3c (2026-09-17) — what the numbers say against the plan
 
