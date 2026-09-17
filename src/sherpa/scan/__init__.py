@@ -53,7 +53,8 @@ def scan(
     git_layer = build_git_layer(
         repo, data, top=hotspots or cfg.scan.hotspots, generated=cfg.scan.generated, outputs=outputs
     )
-    coupling, coupling_stats = compute_coupling(data, owner, [m.id for m in raw])
+    catch_all = next((m.id for m in raw if m.path == ""), None) if len(raw) > 1 else None
+    coupling, coupling_stats = compute_coupling(data, owner, [m.id for m in raw], exclude=catch_all)
     modules = build_modules_from(data, git_layer.files, raw, owner, outputs=outputs, coupling=coupling)
     languages, ci, containers = detect_conventions(paths, data.locs)
     return Model(

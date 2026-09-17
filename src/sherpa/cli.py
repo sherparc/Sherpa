@@ -58,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     st = sub.add_parser("status", help="drift between state and files, checker findings, outcome labels")
     st.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
+    st.add_argument("--json", action="store_true", help="the report as JSON (drift, findings, outcomes, plan)")
 
     ck = sub.add_parser("check", help="structural rules for .claude/** (exit 1 on FAIL)")
     ck.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
@@ -72,6 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     dr = sub.add_parser("doctor", help="every prerequisite (git, origin, trunk, runtime, install, update) with a fix")
     dr.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
     dr.add_argument("--offline", action="store_true", help="skip the release check (no network)")
+    dr.add_argument("--json", action="store_true", help="the checks as JSON")
 
     su = sub.add_parser("self-update", help="install the latest GitHub release with the installer that owns this copy")
     su.add_argument("--check", action="store_true", help="only report whether a newer release exists")
@@ -244,12 +246,20 @@ def cmd_apply(args: argparse.Namespace) -> int:
     return EXIT_ERROR if result.rolled_back else EXIT_OK
 
 
-def _refuse_stale(repo: Path, plan) -> None:
-    """Like a saved Terraform plan: the trunk moved since the plan was made → plan again (no fetch here)."""
+def _stale(repo: Path, plan) -> tuple[str, str, str] | None:
+    """``(trunk, plan rev, current rev)`` when the trunk moved since the plan was made, else None (no fetch here)."""
     from sherpa import gitinfo
 
     trunk, rev = plan.model.get("trunk", ""), plan.model.get("rev", "")
     if trunk and gitinfo.ref_exists(repo, trunk) and (now := gitinfo.rev(repo, trunk)) != rev:
+        return trunk, rev, now
+    return None
+
+
+def _refuse_stale(repo: Path, plan) -> None:
+    """Like a saved Terraform plan: the trunk moved since the plan was made → plan again."""
+    if s := _stale(repo, plan):
+        trunk, rev, now = s
         raise ValueError(
             f"harness-plan.yaml is from {trunk}@{rev[:10]}, {trunk} is now at {now[:10]} — run `sherpa plan` first"
         )
@@ -265,8 +275,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     plan, model = _load_plan_and_model(repo)
     home, targets = _resolve_layout(repo, state, ask=False)
     actions = apply.plan_files(apply.targets_for(plan, model, home=home, targets=targets), repo, state)
-    report = status_mod.report(repo, state, actions)
-    sys.stdout.write(status_mod.render(report))
+    report = status_mod.report(repo, state, actions, stale=_stale(repo, plan))
+    sys.stdout.write(status_mod.render_json(report) if args.json else status_mod.render(report))
     return EXIT_ERROR if report.fails else EXIT_OK
 
 
@@ -318,7 +328,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     from sherpa import doctor
 
     checks = doctor.run(Path(args.repo).resolve(), network=not args.offline)
-    sys.stdout.write(doctor.render(checks))
+    sys.stdout.write(doctor.render_json(checks) if args.json else doctor.render(checks))
     return EXIT_ERROR if any(c.level == "fail" for c in checks) else EXIT_OK
 
 

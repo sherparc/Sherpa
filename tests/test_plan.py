@@ -490,10 +490,21 @@ def test_sub_units_config_override_and_off_switch():
     assert "units" not in p.thresholds
 
 
-def test_sub_units_only_for_a_single_root_module():
+def test_sub_units_for_a_root_module_only_when_alone_or_dominant():
+    """ADR-0020: a lone root module gets sub-units; ADR-0027: so does a root module holding ≥ root_share of the
+    files next to other modules — a root package with a web/ and a tests/ manifest is the common service shape."""
     subs = [sub("src/a", 2), sub("src/b", 2)]
-    two = model([mod("app", "", sub_dirs=subs), mod("lib", "packages/lib")])
-    assert {e.target for e in build_plan(two).entries if e.kind == "owner-doc"} == {"app", "lib"}
+    small_root = model([mod("app", "", files=10, sub_dirs=subs), mod("lib", "packages/lib", files=30)])
+    p = build_plan(small_root)
+    assert {e.target for e in p.entries if e.kind == "owner-doc"} == {"app", "lib"}
+    assert not any("sub-units" in n for n in p.notes)
+    big_root = model([mod("app", "", files=30, sub_dirs=subs), mod("lib", "packages/lib", files=10)])
+    p = build_plan(big_root)
+    assert {e.target for e in p.entries if e.kind == "owner-doc"} == {"app", "lib", "src/a", "src/b"}
+    assert p.notes[0].startswith("2 sub-units of app (75% of the files, root_share 0.5) by the depth rule (depth 2)")
+    p = build_plan(big_root, PlanConfig(root_share=0.8))  # the threshold is configurable
+    assert {e.target for e in p.entries if e.kind == "owner-doc"} == {"app", "lib"}
+    assert p.thresholds["root_share"] == 0.8
 
 
 def test_plan_config_units_key(tmp_path: Path):

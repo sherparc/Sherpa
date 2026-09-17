@@ -301,10 +301,11 @@ def find_modules(paths: list[str], contents: dict[str, bytes | None]) -> list[Ra
         m = PARSERS[kind](p, contents[p] or b"")
         if m is not None:
             mods.append(m)
-    # One directory, several manifests (pyproject + package.json): the first by path wins.
+    # One directory, several manifests (pyproject + package.json): the kind with the most source files under the
+    # directory wins (ADR-0025, linguist's language share measured in files); a tie falls back to the manifest name.
     seen: set[str] = set()
     out = []
-    for m in sorted(mods, key=lambda m: (m.path, m.manifest)):
+    for m in sorted(mods, key=lambda m: (m.path, -kind_share(m, paths), m.manifest)):
         if m.path in seen:
             continue
         seen.add(m.path)
@@ -312,6 +313,13 @@ def find_modules(paths: list[str], contents: dict[str, bytes | None]) -> list[Ra
             m = replace(m, is_test=True)  # a module under tests/ is a test module, in every language
         out.append(m)
     return out
+
+
+def kind_share(m: RawModule, paths: list[str]) -> int:
+    """How many files under the module's directory carry an extension of the manifest's kind (``KIND_EXTS``)."""
+    base = m.path + "/" if m.path else ""
+    exts = KIND_EXTS.get(m.kind, ())
+    return sum(1 for p in paths if p.startswith(base) and p.lower().endswith(exts)) if exts else 0
 
 
 # --------------------------------------------------------------------------- resolution + aggregation
@@ -404,15 +412,17 @@ def coupling_cap(n_modules: int) -> int:
 
 
 def compute_coupling(
-    data: T0Data, owner: dict[str, str | None], module_ids: list[str]
+    data: T0Data, owner: dict[str, str | None], module_ids: list[str], *, exclude: str | None = None
 ) -> tuple[dict[str, list[Coupling]], CouplingStats]:
-    """Temporal coupling per module (Tornhill): partners that changed in the same commits, above the floors."""
+    """Temporal coupling per module (Tornhill): partners that changed in the same commits, above the floors.
+    ``exclude`` names the root module when others exist (ADR-0026): it owns everything no other manifest claims
+    (docs, tests, scripts), so a row "changes together with <root>" would only say "touches the rest"."""
     cap = coupling_cap(len(module_ids))
     per_module: dict[str, int] = defaultdict(int)
     pairs: dict[tuple[str, str], int] = defaultdict(int)
     skipped = measured = 0
     for c in data.commits:
-        touched = sorted({owner[f] for f in c.files if owner.get(f)})
+        touched = sorted({m for f in c.files if (m := owner.get(f)) and m != exclude})
         if not touched:
             continue
         if len(touched) > cap:
@@ -431,7 +441,7 @@ def compute_coupling(
             if n >= COUPLING_MIN_SHARED and share >= COUPLING_MIN_SHARE:
                 partners[me].append(Coupling(other, n, round(share, 2)))
     out = {m: sorted(partners[m], key=lambda c: (-c.shared, c.module))[:COUPLING_TOP] for m in module_ids}
-    return out, CouplingStats(cap, skipped, measured, COUPLING_MIN_SHARED, COUPLING_MIN_SHARE)
+    return out, CouplingStats(cap, skipped, measured, COUPLING_MIN_SHARED, COUPLING_MIN_SHARE, exclude)
 
 
 def sub_dirs_of(module: RawModule, paths: list[str], fstat: dict[str, FileStat], data: T0Data) -> list[SubDir]:

@@ -178,7 +178,7 @@ the counts per `harness_rev`.
 | C4 | FAIL | relative file links in `.claude/**`, `.agents/**` and every `CLAUDE.md`/`AGENTS.md` resolve (links without an extension are wiki pages, `archive/` is history — both skipped) |
 | C5 | FAIL | `sherpa:begin/end` markers are balanced, named and unique per file |
 | C6 | FAIL | `.claude/settings.json` is valid JSON; every hook command under `$CLAUDE_PROJECT_DIR` points to an existing file |
-| C7 | WARN | agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate |
+| C7 | WARN | agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate; a nested `CLAUDE.md`/`AGENTS.md` > 8 KiB and a root one > 32 KiB — a proximity file lands whole in the context (Hermes: a tool result on the first touch of the directory, ceiling 32 KiB; ADR-0029) |
 | C8 | WARN | with a state: managed files or blocks whose hash differs, or that are missing |
 
 `src/sherpa/check.py` is one stdlib-only file. `apply` deploys it as `<home>/scripts/sherpa-check.py` with the

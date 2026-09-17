@@ -22,6 +22,7 @@ dir_min_files = 10            # a directory without a module counts as a unit fr
 generated_share = 0.5         # from this share of generator output: no agent/librarian, a skill instead
 skill_min_generated_files = 5 # skill proposal from this many generated files
 owner_doc_min_files = 5       # owner doc from this many files — a dependent overrides the floor
+root_share = 0.5              # a root module holding this share of the files gets sub-units next to other modules
 units = ["src/app/*"]         # single-manifest repos: sub-units by glob instead of the depth rule; [] = none
 
 [apply]
@@ -57,7 +58,8 @@ three commits.
 | `skill_min_generated_files` | int | `5` | skill | a generator family is proposed as a skill from this many generated files; configuration files alone count only for families without detectable output (OpenAPI clients) |
 | `owner_doc_min_files` | int | `5` | owner-doc | a unit with fewer files and **no dependents** gets no owner doc (listed as a no, counted in a note): a two-file tool is explained where it is used, and a doc nobody links to is the first to go stale. Any dependent overrides the floor. |
 
-| `units` | list of globs | absent (depth rule) | sub-units | only for a repository whose single module sits at the root (ADR-0020). Absent: the depth rule — the first depth below the module at which ≥ 2 directories are source directories (≥ 2 files in the module's language, a package for Python; tests and dot directories excluded). A list: exactly the directories matching these globs (`fnmatch` against the repo-relative path, `src/app/*` matches one level) become the sub-units. `[]`: no sub-units. |
+| `root_share` | float 0–1 | `0.5` | sub-units | a root module next to other modules gets sub-units by the depth rule when it holds at least this share of all modules' files (ADR-0027); a lone root module always does (ADR-0020) |
+| `units` | list of globs | absent (depth rule) | sub-units | for a repository whose single module sits at the root (ADR-0020) or whose root module is dominant (ADR-0027). Absent: the depth rule — the first depth below the module at which ≥ 2 directories are source directories (≥ 2 files in the module's language, a package for Python; tests and dot directories excluded). A list: exactly the directories matching these globs (`fnmatch` against the repo-relative path, `src/app/*` matches one level) become the sub-units. `[]`: no sub-units. |
 
 Every numeric threshold in effect is written into `harness-plan.yaml` under `thresholds`, so a plan is readable
 without the config file; `units` is a list and appears in the console note instead. The owner-doc activity rule (≥ 1 commit/90d or ≥ 1 dependent), the test-infra comparison (most active

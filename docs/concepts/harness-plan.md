@@ -43,6 +43,12 @@ reasoned no with its flip criterion, like any small unit. `[plan] units = ["src/
 the rule with exactly those directories; `units = []` switches sub-units off. The console note names what
 applied and the key that changes it.
 
+The same rule runs on a **dominant root module** (ADR-0027): a root manifest next to a few sub-manifests — a
+Python service with a `web/` package and a `tests-js/` package — is the most common service shape, and its root
+module is a catch-all holding most of the repository. When the root module holds at least `root_share` (0.5) of
+the files of all modules, its sub-units come from the depth rule as above; the console note says so
+(`9 sub-units of svc (64% of the files, root_share 0.5) by the depth rule (depth 1): …`).
+
 The **ranking** runs over business units (no test units, no generator-dominated ones). Quartile = rank ≤
 ⌈n · agent_top⌉; ties by id. It is in the plan header (`ranking`) so every "rank 7/44" can be recomputed.
 

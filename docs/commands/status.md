@@ -6,13 +6,13 @@ files and the plan; the checker's findings; the outcome labels per harness versi
 ## Synopsis
 
 ```
-sherpa status [REPO]
+sherpa status [REPO] [--json]
 ```
 
 ## What it does
 
 1. Loads `.sherpa/state.json` (an empty state when there is none), `.sherpa/harness-plan.yaml` and
-   `.sherpa/codebase-model.json`.
+   `.sherpa/codebase-model.json`; notes whether the trunk moved since the plan was made (`plan: stale`).
 2. Renders what [`sherpa apply`](apply.md) would do now — the same pure comparison, nothing written.
 3. Runs the checker rules C1–C7 ([`sherpa check`](check.md)); C8 (drift) is replaced by the sharper per-block
    view above.
@@ -24,6 +24,7 @@ sherpa status [REPO]
 ```console
 $ sherpa status .
 sherpa status — harness_rev c38498363846, applied 2026-09-16T22:07:12Z
+plan: current
 drift: 4 files
   ? .claude/agents/old.md            in the state, no longer in the plan
   - .agents/docs/modules/core.md     in the state, not on disk — apply recreates it
@@ -37,8 +38,29 @@ outcomes: 3 executions labelled, 1 corrections
   note: .agents/scripts/sherpa-check.py is sherpa 0.0.1, installed is 0.4.0 — `sherpa apply` refreshes it
 ```
 
-Without drift the second line reads `drift: none — files match the state and the plan`; without labels,
+Without drift the drift line reads `drift: none — files match the state and the plan`; without labels,
 `outcomes: none yet — labels appear once Claude Code runs with the hook installed`.
+
+The `plan:` line is what `apply` checks first: when the trunk moved since `sherpa plan` it reads
+`plan: stale — origin/main moved 2c22d796e3 → 9bac74de60 since \`sherpa plan\`; run \`sherpa plan\`` — a
+warning, never an exit code. The harness can be current while the plan is stale (ADR-0019: a merge without
+activity in a unit changes no block), so the two facts are two lines.
+
+`--json` prints the same report for scripts:
+
+```json
+{
+  "sherpa": "0.7.0",
+  "harness_rev": "c38498363846",
+  "applied_at": "2026-09-16T22:07:12Z",
+  "plan": {"stale": true, "trunk": "origin/main", "plan_rev": "2c22d796e3…", "current_rev": "9bac74de60…"},
+  "drift": [{"op": "~", "path": ".agents/docs/modules/pay.md", "detail": "block facts updated"}],
+  "findings": [{"level": "WARN", "rule": "C7", "path": ".claude/agents/pay.md", "message": "162 lines > budget 150 (agent)"}],
+  "outcomes": {"c38498363846": {"success": 1, "unknown": 1}},
+  "corrections": 1,
+  "notes": []
+}
+```
 
 ### Drift lines
 
@@ -47,7 +69,7 @@ Without drift the second line reads `drift: none — files match the state and t
 | `+` | a file the plan wants that does not exist yet | `sherpa apply` |
 | `~` | a block or managed file whose content is behind the model (a rescan changed the facts, a new sherpa version) | `sherpa apply` |
 | `!` | a hand-edited block or file, broken markers, or a file sherpa does not manage | nothing — it is yours; `apply` skips it too |
-| `-` | in the state, not on disk | `sherpa apply` recreates it, or remove the record if the deletion was intended |
+| `-` | in the state, not on disk | `sherpa apply` recreates it when the plan still wants it; when it does not (a rejected entry, a deleted file) the line says `sherpa adopt` drops the record |
 | `?` | orphan: in the state, no longer in the plan (the entry was rejected or the module disappeared) | delete the file and its state record by hand — Sherpa never deletes |
 
 Files recorded as `origin: adopted` ([`sherpa adopt`](adopt.md)) never appear as drift — a hand edit to them is

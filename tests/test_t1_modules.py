@@ -261,7 +261,20 @@ def test_find_modules_one_per_dir_and_skips_tool_dirs():
     assert "left-pad" not in ids and "shop-parent" in ids
     assert len(mods) == 14
     two = {"x/pyproject.toml": b'[project]\nname="a"\n', "x/package.json": b'{"name":"b"}'}
-    assert [m.id for m in find_modules(sorted(two), two)] == ["b"]  # package.json < pyproject.toml alphabetically
+    assert [m.id for m in find_modules(sorted(two), two)] == ["b"]  # no source files: the manifest name decides
+
+
+def test_find_modules_two_manifests_the_language_with_more_files_wins():
+    """ADR-0025: a root with pyproject.toml and package.json is the ecosystem of its files, not of the alphabet."""
+    two = {"pyproject.toml": b'[project]\nname="svc"\n', "package.json": b'{"name":"web"}'}
+    paths = sorted(two) + [f"svc/m{i}.py" for i in range(5)] + ["web/app.ts", "web/index.tsx"]
+    (m,) = find_modules(paths, two)
+    assert (m.id, m.kind, m.manifest) == ("svc", "python", "pyproject.toml")
+    paths = sorted(two) + ["svc/m.py"] + [f"web/c{i}.ts" for i in range(3)]
+    (m,) = find_modules(paths, two)
+    assert (m.id, m.kind) == ("web", "node")
+    paths = sorted(two) + ["svc/m.py", "web/c.ts"]  # a tie: the manifest name decides, deterministically
+    assert find_modules(paths, two)[0].id == "web"
 
 
 def test_assign_files_deepest_module_wins_and_root_catches_rest():
@@ -409,6 +422,32 @@ def test_coupling_cap_and_floors():
     assert stats == CouplingStats(cap=5, skipped_commits=3, measured_commits=12, min_shared=5, min_share=0.3)
     assert per["A"] == [Coupling("B", 6, 0.5)]  # 6 of A's 12 measured commits
     assert per["B"] == [Coupling("A", 6, 1.0)] and per["C"] == [] and per["G"] == []
+
+
+def test_coupling_excludes_the_root_catch_all(poly_repo: Path):
+    """ADR-0026: the root module owns everything no other manifest claims; a partner row naming it says only
+    "touches the rest". Excluded from partners and from the cap count of a commit; the model records which."""
+    owner = {"a/x": "A", "b/x": "B", "README.md": "ROOT", "docs/y": "ROOT"}
+    commits = [("u", 1, ["a/x", "b/x", "README.md"])] * 6 + [("u", 2, ["a/x", "docs/y"])] * 4
+    per, stats = compute_coupling(_data(commits), owner, ["ROOT", "A", "B"])
+    assert per["A"] == [Coupling("ROOT", 10, 1.0), Coupling("B", 6, 0.6)]  # without the exclusion
+    per, stats = compute_coupling(_data(commits), owner, ["ROOT", "A", "B"], exclude="ROOT")
+    assert per["A"] == [Coupling("B", 6, 0.6)] and per["ROOT"] == [] and stats.excluded == "ROOT"
+    assert scan(poly_repo, fetch=False).coupling.excluded is None  # no root manifest there: nothing to exclude
+
+
+def test_scan_excludes_the_root_module_only_next_to_others(tmp_path: Path, make_origin, make_clone):
+    origin, _ = make_origin()
+    seed = tmp_path / "seed"
+    commit(seed, "root package", {"pyproject.toml": '[project]\nname = "svc"\n', "svc/a.py": "x\n"})
+    git(seed, "push", "-q", str(origin), "main")
+    clone = make_clone(origin)
+    assert scan(clone, fetch=False).coupling.excluded is None  # alone: a real unit, measured
+    commit(seed, "a web module", {"web/package.json": '{"name": "web"}', "web/i.ts": "y\n"})
+    git(seed, "push", "-q", str(origin), "main")
+    git(clone, "fetch", "-q", "origin")
+    m = scan(clone, fetch=False)
+    assert m.coupling.excluded == "svc" and [x.id for x in m.modules] == ["svc", "web"]
 
 
 def test_coupling_top_three_ordered_by_shared_then_name():

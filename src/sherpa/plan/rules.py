@@ -66,11 +66,12 @@ class Unit:
         return self.commits_90d == 0 and self.dependents == 0
 
 
-def sub_units_of(m: ModuleStat, cfg: PlanConfig) -> tuple[list[Unit], str | None]:
-    """Sub-units of a single-manifest repository (ADR-0020). The depth rule: the first depth below the module's
-    path at which at least two directories are *source directories* — ≥ 2 files in the module's language, a
-    package for Python — test directories excluded. ``[plan] units = [globs]`` replaces the rule; an empty list
-    switches sub-units off. Returns the units and a one-line explanation for the plan notes."""
+def sub_units_of(m: ModuleStat, cfg: PlanConfig, *, why: str = "") -> tuple[list[Unit], str | None]:
+    """Sub-units of a single-manifest repository (ADR-0020) or of a dominant root module (ADR-0027). The depth
+    rule: the first depth below the module's path at which at least two directories are *source directories* —
+    ≥ 2 files in the module's language, a package for Python — test directories excluded. ``[plan] units =
+    [globs]`` replaces the rule; an empty list switches sub-units off. Returns the units and a one-line
+    explanation for the plan notes."""
 
     def unit(s: SubDir) -> Unit:
         return Unit(s.path, "dir", s.path, s.files, s.loc, 0, s.commits_90d, s.commits_30d, s.authors_90d, 0, False)
@@ -97,7 +98,7 @@ def sub_units_of(m: ModuleStat, cfg: PlanConfig) -> tuple[list[Unit], str | None
             candidates.sort(key=lambda s: s.path)
             names = ", ".join(s.path for s in candidates[:MAX_NAMED])
             return [unit(s) for s in candidates], (
-                f"{len(candidates)} sub-units of {m.id} by the depth rule (depth {depth}): {names} — "
+                f"{len(candidates)} sub-units of {m.id}{why} by the depth rule (depth {depth}): {names} — "
                 "[plan] units in sherpa.toml overrides the rule."
             )
     return [], None
@@ -126,10 +127,16 @@ def units_and_note(model: Model, cfg: PlanConfig) -> tuple[list[Unit], str | Non
         for m in model.modules
     ]
     covered = [m.path for m in model.modules]
-    if len(model.modules) == 1 and covered == [""]:
-        subs, note = sub_units_of(model.modules[0], cfg)
-        return units + subs, note
     if "" in covered:
+        root = next(m for m in model.modules if m.path == "")
+        total = sum(m.files for m in model.modules)
+        # The only module (ADR-0020), or the catch-all that holds most of the repository (ADR-0027): sub-units.
+        if len(model.modules) == 1:
+            return (units + (r := sub_units_of(root, cfg))[0]), r[1]
+        if total and root.files / total >= cfg.root_share:
+            why = f" ({root.files / total:.0%} of the files, root_share {cfg.root_share:g})"
+            subs, note = sub_units_of(root, cfg, why=why)
+            return units + subs, note
         return units, None
     for d in model.git.dirs:
         p = d.path

@@ -91,6 +91,7 @@ class CouplingStats:
     measured_commits: int
     min_shared: int  # floor: partners with fewer shared commits are not listed
     min_share: float
+    excluded: str | None = None  # the root module left out as a catch-all when other modules exist (ADR-0026)
 
 
 @dataclass(frozen=True)

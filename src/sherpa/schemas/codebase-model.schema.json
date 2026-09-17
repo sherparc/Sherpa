@@ -574,7 +574,7 @@
     "coupling": {
       "type": "object",
       "additionalProperties": false,
-      "description": "How coupling was measured: cap = max(5, ceil(modules / 2)) modules per commit; skipped_commits = commits above the cap (squash merges, mass renames), measured_commits = the rest.",
+      "description": "How coupling was measured: cap = max(5, ceil(modules / 2)) modules per commit; skipped_commits = commits above the cap (squash merges, mass renames), measured_commits = the rest; excluded = the root module left out as a catch-all when other modules exist (ADR-0026), else null.",
       "required": [
         "cap",
         "skipped_commits",
@@ -594,6 +594,9 @@
         "measured_commits": {
           "type": "integer",
           "minimum": 0
+        },
+        "excluded": {
+          "type": ["string", "null"]
         },
         "min_shared": {
           "type": "integer",

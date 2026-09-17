@@ -28,12 +28,11 @@ blocks current, `adopt` takes an existing harness into the state unchanged (and 
 files), `status`/`check` report drift and structural findings. Terraform's plan/apply/state model for
 knowledge infrastructure. Everything outside `plan` stage 2 is deterministic — no LLM, no clock in outputs.
 
-Direction, held in the background while the milestone plan is executed in order: Sherpa becomes an **agent** in
-its own right (a runtime like Claude Code or Hermes, not only a generator of files for one), with pluggable
-model bindings — bring your own key, local models via OpenAI-compatible servers, Anthropic, OpenAI, Chinese
-providers. The provider layer is already decided thin and framework-free (ADR-0004); every design choice today
-must not close that door: formats stay runtime-neutral where they can (owner docs, skills), runtime-specific
-parts (agents' front matter, hooks, `CLAUDE.md`) stay isolated in `apply/render.py`.
+Direction, held in the background while the milestone plan is executed in order: plan §0 owns it (independence
+from any single runtime through open runtimes first, a thin provider layer second, never a chat runtime of
+Sherpa's own — ADR-0023). Every design choice today must not close that door: formats stay runtime-neutral
+where they can (owner docs, skills), runtime-specific parts (agents' front matter, hooks, `CLAUDE.md`) stay
+isolated in `apply/render.py`.
 
 ## Invariants (break one only with an ADR)
 
@@ -51,14 +50,15 @@ parts (agents' front matter, hooks, `CLAUDE.md`) stay isolated in `apply/render.
 
 | Where | What |
 |---|---|
-| `src/sherpa/cli.py` | argparse entry: `scan`, `plan`, `apply`, `adopt`, `status`, `check`; exit codes 0/1/2 |
+| `src/sherpa/cli.py` | argparse entry for every command; exit codes in `docs/reference/files-and-exit-codes.md` |
 | `src/sherpa/gitinfo.py` | git calls, trunk resolution (ADR-0003) |
-| `src/sherpa/scan/` | `t0_git.py` (files, dirs, hotspots), `t1_modules.py` (manifests, deps), `generators.py` (families, `GlobSet`) |
-| `src/sherpa/model.py`, `schemas/` | dataclasses and JSON schemas of model (v3), plan (v1), state (v1) |
+| `src/sherpa/scan/` | `t0_git.py` (files, dirs, hotspots), `t1_modules.py` (manifests, deps, sub-dirs, coupling), `generators.py` (families, `GlobSet`) |
+| `src/sherpa/model.py`, `schemas/` | dataclasses and JSON schemas of model, plan and state (the version constant lives in each) |
 | `src/sherpa/plan/` | `rules.py` (units, rank and floor, reach), `yamlio.py` (format, decisions) |
 | `src/sherpa/apply/` | `render.py` (entry → files), `__init__.py` (actions, write, rollback), `adopt.py` (inventory, reconcile, link, gaps), `state.py`, `status.py`, `assets/sherpa-outcome.py` (hook) |
 | `src/sherpa/atomic.py` | atomic writes for the index files (ADR-0017) |
 | `src/sherpa/check.py` | single-file checker, deployed into target repos as a copy |
+| `src/sherpa/doctor.py`, `update.py` | `doctor` checks with a fix each; releases, `self-update`, the daily hint (ADR-0018) |
 | `tests/` | programmatic fixture repos (`conftest.py`, `active_repo`, `poly_repo`), goldens in `tests/goldens/` |
 | `docs/` | `index.md` landing, `commands/` reference, `concepts/` rules, `reference/` config and files, `adr/`, `plan.md` |
 | `scripts/sync-kb.py` | one-way projection of docs and harness into the ignored Obsidian vault `kb-sherpa/` |

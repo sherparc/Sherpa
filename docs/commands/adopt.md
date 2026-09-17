@@ -86,7 +86,7 @@ gaps:
   - .claude/docs/modules/legacy.md: no unit matches by name or path mentions — moved, renamed or not a module doc
   - 2 proposed owner docs without an existing doc — `apply` creates them
   - 1 file of unknown kind — recorded as yours, listed above with `?`
-state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 0d2bdd9cfe6a → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
+state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 223215100f49 → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
 ```
 
 | Mark | Meaning |
