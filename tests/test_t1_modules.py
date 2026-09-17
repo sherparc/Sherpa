@@ -21,7 +21,6 @@ Expected module landscape (path → id, deps within the repo):
 
 from __future__ import annotations
 
-import shutil
 from datetime import UTC
 from pathlib import Path
 
@@ -442,12 +441,12 @@ def test_scan_excludes_the_root_module_only_next_to_others(tmp_path: Path, make_
     seed = tmp_path / "seed"
     commit(seed, "root package", {"pyproject.toml": '[project]\nname = "svc"\n', "svc/a.py": "x\n"})
     git(seed, "push", "-q", str(origin), "main")
-    assert scan(make_clone(origin), fetch=False).coupling.excluded is None  # alone: a real unit, measured
+    clone = make_clone(origin)
+    assert scan(clone, fetch=False).coupling.excluded is None  # alone: a real unit, measured
     commit(seed, "a web module", {"web/package.json": '{"name": "web"}', "web/i.ts": "y\n"})
     git(seed, "push", "-q", str(origin), "main")
-    clone = tmp_path / "clone"
-    shutil.rmtree(clone)
-    m = scan(make_clone(origin), fetch=False)
+    git(clone, "fetch", "-q", "origin")
+    m = scan(clone, fetch=False)
     assert m.coupling.excluded == "svc" and [x.id for x in m.modules] == ["svc", "web"]
 
 
