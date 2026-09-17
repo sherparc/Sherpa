@@ -1,6 +1,6 @@
 # Sherpa — Plan
 
-> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 16: F20 to F23 closed — stdlib schema validation on every reader (ADR-0042), NUL-separated git paths (ADR-0038), the coupling denominator in the row (ADR-0039), test runs as command words and the start revision on outcome labels (ADR-0040); the mechanics drawn as Mermaid under `docs/architecture/` (ADR-0041, Q25) and the CI matrix by event (ADR-0043); revision 15: two findings from a first run on a large repository with two homes, F18/F19 — a preview never refuses (assumes `.agents` and says so, ADR-0036) and a target directory that is a repository of its own is named (ADR-0037); revision 14: F17 closed — `self-update` saves the wheel under its PEP 427 name and finds the tag with `git ls-remote` without a token, verified with pip itself, ADR-0035; revision 13: the review's F16 closed — `adopt` no longer refuses a stale plan and `plan`/`status`/`adopt` run on a torn state, ADR-0034, so a broken index plus a moved trunk has a way out; revision 12: an external review of v0.7.0 found the write path overwriting a file that moved between the preview and the confirmation — writing through symlinks, a torn harness after a write error, and `adopt` lifting the hand-edit guard on base files — closed as M3f with compare-and-swap, a symlink guard, atomic writes with rollback and base files as yours, ADR-0030 to 0033, §10.4) · **Author:** Claude (Opus 5) with Andrei
+> **Created:** 2026-09-16 · **Revised:** 2026-09-17 (revision 17: the manager review (§11) — Sherpa creates and updates but cannot remove: a rejected entry or a vanished unit stays live in the runtime and a state rebuild adopts sherpa's own leftovers as yours, F24 to F33, Q26 to Q29, M3i proposed before M3h; revision 16: F20 to F23 closed — stdlib schema validation on every reader (ADR-0042), NUL-separated git paths (ADR-0038), the coupling denominator in the row (ADR-0039), test runs as command words and the start revision on outcome labels (ADR-0040); the mechanics drawn as Mermaid under `docs/architecture/` (ADR-0041, Q25) and the CI matrix by event (ADR-0043); revision 15: two findings from a first run on a large repository with two homes, F18/F19 — a preview never refuses (assumes `.agents` and says so, ADR-0036) and a target directory that is a repository of its own is named (ADR-0037); revision 14: F17 closed — `self-update` saves the wheel under its PEP 427 name and finds the tag with `git ls-remote` without a token, verified with pip itself, ADR-0035; revision 13: the review's F16 closed — `adopt` no longer refuses a stale plan and `plan`/`status`/`adopt` run on a torn state, ADR-0034, so a broken index plus a moved trunk has a way out; revision 12: an external review of v0.7.0 found the write path overwriting a file that moved between the preview and the confirmation — writing through symlinks, a torn harness after a write error, and `adopt` lifting the hand-edit guard on base files — closed as M3f with compare-and-swap, a symlink guard, atomic writes with rollback and base files as yours, ADR-0030 to 0033, §10.4) · **Author:** Claude (Opus 5) with Andrei
 > **Status:** v0.7.4 — M0, M1, M1a, M2, M2b, M3a, M3t, M3c, M3d, M3e, M3f done; order from here: M3h → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (§7.3, §9, §10)
 > **Origin of the patterns:** production Claude Code harnesses built and analysed in practice (owner docs, agents with
 > knowledge manifests, librarians, deterministic checkers) plus the industry patterns in §2. Sherpa is a generic
@@ -305,7 +305,7 @@ Many tests, small units, everything reproducible:
 | Corpus | real repos under `tests/corpus/` (ignored) | smoke: scan runs through, schema valid, runtime < 60 s; never in CI |
 | Schema | `codebase-model`, `harness-plan`, `harness-state` | JSON Schema under `src/sherpa/schemas/`; validated on every read and write by the stdlib validator `sherpa/schema.py` (ADR-0042); `jsonschema` (dev extra) is the reference the tests compare it with on one input matrix |
 
-Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M3f: 326 tests, 98 %.
+Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M3f: 400 tests, 98 %.
 The conftest sets `SHERPA_NO_UPDATE_CHECK` and a temporary cache directory for every test, in-process and in
 subprocesses: no test reaches the network.
 
@@ -394,6 +394,28 @@ subprocesses: no test reaches the network.
     like the index (ADR-0021) at most. The generated graph gets **its own block** (`graph`), so a hand-edited
     facts block does not freeze it and vice versa (ADR-0013 per-block ownership). Sorted ids → byte-stable →
     goldens on the fixtures. A slice after M3f (M3g), one ADR; changes nothing in the order M3h → M5.
+
+26. **Removal semantics (§11 F24, amends ADR-0016).** Sherpa creates, appends and merges, and deletes nothing —
+    so a rejected entry or a vanished unit leaves sherpa's own files live in every runtime, and `apply` says
+    `nothing to do.`. Recommendation: remove only what is `generated` **and** unchanged (hash matches the state)
+    with `- removed (no longer in the plan)` in the preview; a hand-edited file or block stays, its record is
+    dropped and the line says `yours now`; in a nested `AGENTS.md` only the block goes, the file only when
+    nothing but sherpa's block was in it. With "never delete, ever": F25 still needs the orphan record, and
+    `status` must at least name `rm` as the way out — the rejected agent stays live until a human deletes it.
+27. **`harness_rev` over agent-visible content only (§11 F26, amends ADR-0008/0028).** Today the hash carries the
+    Sherpa version and the checker copy, so every `self-update` + `apply` starts a new revision without a doc,
+    agent or block changing. Recommendation: yes, before M5 — docs, agents, skills and proximity blocks in
+    `harness_rev`, the checker copy, hook, ignore file and version in a second field (`tooling`). With "no", M5
+    must group by content anyway or its comparisons restart on every release.
+28. **Hook wiring in exec form, and which interpreter (§11 F27).** Claude Code runs shell-form hooks through
+    PowerShell on Windows without Git Bash; the exec form (`command` + `args`) needs no shell but resolves one
+    executable name on `PATH` — `python3` is missing on many Windows installs, `python` on many Linux ones.
+    Recommendation: exec form with `python3` plus a `doctor` check `hook-python` that names the fix on the
+    machine it runs on; alternative: keep `sh -c` and document "Git Bash required" — then Windows without it has
+    no outcome channel, which contradicts ADR-0008.
+29. **`status --exit-code` (§11 F31).** Recommendation: yes — exit 2 on drift or a stale plan, as `terraform plan
+    -detailed-exitcode` and `git diff --exit-code` do; it is the CI gate the milestone-step ritual already
+    assumes ("status clean"). With "no", a gate needs `status --json` plus a JSON tool.
 
 Decided (2026-09-17): the `hermes` target and the reordered direction → ADR-0023; runtime plugins from one
 source, thin, no hook in the plugin → ADR-0024; manifest tie-break → ADR-0025; coupling without the root
@@ -602,3 +624,57 @@ Eleven findings; six built as M3e in the same day, one decided as an order chang
    same harness helps Claude Code and Hermes users differently; the hook already accepts both payload shapes.
 3. **Stale-plan awareness with zero churn** (F1 + F7): `plan: stale` next to `drift: none` is Terraform's
    "no changes" for documentation, one level up.
+
+## 11. Retro after M3f (2026-09-17) — Sherpa as a harness manager, before M3h
+
+Method: `architect-review` with the focus "Sherpa is a harness manager and generator" (§7 method): the suite and
+`ruff`, the four corpus repositories through `scan`, `plan`, `apply --dry-run`, `status`, `check` and
+`doctor --offline`, and three lifecycle experiments on the five-module fixture that no earlier retro had run —
+an entry rejected **after** it was applied, a unit removed from the trunk, and two branches that both ran
+`apply` and were merged. Claude Code's sub-agent and hook documentation read for the premises of the `claude`
+adapter. Ten findings; all accepted into the plan by Andrei, decisions as Q26 to Q29.
+
+### 11.1 Gaps
+
+| # | Finding | Evidence | Consequence |
+|---|---|---|---|
+| F24 | **No removal path.** After `plan --reject agent:pay` on an applied harness, `apply --dry-run` prints `nothing to do.`; `.claude/agents/pay.md` stays and Claude Code keeps dispatching it. After `git rm -r svc/core` on the trunk, `.agents/docs/modules/core.md` stays. `status` shows `? … in the state, no longer in the plan` and names no way out. | `apply/__init__.py` `write()`: `files = dict(previous.files)` — a record never leaves; `status.py` `ORPHAN`; `adopt` reports the orphan as `sherpa's, unchanged`. Measured on the fixture. | The team's decision has no effect on the harness; orphans accumulate and every runtime loads them. Terraform plans `- destroy` for what it owns. → Q26, an ADR amending 0016 (and 0013 for blocks). |
+| F25 | **Orphans poison the rebuild.** After a state loss (here a merge conflict in `state.json`), `adopt` adopted `.agents/docs/modules/suite.md` and `.claude/agents/pay.md` as "yours" and wrote `covered:` on entries that carry `decision: reject` — rejected *and* covered on the same entry; the runtime still loads the rejected agent. | `adopt` output `a .claude/agents/pay.md → agent pay (name matches)`; the plan with `decision: reject` and `covered:` on `test-infra suite` and `agent pay`. ADR-0022 recognises older stamps, not renderings of entries no longer selected. | A rebuilt state silently turns sherpa's own stale output into a hand-written harness that overrides the team's no. Fix: `adopt` renders **every** plan entry, selected or not, and recognises its own rendering of a deselected entry as `sherpa's, no longer in the plan` — an orphan record, never a cover; `mark_covered` skips entries with a decision; F24's removal is the way out. Extends ADR-0022's pattern list. |
+| F26 | **`harness_rev` moves with the Sherpa version, not with what an agent reads.** | `state.py` `harness_rev()` hashes `sherpa {version}`; measured on one state: `0.7.4 → 79814b3256ea`, `0.7.5 → 1bd8ead4acf8`; 14 of 18 recorded files are agent-visible. | Every `self-update` + `apply` starts a new revision; ADR-0028's 30-label threshold restarts although nothing an agent reads changed — M5 would compare tool versions. Terraform keeps `terraform_version` apart from resource identity. → Q27. |
+| F27 | **The outcome hook is shell-form `sh -c`; Claude Code runs shell-form hooks through PowerShell on Windows without Git Bash.** | `render.py` `HOOK_COMMAND`; Claude Code hooks documentation: "`sh -c` on macOS and Linux, Git Bash on Windows, or PowerShell when Git Bash isn't installed"; the exec form (`command` + `args`) runs "with no shell involved". No test renders the command string — the script is tested on Windows CI, the wiring is not. | The mandatory minimum (ADR-0008) fails with a non-blocking notice on four events per turn; labels stay empty, the user sees noise. → Q28. |
+| F28 | **The agent's `knowledge:` manifest never reaches the agent.** Claude Code: "the body becomes the system prompt"; the front matter is configuration, `knowledge` is not a field, and the field that does preload — `skills:` — is unused. | `render.py` `agent()`; the sub-agents documentation's field table. C3 checks the manifest, the runtime ignores it; only the body's `Read first:` line acts. | The manifest is a checker convention presented as a runtime mechanism. Fix: keep `knowledge:` as the neutral manifest (C3) and let the `claude` adapter also emit `skills: [regenerate-…]` from the same list — adapter only, the core stays neutral (ADR-0015). |
+| F29 | **Skeleton owner docs are the harness's own dormant docs, and nothing measures them.** Every owner doc is seeded with four empty sections; on the 122-module corpus repository that is 77 skeletons in 231 files. §1 names dormant docs as the measured weakness of grown harnesses. | `render.py` owner-doc seed; golden `active-owner-doc-pay.md`; corpus plan: 77 owner docs. | The team cannot see which docs were filled since `apply`. Fix (Backstage scorecards / Soundcheck): one `status` line `N of M owner docs are still skeletons (no text outside the facts block)` — the non-block text equals the seed's; `status --json` carries the list. |
+| F30 | **Two branches that both run `apply` conflict in `state.json` on every merge** (`applied_at`, `harness_rev`), while `harness-plan.yaml` merged cleanly. The way out (`sherpa adopt` rebuilds; `load` names it) is documented nowhere. | Measured: `CONFLICT (content): .sherpa/state.json`; no troubleshooting row mentions a conflict. | A team hits this in week one; with F25 the fix (`adopt`) currently makes it worse. Fix: one troubleshooting row in `docs/commands/adopt.md` and `docs/reference/files-and-exit-codes.md` — take either side, run `sherpa adopt`; safe once F25 is built. |
+| F31 | **`status` gives CI no drift signal.** Exit 1 only on a checker FAIL; drift and a stale plan exit 0. | `status.py` docstring; `cli.py` exit codes. | A "harness current?" gate needs `--json` plus a JSON tool. → Q29. |
+| F32 | **Decisions vanish silently when their entry does.** `merge_decisions` counts kept decisions; a reject on a renamed or removed unit is dropped without a line. | `plan/yamlio.py` `merge_decisions`; measured: `1 decisions kept` after the second decision's unit was removed. | A rename (`svc/core → svc/kernel`) reactivates a rejected agent on the next `apply`. Renovate prints every migrated or dropped config key. Fix: `1 decision no longer matches an entry: agent:core (dropped)` on the plan's last line. |
+| F33 | **README and §5 said 326 tests; the suite has 400.** | `pytest -q`: `400 passed`. | Invariant 8 (README is truth). Fixed in this revision. |
+
+### 11.2 What holds
+
+- Gate: 400 tests, 98 % coverage, `ruff check` and `format --check` clean, 20 s on Linux.
+- Corpus (54 → 20.6k files, 1 → 122 modules): scan 0.58 / 1.15 / 3.49 / 5.25 s, plan ≤ 0.16 s, `check` 0 FAIL
+  and `doctor --offline` ready on all four; the notes of ADR-0036/0037 fired nowhere falsely.
+- Bloat control: 3 / 6 / 7 / 0 agents on 79 / 122 / 16 / 1 modules — the floors (ADR-0006) hold where the
+  quartile alone would propose 31.
+- Idempotence after a decision: `plan --reject` then `apply --dry-run` → `0 to change`.
+- A torn or conflicted state: `status` and `adopt` name the way out at runtime (ADR-0034) and the rebuild
+  itself runs — only its result is wrong (F25).
+- Hand edits survive every path measured (`test_adopt_keeps_hand_edits_in_blocks_and_in_base_files`).
+
+### 11.3 Innovation candidates
+
+1. **Deselect = destroy of sherpa's own bytes only, with the decision kept** (F24/F25): no AGENTS.md generator has
+   plan/apply/*remove* for documentation; Terraform has it for infrastructure. Smallest proof: reject an applied
+   agent → `- removed` in the preview, the hand-edited variant → `yours now`; one test each.
+2. **A harness revision that survives tool upgrades** (F26): outcome samples comparable across Sherpa versions —
+   the precondition for M5's claim "revision X helps more than Y".
+3. **Skeleton ratio as the harness's health metric** (F29): the first number that says whether a team fills what
+   Sherpa scaffolds — Backstage scorecards for AI harnesses.
+
+### 11.4 Proposed next step
+
+One slice **M3i — the manager's delete**: F25 (adopt recognises deselected renderings), F24 (removal of own
+unchanged bytes), F26 (content-only `harness_rev`), F32 (dropped decisions named); F27, F28, F29, F30, F31 as
+fruit in the same PR. It displaces M3h by one slice because every new target multiplies the files that can
+orphan, and M5 builds on `harness_rev` — fixing its identity after M5 would invalidate the first samples. The
+milestone table and the status line change once Q26 to Q29 are decided.
