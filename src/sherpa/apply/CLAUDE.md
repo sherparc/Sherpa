@@ -1,10 +1,10 @@
 <!-- sherpa:begin harness -->
-## src/sherpa/apply (managed by sherpa, as of 2026-09-17)
+## src/sherpa/apply (managed by sherpa, as of 2026-09-18)
 
 | field | value |
 |---|---|
 | unit | `src/sherpa/apply` (module) |
-| part of | `sherpa-harness` — 7 files, 10 commits/90d |
+| part of | `sherpa-harness` — 7 files, 11 commits/90d |
 | hotspots | `src/sherpa/apply/render.py`, `src/sherpa/apply/__init__.py`, `src/sherpa/apply/adopt.py` |
 | tests naming it | `tests/test_apply.py` |
 

@@ -53,6 +53,7 @@ sherpa adopt [REPO] [--dry-run]
    | is a base file sherpa names itself (`sherpa-check.py`, `sherpa-outcome.py`, the telemetry ignore file) and differs | `adopted` — a hand edit or an older copy, adopt cannot tell (ADR-0033); the gap line says `differs from sherpa <version>'s copy — yours; delete it and run `apply` for the current one` |
    | is at sherpa's path for a plan entry and differs, no markers | `adopted`, linked to that entry — **covers** it |
    | is a root or nested `CLAUDE.md`/`AGENTS.md` without markers, or `settings.json` without the hook | not recorded — `apply` may still append its block or merge the hook (ADR-0016) |
+   | equals sherpa's rendering of an entry the plan no longer selects (rejected, covered, gone from the trunk) | `generated`, sherpa's leftover — `= sherpa's, no longer in the plan — apply removes it`; never adopted as yours, never a cover (ADR-0048) |
 
 3. **Link.** An adopted agent, or a doc under `<home>/docs/modules/` (the owner-doc location — reference pages,
    archives and reports are never owner docs, ADR-0046), is linked to a unit of the plan, in this order: the

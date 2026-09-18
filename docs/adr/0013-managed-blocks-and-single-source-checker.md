@@ -1,6 +1,6 @@
 # ADR-0013 — `apply` owns marked blocks, not whole files; the checker has one source and is deployed as a copy
 
-**Status:** accepted · **Date:** 2026-09-17 · **Decision:** Andrei (M3 design questions)
+**Status:** accepted · **Amended by:** ADR-0048 (a seeded blocks file carries a whole-file hash while it is sherpa's whole) · **Date:** 2026-09-17 · **Decision:** Andrei (M3 design questions)
 
 ## Context
 Owner docs and agents are written by sherpa **and** by humans. Terraform's model — a resource is either managed

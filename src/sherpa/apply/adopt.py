@@ -209,9 +209,14 @@ def adopt(
     home: str,
     runtime_targets: tuple[str, ...],
     version: str = __version__,
+    deselected: list[Target] | None = None,
 ) -> Adoption:
+    """``deselected``: what sherpa would render for entries the plan no longer selects (rejected, covered, gone
+    from the trunk) — a file that equals such a rendering is sherpa's leftover, recorded as generated so that
+    ``apply`` removes it, never adopted as yours and never a cover (ADR-0048, F25)."""
     rendered = {t.path: t for t in targets}
-    found = inventory(repo, {t.path for t in targets})
+    leftovers = {t.path: t for t in deselected or () if t.path not in rendered}
+    found = inventory(repo, {t.path for t in targets} | set(leftovers))
     units = {e.target: e.scope for e in plan.entries if e.kind in ("owner-doc", "test-infra")}
     keys = {(e.kind, e.target): f"{e.kind}:{e.target}:{e.scope}" for e in plan.entries}
     proposed_agents = {e.target for e in plan.entries if e.kind == "agent" and e.default == PROPOSE}
@@ -225,6 +230,11 @@ def adopt(
             files[f.path] = prev
             a.kept += 1
             a.rows.append((REBUILT, f.path, f.kind, "sherpa's, unchanged"))
+            continue
+        if (t := leftovers.get(f.path)) is not None and (rec := _leftover(t, f)) is not None:
+            files[f.path] = rec
+            a.rebuilt += 1
+            a.rows.append((REBUILT, f.path, f.kind, "sherpa's, no longer in the plan — `apply` removes it"))
             continue
         t = rendered.get(f.path)
         if t is not None:
@@ -310,6 +320,8 @@ def _reconcile(t: Target, f: Found) -> tuple[FileRecord | None, str]:
     }
     known.update(older)
     stale = [n for n in t.blocks if n in have and n not in known]
+    if f.text == t.content and not stale:  # the seed and every block: sherpa's whole (ADR-0048)
+        return FileRecord(BLOCKS, GENERATED, t.entry, content_hash(f.text), blocks=known), "sherpa's, matches the plan"
     detail = f"{len(known)} of {len(t.blocks)} blocks match the plan"
     if older:
         detail += f"; block {', '.join(older)} carries an older stamp — `apply` refreshes it"
@@ -323,6 +335,30 @@ def is_owner_doc_location(path: str) -> bool:
     reports mention modules too and were linked as covers before."""
     parts = path.split("/")
     return len(parts) == 4 and parts[0] in HOMES and parts[1:3] == ["docs", "modules"]
+
+
+def _leftover(t: Target, f: Found) -> FileRecord | None:
+    """Sherpa's own rendering of an entry no longer selected — byte for byte or up to an older stamp — as a
+    generated record; anything else is not provably sherpa's and goes the normal way."""
+    if t.mode == MANAGED:
+        if f.text == t.content or modernize_stamp(f.text) == t.content:
+            return FileRecord(MANAGED, GENERATED, t.entry, content_hash(f.text))
+        return None
+    if t.mode == JSON_HOOKS:
+        return None  # the hook record is a base record, never an entry's
+    try:
+        have = block_contents(f.text)
+    except ValueError:
+        return None
+    known = {
+        n: content_hash(have[n])
+        for n, v in t.blocks.items()
+        if n in have and (have[n] == v or modernize_stamp(have[n]) == v)
+    }
+    if not known:
+        return None
+    whole = f.text == t.content or modernize_stamp(f.text) == t.content
+    return FileRecord(BLOCKS, GENERATED, t.entry, content_hash(f.text) if whole else None, blocks=known)
 
 
 def _link_entry(f: Found, units: dict[str, str], keys: dict[tuple[str, str], str]) -> tuple[str | None, str]:

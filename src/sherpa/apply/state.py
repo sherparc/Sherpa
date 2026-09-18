@@ -31,7 +31,7 @@ class FileRecord:
     mode: str  # managed | blocks | json-hooks
     origin: str = GENERATED  # generated | adopted
     entry: str | None = None  # "kind/target/scope" of the plan entry, None for base files
-    hash: str | None = None  # managed and json-hooks: hash of the whole file
+    hash: str | None = None  # managed, json-hooks: hash of the whole file; blocks: set while the file is sherpa's whole
     blocks: dict[str, str] = field(default_factory=dict)  # blocks: name → hash of the inner text
 
 

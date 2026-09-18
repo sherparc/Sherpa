@@ -98,6 +98,19 @@ what a file's line means:
 | `! exists, not managed by sherpa — sherpa adopt takes it over` | a file with that path but no state record and no markers |
 | `! exists with sherpa markers but no state record — sherpa adopt` | markers present, no record (a deleted state, a copied file) — somebody's content until adopt says otherwise |
 | `! block facts not written by sherpa (skipped)` | a block with one of Sherpa's names that has no hash in the record — not Sherpa's, never touched |
+| `- removed (no longer in the plan)` | the entry was rejected or its unit left the trunk, and the file is still byte for byte what sherpa wrote (hash in the state) — deleted, record dropped (ADR-0048) |
+| `- block facts removed (no longer in the plan)` | the file holds the human's text too: only sherpa's block is cut out, the file stays, the record is dropped |
+| `- hooks removed: Stop, … (no longer in the plan)` | sherpa's hook groups leave `settings.json`; every other key stays; the file goes only when nothing else was in it |
+| `- already gone — record dropped` | the file was deleted by hand; the state forgets it |
+| `! hand-edited — yours now (kept)` | no longer in the plan, but the bytes are not sherpa's any more — the file stays, the record is dropped |
+| `! block facts hand-edited — yours now (kept)` | the block's hash differs — it stays with the file, the record is dropped |
+
+With `apply --remove` every generated record is taken back the same way — the uninstall (ADR-0048): base files
+(checker copy, hook script, the telemetry ignore file), blocks appended to `CLAUDE.md`/`AGENTS.md`, sherpa's hook
+groups; the lines say `(--remove)`. When nothing of sherpa's is left, the index files (`state.json`,
+`harness-plan.yaml`, `codebase-model.json`) and the telemetry go too, so a repository that was clean before
+`apply` is clean after — `git status --ignored` as it was. Files taken over with [`sherpa adopt`](../commands/adopt.md)
+are never removed; hand-edited files and blocks stay and are listed as `kept, yours`.
 | `! changed since the preview (skipped)` | the file no longer reads as the preview saw it — the bytes were computed from that read, so nothing is written (ADR-0030) |
 | `! symlink in the path — never written through (skipped)` | a link in the path, wherever it points — the bytes would land in another file (ADR-0031) |
 
@@ -217,8 +230,9 @@ outcomes: 12 executions labelled, 1 corrections
 ```
 
 Drift is what `apply` would do now (`+ ~ !`), plus `-` files in the state that vanished (apply recreates them)
-and `?` orphans — in the state but no longer in the plan (an entry was rejected later). Sherpa never deletes;
-orphans are listed until a human removes them. Exit code 1 only on a checker FAIL.
+and `?` orphans — in the state but no longer in the plan (an entry was rejected later), each with what `apply`
+does about it: removes it, removes sherpa's blocks from it, or drops the record because the file was changed by
+hand (ADR-0048). Exit code 1 only on a checker FAIL.
 
 ## Determinism and tests
 

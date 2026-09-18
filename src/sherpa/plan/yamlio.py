@@ -241,7 +241,7 @@ def mark_covered(plan: Plan, state: State, repo: Path | None = None) -> tuple[Pl
             by_key.setdefault(rec.entry, path)
     entries, n = [], 0
     for e in plan.entries:
-        covered = e.covered or by_key.get(e.address)
+        covered = e.covered or (by_key.get(e.address) if e.decision is None else None)  # a decision stands alone
         n += covered is not None
         entries.append(replace(e, covered=covered))
     return replace(plan, entries=entries), n

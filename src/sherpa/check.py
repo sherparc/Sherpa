@@ -213,13 +213,22 @@ def _managed_paths(root: Path) -> set[str] | None:
     return {p for p, rec in files.items() if isinstance(rec, dict) and rec.get("origin") == "generated"}
 
 
-def check(root: Path, *, strict: bool = False, managed_too: frozenset[str] | set[str] = frozenset()) -> list[Finding]:
+def check(
+    root: Path,
+    *,
+    strict: bool = False,
+    managed_too: frozenset[str] | set[str] = frozenset(),
+    yours_now: frozenset[str] | set[str] = frozenset(),
+) -> list[Finding]:
     """``managed_too``: paths treated as sherpa's although the state does not record them yet — ``apply`` checks
-    what it writes before it writes the state; on a first ``apply`` they are the only managed files."""
+    what it writes before it writes the state; on a first ``apply`` they are the only managed files.
+    ``yours_now``: paths the state still records but ``apply`` is handing back (ADR-0048) — theirs already."""
     root = root.resolve()
     managed = None if strict else _managed_paths(root)
     if managed_too and not strict:
         managed = (managed or set()) | set(managed_too)
+    if managed is not None:
+        managed -= set(yours_now)
     claude = root / ".claude"
     findings: list[Finding] = []
     for p in _md_files(root):
@@ -314,7 +323,7 @@ def _check_drift(root: Path) -> list[Finding]:
         if rec.get("origin") == "adopted":
             continue  # yours by definition (ADR-0007): a changed hash is not drift
         text = read_text(p)
-        if rec.get("hash") and content_hash(text) != rec["hash"]:
+        if rec.get("hash") and rec.get("mode") != "blocks" and content_hash(text) != rec["hash"]:
             out.append(Finding(WARN, "C8", rel, "hand-edited (hash differs from state)"))
         if rec.get("blocks"):
             try:
