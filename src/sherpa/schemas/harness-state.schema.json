@@ -28,7 +28,7 @@
           "mode": {"enum": ["managed", "blocks", "json-hooks"], "description": "managed = whole file; blocks = marked blocks only; json-hooks = merged hook entries"},
           "origin": {"enum": ["generated", "adopted"]},
           "entry": {"type": "string", "description": "kind/target/scope of the plan entry; absent for base files"},
-          "hash": {"type": "string", "pattern": "^[0-9a-f]{16}$", "description": "content hash, line endings normalised (managed, json-hooks)"},
+          "hash": {"type": "string", "pattern": "^[0-9a-f]{16}$", "description": "content hash, line endings normalised (managed, json-hooks); on a blocks file: present while the whole file is still sherpa's seed plus its blocks — apply --remove deletes it then (ADR-0048)"},
           "blocks": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{16}$"}, "description": "block name → hash of the inner text"}
         }
       }

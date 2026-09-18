@@ -537,21 +537,20 @@ def test_status_names_adopt_on_a_foreign_state_schema(active_repo: Path, capsys)
     assert "state has schema_version 2, expected 1" in err and "`sherpa adopt` rebuilds it" in err
 
 
-def test_status_names_adopt_for_a_gone_file_the_plan_no_longer_wants(active_repo: Path, capsys):
-    """Reject an entry, delete its file: apply has nothing to do, and status says how the record goes away."""
+def test_a_gone_file_the_plan_no_longer_wants_loses_its_record(active_repo: Path, capsys):
+    """Reject an entry, delete its file by hand: status names it, apply drops the record (ADR-0048)."""
     applied(active_repo)
     assert main(["plan", str(active_repo), "--no-fetch", "--reject", "agent:pay"]) == 0
     (active_repo / ".claude" / "agents" / "pay.md").unlink()
     capsys.readouterr()
-    assert main(["apply", str(active_repo), "--dry-run"]) == 0
-    assert "nothing to do." in capsys.readouterr().out
     assert main(["status", str(active_repo)]) == 0
-    assert (
-        "  - .claude/agents/pay.md  in the state, not on disk — `sherpa adopt` drops the record"
-        in capsys.readouterr().out
-    )
-    assert main(["adopt", str(active_repo)]) == 0
-    assert "dropped from the state (file gone): .claude/agents/pay.md" in capsys.readouterr().out
+    assert "  - .claude/agents/pay.md  in the state, not on disk — `apply` drops the record" in capsys.readouterr().out
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "  - .claude/agents/pay.md" in out and "already gone — record dropped" in out and "1 to remove." in out
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    assert "0 files written · harness_rev" in capsys.readouterr().out
+    assert ".claude/agents/pay.md" not in state_mod.load(active_repo / state_mod.STATE_PATH).files
     assert main(["status", str(active_repo)]) == 0
     assert "drift: none" in capsys.readouterr().out
 
@@ -667,7 +666,10 @@ def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, ca
     assert (
         "drift: 4 files" in out and "FAIL C4 svc/core/AGENTS.md: link target ../../.agents/docs/modules/core.md" in out
     )
-    assert "  ? .claude/agents/old.md            in the state, no longer in the plan" in out
+    assert (
+        "  ? .claude/agents/old.md            no longer in the plan, changed by hand — `apply` drops the record, the file is yours"
+        in out
+    )
     assert "  - .agents/docs/modules/core.md     in the state, not on disk — apply recreates it" in out
     assert "  ! .claude/hooks/sherpa-outcome.py  hand-edited (skipped)" in out
     assert "  ! .agents/scripts/sherpa-check.py  hand-edited (skipped)" in out

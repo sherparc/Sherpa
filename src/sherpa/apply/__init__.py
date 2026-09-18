@@ -13,6 +13,13 @@ it stays. A file that exists without a state record is never touched (``sherpa a
 nested ``CLAUDE.md``/``AGENTS.md`` get sherpa's block appended; a file the state records as ``adopted`` is never
 touched either (ADR-0007).
 
+Removal (ADR-0048, the ``- destroy`` half of the Terraform model): a state record whose file the plan no longer
+renders — a rejected entry, a unit gone from the trunk — is taken back when the bytes are still sherpa's: a
+managed file whose hash equals the state is deleted, a marked block whose hash equals the state is cut out of its
+file (the file goes too when nothing but sherpa's blocks was in it), sherpa's hook groups leave ``settings.json``.
+A hand-edited file or block stays and its record is dropped — ``yours now``. ``apply --remove`` does the same
+for every generated record at once, base files included: the uninstall. Nothing adopted is ever removed.
+
 Determinism: same plan, model and files → same actions, same bytes; the second run is all ``=``.
 
 The bytes ``write()`` puts down were computed from the preview's read; a file that changed in between (an editor,
@@ -31,23 +38,25 @@ from pathlib import Path
 from sherpa import __version__, atomic
 from sherpa.apply import state as state_mod
 from sherpa.apply.render import HOOK_COMMAND, Renderer, Target
-from sherpa.apply.state import ADOPTED, BLOCKS, JSON_HOOKS, MANAGED, FileRecord, State
+from sherpa.apply.state import ADOPTED, BLOCKS, GENERATED, JSON_HOOKS, MANAGED, FileRecord, State
 from sherpa.check import Finding, block_contents, content_hash
 from sherpa.config import TARGETS
 from sherpa.model import Model
 from sherpa.plan import Plan
 
-NEW, UPDATED, UNCHANGED, SKIPPED = "+", "~", "=", "!"
+NEW, UPDATED, UNCHANGED, SKIPPED, REMOVED = "+", "~", "=", "!", "-"
 
 
 @dataclass(frozen=True)
 class Action:
     target: Target
-    op: str  # + ~ = !
-    detail: str  # human line: "new", "block facts updated", "hand-edited (skipped)", …
+    op: str  # + ~ = ! -
+    detail: str  # human line: "new", "block facts updated", "hand-edited (skipped)", "removed (…)", …
     new: str | None  # bytes to write; None when nothing is written
     old: str | None  # current content for rollback; None = file did not exist
-    record: FileRecord | None  # state after this action; None = keep the previous record
+    record: FileRecord | None  # state after this action; None = keep the previous record (or drop it, see forget)
+    delete: bool = False  # remove the file instead of writing it (ADR-0048); ``old`` restores it on rollback
+    forget: bool = False  # drop the state record — the file is gone or yours now
 
     @property
     def path(self) -> str:
@@ -61,11 +70,12 @@ class Result:
     findings: list[Finding] = field(default_factory=list)  # checker output after the write
     rolled_back: bool = False
     written: int = 0
+    removed: int = 0  # files deleted (ADR-0048)
     error: str | None = None  # the OSError that stopped the write (ADR-0032)
     left: list[str] = field(default_factory=list)  # files the rollback could not restore
 
     def counts(self) -> dict[str, int]:
-        return {op: sum(a.op == op for a in self.actions) for op in (NEW, UPDATED, UNCHANGED, SKIPPED)}
+        return {op: sum(a.op == op for a in self.actions) for op in (NEW, UPDATED, UNCHANGED, SKIPPED, REMOVED)}
 
 
 class StalePlan(ValueError):
@@ -82,6 +92,7 @@ def targets_for(
     *,
     home: str = ".agents",
     targets: tuple[str, ...] = TARGETS,
+    everything: bool = False,
 ) -> list[Target]:
     if plan.model.get("rev") != model.git.trunk.rev:
         raise StalePlan(
@@ -90,11 +101,115 @@ def targets_for(
         )
     if any(e.kind == "outcome" and e.decision == "reject" for e in plan.entries):
         raise ValueError("the outcome entry is rejected — a harness without a signal is not created (ADR-0008)")
+    if everything:  # every entry as if accepted and uncovered: what sherpa *would* render — adopt uses it to
+        # recognise its own rendering of an entry that is no longer selected (ADR-0048, F25)
+        from dataclasses import replace
+
+        plan = replace(plan, entries=[replace(e, decision="accept", covered=None) for e in plan.entries])
     return Renderer(plan, model, version, home=home, targets=targets).targets()
 
 
-def plan_files(targets: list[Target], repo: Path, state: State) -> list[Action]:
-    return [_plan_one(t, _read(repo / t.path), state.files.get(t.path), repo) for t in targets]
+def plan_files(targets: list[Target], repo: Path, state: State, *, remove_all: bool = False) -> list[Action]:
+    """One action per rendered target, then one per generated record the targets no longer cover (ADR-0048):
+    entry-bound files whose entry left the plan; with ``remove_all`` every generated record, base files too."""
+    actions = [_plan_one(t, _read(repo / t.path), state.files.get(t.path), repo) for t in targets]
+    rendered = {t.path for t in targets}
+    for path, rec in sorted(state.files.items()):
+        if path in rendered or rec.origin != GENERATED or (rec.entry is None and not remove_all):
+            continue
+        actions.append(_plan_removal(path, rec, _read(repo / path), repo, "all" if remove_all else "plan"))
+    return actions
+
+
+def _plan_removal(path: str, rec: FileRecord, current: str | None, repo: Path, why: str) -> Action:
+    """Take back sherpa's own unchanged bytes; leave everything else and drop the record (``yours now``)."""
+    t = Target(path, rec.mode, rec.entry)
+    reason = "no longer in the plan" if why == "plan" else "--remove"
+    if current is None:
+        return Action(t, REMOVED, "already gone — record dropped", None, None, None, forget=True)
+    if _through_symlink(repo, path):
+        return Action(t, SKIPPED, THROUGH_SYMLINK, None, current, None)
+    if rec.mode == MANAGED:
+        if content_hash(current) != rec.hash:
+            return Action(t, SKIPPED, "hand-edited — yours now (kept)", None, current, None, forget=True)
+        return Action(t, REMOVED, f"removed ({reason})", None, current, None, delete=True, forget=True)
+    if rec.mode == JSON_HOOKS:
+        return _plan_hooks_removal(t, current, reason)
+    return _plan_blocks_removal(t, rec, current, reason)
+
+
+def _plan_blocks_removal(t: Target, rec: FileRecord, current: str, reason: str) -> Action:
+    if rec.hash is not None and content_hash(current) == rec.hash:  # seeded by sherpa, untouched since
+        return Action(t, REMOVED, f"removed ({reason})", None, current, None, delete=True, forget=True)
+    try:
+        have = block_contents(current)
+    except ValueError as e:
+        return Action(t, SKIPPED, f"markers broken: {e} (skipped)", None, current, None)
+    cut = [n for n, h in rec.blocks.items() if n in have and content_hash(have[n]) == h]
+    kept = [n for n in rec.blocks if n in have and n not in cut]
+    if not cut:
+        detail = "block " + ", ".join(kept) + " hand-edited — yours now (kept)" if kept else "no sherpa block left"
+        return Action(t, SKIPPED, detail, None, current, None, forget=True)
+    rest = _cut_blocks(current, set(cut))
+    if not rest.strip():  # nothing but sherpa's blocks was in the file: it was sherpa's whole
+        return Action(t, REMOVED, f"removed ({reason})", None, current, None, delete=True, forget=True)
+    detail = "block " + ", ".join(cut) + f" removed ({reason})"
+    if kept:
+        detail += "; block " + ", ".join(kept) + " hand-edited — yours now"
+    return Action(t, REMOVED, detail, rest, current, None, forget=True)
+
+
+def _cut_blocks(text: str, names: set[str]) -> str:
+    """Drop the named blocks, markers included, and the one blank line ``apply`` put before an appended block."""
+    from sherpa.check import MARKER
+
+    out: list[str] = []
+    skip = False
+    for line in text.split("\n"):
+        m = MARKER.match(line)
+        if m and m.group(1) == "begin" and m.group(2) in names:
+            skip = True
+            if out and out[-1] == "":
+                out.pop()
+            continue
+        if m and m.group(1) == "end" and skip:
+            skip = False
+            continue
+        if not skip:
+            out.append(line)
+    return "\n".join(out)
+
+
+def _plan_hooks_removal(t: Target, current: str, reason: str) -> Action:
+    """Sherpa's hook groups are the ones that call ``sherpa-outcome.py`` — identified, not hashed: another key
+    edited by hand does not keep sherpa's groups in the file."""
+    try:
+        data = json.loads(current)
+        if not isinstance(data, dict):
+            raise ValueError("top level is not an object")
+    except ValueError as e:
+        return Action(t, SKIPPED, f"not valid JSON: {e} (skipped)", None, current, None)
+    hooks = data.get("hooks") if isinstance(data.get("hooks"), dict) else {}
+    removed = []
+    for event, groups in list(hooks.items()):
+        if not isinstance(groups, list):
+            continue
+        rest = [g for g in groups if not (isinstance(g, dict) and _has_sherpa_hook(g))]
+        if len(rest) != len(groups):
+            removed.append(event)
+        if rest:
+            hooks[event] = rest
+        else:
+            del hooks[event]
+    if not removed:
+        return Action(t, SKIPPED, "no sherpa hook in it — yours now (kept)", None, current, None, forget=True)
+    if not hooks:
+        data.pop("hooks", None)
+    if not data:  # sherpa created the file for its hooks alone
+        return Action(t, REMOVED, f"removed ({reason})", None, current, None, delete=True, forget=True)
+    content = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    detail = "hooks removed: " + ", ".join(removed) + f" ({reason})"
+    return Action(t, REMOVED, detail, content, current, None, forget=True)
 
 
 THROUGH_SYMLINK = "symlink in the path — never written through (skipped)"
@@ -146,8 +261,9 @@ def _plan_managed(t: Target, current: str | None, rec: FileRecord | None) -> Act
 
 def _plan_blocks(t: Target, current: str | None, rec: FileRecord | None) -> Action:
     hashes = {n: content_hash(v) for n, v in t.blocks.items()}
-    if current is None:
-        return Action(t, NEW, "new", t.content, None, FileRecord(BLOCKS, entry=t.entry, blocks=hashes))
+    if current is None:  # seeded whole: the hash says so until a hand touches anything (ADR-0048)
+        rec_new = FileRecord(BLOCKS, entry=t.entry, hash=content_hash(t.content), blocks=hashes)
+        return Action(t, NEW, "new", t.content, None, rec_new)
     try:
         have = block_contents(current)
     except ValueError as e:
@@ -190,10 +306,16 @@ def _plan_blocks(t: Target, current: str | None, rec: FileRecord | None) -> Acti
         if have[name] != inner:
             updated.append(name)
             replace[name] = inner
-    new_rec = FileRecord(BLOCKS, entry=t.entry, blocks=kept)
+    # Still sherpa's seed plus its blocks: the hash from the state says so, or — for a record older than the
+    # hash (before ADR-0048) — the file equals the rendering byte for byte.
+    whole = (rec.hash is not None and content_hash(current) == rec.hash) or current == t.content
     if updated:
+        merged = _replace_blocks(current, replace)
+        whole = whole or merged == t.content
+        new_rec = FileRecord(BLOCKS, entry=t.entry, hash=content_hash(merged) if whole else None, blocks=kept)
         detail = "block " + ", ".join(updated) + " updated" + (f"; {'; '.join(skipped)}" if skipped else "")
-        return Action(t, UPDATED, detail, _replace_blocks(current, replace), current, new_rec)
+        return Action(t, UPDATED, detail, merged, current, new_rec)
+    new_rec = FileRecord(BLOCKS, entry=t.entry, hash=rec.hash if whole else None, blocks=kept)
     if skipped:
         return Action(t, SKIPPED, "; ".join(skipped) + " (skipped)", None, current, new_rec)
     return Action(t, UNCHANGED, "unchanged", None, current, new_rec)
@@ -278,7 +400,7 @@ def _reconcile(a: Action, repo: Path) -> Action:
     ``a.old`` — an editor, a second agent — or a symlink appeared in its path (ADR-0031), writing ``a.new``
     would overwrite somebody's bytes. Skip instead and keep the previous record; the next run plans against
     what is there now."""
-    if a.new is None:
+    if a.new is None and not a.delete:
         return a
     if _through_symlink(repo, a.path) or _read(repo / a.path) != a.old:
         return Action(a.target, SKIPPED, CHANGED_SINCE_PREVIEW, None, a.old, None)
@@ -300,6 +422,43 @@ def _roll_back(written: list[Action], repo: Path) -> list[str]:
     return left
 
 
+def _prune_empty_dirs(repo: Path, deleted: list[str]) -> None:
+    """A directory that held nothing but a removed file goes with it, up to the repo root — git tracks no empty
+    directory, so nothing of the user's is lost."""
+    for rel in deleted:
+        d = (repo / rel).parent
+        while d != repo:
+            try:
+                d.rmdir()  # fails when not empty
+            except OSError:
+                break
+            d = d.parent
+
+
+INDEX_FILES = (
+    ".sherpa/state.json",
+    ".sherpa/harness-plan.yaml",
+    ".sherpa/codebase-model.json",
+    ".sherpa/telemetry/outcomes.ndjson",
+)
+
+
+def uninstall_index(repo: Path) -> tuple[list[str], list[str]]:
+    """After ``apply --remove`` took the harness back: the index files and the telemetry go too, so a clean
+    repository is clean again — ``git status --ignored`` empty (ADR-0048). Returns (removed, left): anything
+    else under ``.sherpa/`` is not sherpa's and stays, named."""
+    removed: list[str] = []
+    for rel in INDEX_FILES:
+        p = repo / rel
+        if p.is_file():
+            p.unlink()
+            removed.append(rel)
+    _prune_empty_dirs(repo, removed)
+    sherpa_dir = repo / ".sherpa"
+    left = [x.relative_to(repo).as_posix() for x in sherpa_dir.rglob("*") if x.is_file()] if sherpa_dir.is_dir() else []
+    return removed, sorted(left)
+
+
 def write(
     actions: list[Action],
     repo: Path,
@@ -315,11 +474,17 @@ def write(
 
     actions = [_reconcile(a, repo) for a in actions]
     ours = {a.path for a in actions if a.new is not None}  # scoped like the check after the write (ADR-0047)
-    before = {f for f in run_check(repo, managed_too=ours) if f.level == FAIL} if check else set()
+    theirs = {a.path for a in actions if a.forget and not a.delete}  # handed back: yours now (ADR-0048)
+    scope = {"managed_too": ours - theirs, "yours_now": theirs}
+    before = {f for f in run_check(repo, **scope) if f.level == FAIL} if check else set()
     written: list[Action] = []
     result = Result(actions, previous)
     try:
         for a in actions:
+            if a.delete:
+                (repo / a.path).unlink()  # ``old`` brings it back on rollback
+                written.append(a)
+                continue
             if a.new is None:
                 continue
             atomic.write_text(repo / a.path, a.new)  # whole or not at all (ADR-0032)
@@ -328,9 +493,11 @@ def write(
         result.error = f"{a.path}: {e}"
         result.rolled_back, result.left = True, _roll_back(written, repo)
         return result
-    result.written = len(written)
+    result.written = sum(not a.delete for a in written)
+    result.removed = sum(a.delete for a in written)
+    _prune_empty_dirs(repo, [a.path for a in written if a.delete])
     if check:
-        result.findings = run_check(repo, managed_too=ours)
+        result.findings = run_check(repo, **scope)
         new_fails = {f for f in result.findings if f.level == FAIL} - before
         if new_fails:
             result.rolled_back, result.left = True, _roll_back(written, repo)
@@ -341,6 +508,8 @@ def write(
     for a in actions:
         if a.record is not None:
             files[a.path] = a.record
+        elif a.forget:
+            files.pop(a.path, None)
     rev = state_mod.harness_rev(files)
     home, targets = home or previous.home, targets or previous.targets
     changed = (
@@ -374,8 +543,9 @@ def render_actions(actions: list[Action], plan: Plan) -> str:
     for a in actions:
         who = " ".join(a.target.entry.split(":")[:2]) if a.target.entry else "harness"
         lines.append(f"  {a.op} {a.path:<{w_path}}  {who:<28}  {a.detail}")
-    c = {op: sum(a.op == op for a in actions) for op in (NEW, UPDATED, UNCHANGED, SKIPPED)}
-    lines.append(f"{c[NEW]} to add, {c[UPDATED]} to change, {c[UNCHANGED]} unchanged, {c[SKIPPED]} skipped.")
+    c = {op: sum(a.op == op for a in actions) for op in (NEW, UPDATED, UNCHANGED, SKIPPED, REMOVED)}
+    tail = f"{c[NEW]} to add, {c[UPDATED]} to change, {c[UNCHANGED]} unchanged, {c[SKIPPED]} skipped"
+    lines.append(tail + (f", {c[REMOVED]} to remove." if c[REMOVED] else "."))
     return "\n".join(lines) + "\n"
 
 
@@ -399,13 +569,16 @@ def render_result(r: Result) -> str:
     lines = [f"check: {n_fail} FAIL, {n_warn} WARN"]
     lines.extend(f"  {f}" for f in r.findings if f.level == FAIL)
     lines.extend(f"  ! {a.path}  {a.detail}" for a in r.actions if a.detail == CHANGED_SINCE_PREVIEW)
-    lines.append(f"{r.written} files written · harness_rev {r.state.harness_rev} → .sherpa/state.json")
+    what = f"{r.written} files written" + (f", {r.removed} removed" if r.removed else "")
+    lines.append(f"{what} · harness_rev {r.state.harness_rev} → .sherpa/state.json")
     return "\n".join(lines) + "\n"
 
 
 __all__ = [
     "CHANGED_SINCE_PREVIEW",
     "HOOK_COMMAND",
+    "INDEX_FILES",
+    "REMOVED",
     "THROUGH_SYMLINK",
     "Action",
     "Result",
@@ -414,5 +587,6 @@ __all__ = [
     "render_actions",
     "render_result",
     "targets_for",
+    "uninstall_index",
     "write",
 ]

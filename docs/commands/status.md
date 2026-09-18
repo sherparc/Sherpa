@@ -27,7 +27,7 @@ $ sherpa status .
 sherpa status — harness_rev c38498363846, applied 2026-09-16T22:07:12Z
 plan: current
 drift: 4 files
-  ? .claude/agents/old.md            in the state, no longer in the plan
+  ? .claude/agents/old.md            no longer in the plan — `apply` removes it
   - .agents/docs/modules/core.md     in the state, not on disk — apply recreates it
   ! .claude/hooks/sherpa-outcome.py  hand-edited (skipped)
   ~ .agents/docs/modules/pay.md      block facts updated
@@ -78,8 +78,8 @@ drift: unknown until the state is rebuilt
 | `+` | a file the plan wants that does not exist yet | `sherpa apply` |
 | `~` | a block or managed file whose content is behind the model (a rescan changed the facts, a new sherpa version) | `sherpa apply` |
 | `!` | a hand-edited block or file, broken markers, or a file sherpa does not manage | nothing — it is yours; `apply` skips it too |
-| `-` | in the state, not on disk | `sherpa apply` recreates it when the plan still wants it; when it does not (a rejected entry, a deleted file) the line says `sherpa adopt` drops the record |
-| `?` | orphan: in the state, no longer in the plan (the entry was rejected or the module disappeared) | delete the file and its state record by hand — Sherpa never deletes |
+| `-` | in the state, not on disk | `sherpa apply` recreates it when the plan still wants it; when it does not (a rejected entry, a deleted file) the line says `apply` drops the record |
+| `?` | no longer in the plan (the entry was rejected or the module disappeared) — the line says what `apply` does: `removes it`, `removes sherpa's blocks from it`, or `drops the record, the file is yours` when it was changed by hand (ADR-0048) | `sherpa apply` |
 
 Files recorded as `origin: adopted` ([`sherpa adopt`](adopt.md)) never appear as drift — a hand edit to them is
 the intended state of affairs; only a deleted one is listed (`-`) until the next `adopt` drops the record. A

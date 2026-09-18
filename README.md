@@ -234,7 +234,7 @@ flowchart LR
 | M3d | retro fruit: stamp without rev, sub-units for single-manifest repos, change coupling with a size cap, `plan --accept/--reject`, capped root index | ✅ |
 | M3e | review fruit: `status` names a stale plan, `status --json` and `doctor --json`, manifest tie-break by language share, coupling without the root catch-all, sub-units for a dominant root module, proximity-file budgets in the checker | ✅ |
 | M3f | write safety: `apply` compares every file with the preview's read before writing, never writes through a symlink, writes each file whole or not at all and rolls back on a write error; `adopt` treats a differing base file as yours, takes a stale plan and rebuilds a torn state without a dead end; a dry run never refuses (two homes → assumes `.agents` and says so) and names a target directory that is a repository of its own | ✅ |
-| M3i | the manager sees what exists: sherpa works with one repository and refuses on a nested one (a harness clone under `.claude/`, a submodule) — `doctor` says it first, a hand-written `covered:` is kept like a decision and ties cover nothing, the checker fails only in sherpa's own files; open: removal of own unchanged bytes, content-only `harness_rev`, dropped decisions named | ◐ |
+| M3i | the manager sees what exists and takes back what is sherpa's: refuses on a nested repository (`doctor` says it first), a hand-written `covered:` is kept like a decision, the checker fails only in sherpa's own files; `apply` removes a rejected entry's files when they are still sherpa's and `apply --remove` uninstalls — a clean repository is clean again | ✅ |
 | M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev` with `n` and the share of `unknown`; a comparison between revisions from 30 labelled executions each | ⏳ |
 | M7a | runtime plugins: Sherpa installable inside Claude Code (plugin) and Hermes (bundle) — `/sherpa-plan` with per-entry approval, `/sherpa-apply`, `/sherpa-status`; thin, the CLI does the work | ⏳ |
@@ -244,7 +244,7 @@ flowchart LR
 | M3b | language adapters `dotnet` + `python` (T2: anchors, patterns) | ⏳ |
 | M7 | librarians, multi-repo | ⏳ |
 
-Order from here: M3i (rest) → M3h → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §10).
+Order from here: M3h → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §10).
 
 Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an ADR: [docs/adr/](docs/adr/README.md)
 
@@ -255,7 +255,7 @@ Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generat
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 407 tests, ~98 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 411 tests, ~98 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 

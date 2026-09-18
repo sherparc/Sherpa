@@ -55,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--yes", "-y", action="store_true", help="write without asking (CI)")
     ap.add_argument("--dry-run", action="store_true", help="only list the files, never ask")
     ap.add_argument("--no-check", action="store_true", help="skip the checker after writing (no rollback)")
+    ap.add_argument("--remove", action="store_true", help="take back what sherpa wrote and nobody changed (ADR-0048)")
 
     st = sub.add_parser("status", help="drift between state and files, checker findings, outcome labels")
     st.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
@@ -267,13 +268,17 @@ def _nested_repositories(repo: Path) -> list[str]:
 def cmd_apply(args: argparse.Namespace) -> int:
     """Dry run always; then ask (or ``--yes``), write, check, roll back on new FAILs, write the state."""
     from sherpa import apply
+    from sherpa.apply.state import ADOPTED
 
     repo = Path(args.repo).resolve()
     plan, model = _load_plan_and_model(repo)
     _refuse_stale(repo, plan)
     state = _load_state(repo)
     home, targets, notes = _resolve_layout(repo, state, ask=not args.yes and not args.dry_run, preview=args.dry_run)
-    actions = apply.plan_files(apply.targets_for(plan, model, home=home, targets=targets), repo, state)
+    if args.remove:  # the uninstall (ADR-0048): render nothing, take back every generated record
+        actions = apply.plan_files([], repo, state, remove_all=True)
+    else:
+        actions = apply.plan_files(apply.targets_for(plan, model, home=home, targets=targets), repo, state)
     sys.stdout.write(f"targets: {', '.join(targets)} · home: {home}\n")
     for note in notes:
         print(note, file=sys.stdout)
@@ -284,7 +289,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
             file=sys.stdout,
         )
     sys.stdout.write(apply.render_actions(actions, plan))
-    if not any(a.new is not None for a in actions):
+    if not any(a.new is not None or a.delete or a.forget for a in actions):
         print("nothing to do.", file=sys.stdout)
         return EXIT_OK
     if args.dry_run:
@@ -299,6 +304,20 @@ def cmd_apply(args: argparse.Namespace) -> int:
             return EXIT_OK
     result = apply.write(actions, repo, state, plan, check=not args.no_check, home=home, targets=targets)
     sys.stdout.write(apply.render_result(result))
+    if args.remove and not result.rolled_back:
+        yours = sorted(a.path for a in result.actions if a.forget and not a.delete and a.new is None and a.old)
+        if yours:
+            print("kept, yours: " + ", ".join(yours), file=sys.stdout)
+        generated = sorted(p for p, r in result.state.files.items() if r.origin != ADOPTED)
+        if not generated:  # nothing of sherpa's left: the index and the telemetry go too
+            removed, left = apply.uninstall_index(repo)
+            adopted = len(result.state.files)
+            tail = f"; {adopted} adopted files stay yours" if adopted else ""
+            print("uninstalled — " + ", ".join(removed) + " removed too" + tail, file=sys.stdout)
+            if left:
+                print("left in .sherpa/, not sherpa's: " + ", ".join(left), file=sys.stdout)
+        else:
+            print("records kept for: " + ", ".join(generated) + " — skipped this run; `apply --remove` again")
     return EXIT_ERROR if result.rolled_back else EXIT_OK
 
 
@@ -350,7 +369,8 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     state, _ = _load_state_or_empty(repo, "adopt")
     home, targets, notes = _resolve_layout(repo, state, ask=not args.dry_run, preview=args.dry_run)
     rendered = apply.targets_for(plan, model, home=home, targets=targets)
-    a = adopt_mod.adopt(repo, plan, rendered, state, home=home, runtime_targets=targets)
+    everything = apply.targets_for(plan, model, home=home, targets=targets, everything=True)
+    a = adopt_mod.adopt(repo, plan, rendered, state, home=home, runtime_targets=targets, deselected=everything)
     sys.stdout.write(adopt_mod.render(a, home=home, targets=targets))
     for note in notes:
         print(note, file=sys.stdout)

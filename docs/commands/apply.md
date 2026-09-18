@@ -28,7 +28,9 @@ sherpa apply [REPO] [--yes | -y] [--dry-run] [--no-check]
 2. Selects the entries: every `default: propose` without `decision: reject`, every `default: skip` with
    `decision: accept`. A rejected `outcome` entry is an error.
 3. Renders the target files from the plan and the model (pure, no clock) and compares them with the files on disk
-   and the state — one action per file: `+ new`, `~ updated`, `= unchanged`, `! skipped`.
+   and the state — one action per file: `+ new`, `~ updated`, `= unchanged`, `! skipped`, and `- removed` for a
+   file the state records but the plan no longer renders — a rejected entry, a unit gone from the trunk — when
+   its bytes are still sherpa's (ADR-0048; a hand-edited one stays, `yours now`).
 4. Prints the list. Stops here with `--dry-run`, or when there is nothing to write, or when there is no terminal
    to ask; otherwise asks `apply? [y/N]` (skipped with `--yes`).
 5. Re-reads every file it is about to write and skips one that changed since the preview — an editor, a second
@@ -36,7 +38,8 @@ sherpa apply [REPO] [--yes | -y] [--dry-run] [--no-check]
    whole or not at all, and a write error half-way rolls back what was written (ADR-0032). Runs the checker
    ([`sherpa check`](check.md)) before and after writing. A write that introduces a **new** FAIL is rolled back
    completely; pre-existing FAILs are reported and do not block.
-6. Writes `.sherpa/state.json` with one record per file, `harness_rev` and `applied_at`.
+6. Writes `.sherpa/state.json` with one record per file, `harness_rev` and `applied_at`; records of removed and
+   handed-back files are dropped. Removed files are restored on a rollback like written ones.
 
 Ownership modes, file contents and the reasoning: [concepts/harness-apply.md](../concepts/harness-apply.md).
 
@@ -48,6 +51,7 @@ Ownership modes, file contents and the reasoning: [concepts/harness-apply.md](..
 | `--yes`, `-y` | ask | write without the question (CI, scripts) |
 | `--dry-run` | ask | list only; never asks, never writes |
 | `--no-check` | check | skip the checker after writing — no rollback. For repositories whose hand-written harness has FAILs you want to fix later; the FAILs are still reported by `sherpa status`. |
+| `--remove` | — | the uninstall (ADR-0048): render nothing, take back every file, block and hook group sherpa wrote and nobody changed — dry run first, then the question or `--yes`. Hand-edited files and blocks stay (`kept, yours: …`), adopted files are never touched. When nothing of sherpa's is left, `.sherpa/state.json`, `harness-plan.yaml`, `codebase-model.json` and the telemetry go too: `git status --ignored` is as it was before the first `apply`. |
 
 `home` and `targets` have no flags: set them in `sherpa.toml [apply]` ([configuration](../reference/configuration.md#apply)) — a layout is a decision, not a per-run option.
 
@@ -188,6 +192,7 @@ The hook command is `sh -c '… python3 "$0" || python "$0"' "$CLAUDE_PROJECT_DI
 | 1 | outcome rejected | `sherpa apply: the outcome entry is rejected — a harness without a signal is not created (ADR-0008)` |
 | 1 | rolled back | `check: N new FAIL — rolled back, nothing written` + findings |
 | 1 | plan file invalid | `sherpa apply: harness-plan.yaml invalid at …` |
+| 0 | `--remove` done | `N files written, M removed · harness_rev …` then `uninstalled — .sherpa/state.json, … removed too` (and `kept, yours: …` for hand-edited files) |
 | 1 | a nested repository in the tree | `sherpa apply: .claude/ is a repository of its own (.claude/.git) — sherpa works with one repository: move the clone out of the tree, or run sherpa in that repository` (ADR-0045) |
 
 ## Determinism

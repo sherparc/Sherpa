@@ -50,7 +50,7 @@ def report(
     stale: tuple[str, str, str] | None = None,
     state_error: str | None = None,
 ) -> Report:
-    from sherpa.apply import NEW, SKIPPED, UPDATED
+    from sherpa.apply import NEW, REMOVED, SKIPPED, UPDATED
 
     r = Report(state.harness_rev or "none", state.applied_at or "never", stale=stale, state_error=state_error)
     targeted = {a.path for a in actions}
@@ -59,7 +59,22 @@ def report(
     for a in actions if not state_error else ():  # drift against an empty index would name every file (ADR-0034)
         if a.path in adopted:
             continue  # yours (ADR-0007): listed below only when gone
-        if a.path in missing:
+        if a.op == REMOVED or a.forget:  # no longer in the plan (ADR-0048): what `apply` does about it
+            if a.path in missing:
+                r.drift.append((MISSING, a.path, "in the state, not on disk — `apply` drops the record"))
+            elif a.delete:
+                r.drift.append((ORPHAN, a.path, "no longer in the plan — `apply` removes it"))
+            elif a.new is not None:
+                r.drift.append((ORPHAN, a.path, "no longer in the plan — `apply` removes sherpa's blocks from it"))
+            else:
+                r.drift.append(
+                    (
+                        ORPHAN,
+                        a.path,
+                        "no longer in the plan, changed by hand — `apply` drops the record, the file is yours",
+                    )
+                )
+        elif a.path in missing:
             r.drift.append((MISSING, a.path, "in the state, not on disk — apply recreates it"))
         elif a.op in (NEW, UPDATED, SKIPPED):
             r.drift.append((a.op, a.path, a.detail))
@@ -67,10 +82,9 @@ def report(
         if path in adopted:
             if path in missing:
                 r.drift.append((MISSING, path, "adopted file is gone — `sherpa adopt` drops the record"))
-        elif path in missing and path not in targeted:
-            r.drift.append((MISSING, path, "in the state, not on disk — `sherpa adopt` drops the record"))
-        elif path not in targeted:
-            r.drift.append((ORPHAN, path, "in the state, no longer in the plan"))
+        elif path not in targeted:  # a base file (no entry) — never an orphan of the plan
+            if path in missing:
+                r.drift.append((MISSING, path, "in the state, not on disk — `sherpa adopt` drops the record"))
     if adopted:
         r.notes.append(f"{len(adopted)} adopted files are yours and never touched (ADR-0007)")
     r.drift.sort(key=lambda d: d[1])
