@@ -1,6 +1,6 @@
 # Sherpa — Plan
 
-> **Created:** 2026-09-16 · **Revised:** 2026-09-18 (revision 20: M3i second slice — `apply` takes its own bytes back and `apply --remove` is the uninstall, `adopt` records its leftovers as sherpa's (ADR-0048); Q26 decided, F24 and F25 closed, the M3i acceptance sharpened to `git status --ignored` unchanged after apply + remove; revision 19: M3i first slice — one repository: a nested repository anywhere in the tree stops `apply` and `adopt` (ADR-0045, supersedes 0037), `covered:` by hand is a decision and only `docs/modules/` links, one file per entry (ADR-0046), the checker fails only in generated files (ADR-0047); Q30 to Q32 decided, §12.4 measured; revision 18: the field test on a grown harness (§12) — a nested harness repository is invisible to `adopt`, hand-named owner docs stay unlinked, the checker fails on files sherpa never wrote, three files per module — F34 to F38, Q30 to Q33; CI definitions found by directory (ADR-0044); revision 17: the manager review (§11) — Sherpa creates and updates but cannot remove: a rejected entry or a vanished unit stays live in the runtime and a state rebuild adopts sherpa's own leftovers as yours, F24 to F33, Q26 to Q29, M3i proposed before M3h; revision 16: F20 to F23 closed — stdlib schema validation on every reader (ADR-0042), NUL-separated git paths (ADR-0038), the coupling denominator in the row (ADR-0039), test runs as command words and the start revision on outcome labels (ADR-0040); the mechanics drawn as Mermaid under `docs/architecture/` (ADR-0041, Q25) and the CI matrix by event (ADR-0043); revision 15: two findings from a first run on a large repository with two homes, F18/F19 — a preview never refuses (assumes `.agents` and says so, ADR-0036) and a target directory that is a repository of its own is named (ADR-0037); revision 14: F17 closed — `self-update` saves the wheel under its PEP 427 name and finds the tag with `git ls-remote` without a token, verified with pip itself, ADR-0035; revision 13: the review's F16 closed — `adopt` no longer refuses a stale plan and `plan`/`status`/`adopt` run on a torn state, ADR-0034, so a broken index plus a moved trunk has a way out; revision 12: an external review of v0.7.0 found the write path overwriting a file that moved between the preview and the confirmation — writing through symlinks, a torn harness after a write error, and `adopt` lifting the hand-edit guard on base files — closed as M3f with compare-and-swap, a symlink guard, atomic writes with rollback and base files as yours, ADR-0030 to 0033, §10.4) · **Author:** Claude (Opus 5) with Andrei
+> **Created:** 2026-09-16 · **Revised:** 2026-09-18 (revision 21: the whole-product review at v0.7.6 (§13) — a nested `AGENTS.md` at a unit's path is not an owner doc to Sherpa, the first-apply count measured at 243 on the 122-module corpus repository, `harness_rev` still moves with the version, F32 carried twice; Q34 to Q38, M3j proposed before M3h; revision 20: M3i second slice — `apply` takes its own bytes back and `apply --remove` is the uninstall, `adopt` records its leftovers as sherpa's (ADR-0048); Q26 decided, F24 and F25 closed, the M3i acceptance sharpened to `git status --ignored` unchanged after apply + remove; revision 19: M3i first slice — one repository: a nested repository anywhere in the tree stops `apply` and `adopt` (ADR-0045, supersedes 0037), `covered:` by hand is a decision and only `docs/modules/` links, one file per entry (ADR-0046), the checker fails only in generated files (ADR-0047); Q30 to Q32 decided, §12.4 measured; revision 18: the field test on a grown harness (§12) — a nested harness repository is invisible to `adopt`, hand-named owner docs stay unlinked, the checker fails on files sherpa never wrote, three files per module — F34 to F38, Q30 to Q33; CI definitions found by directory (ADR-0044); revision 17: the manager review (§11) — Sherpa creates and updates but cannot remove: a rejected entry or a vanished unit stays live in the runtime and a state rebuild adopts sherpa's own leftovers as yours, F24 to F33, Q26 to Q29, M3i proposed before M3h; revision 16: F20 to F23 closed — stdlib schema validation on every reader (ADR-0042), NUL-separated git paths (ADR-0038), the coupling denominator in the row (ADR-0039), test runs as command words and the start revision on outcome labels (ADR-0040); the mechanics drawn as Mermaid under `docs/architecture/` (ADR-0041, Q25) and the CI matrix by event (ADR-0043); revision 15: two findings from a first run on a large repository with two homes, F18/F19 — a preview never refuses (assumes `.agents` and says so, ADR-0036) and a target directory that is a repository of its own is named (ADR-0037); revision 14: F17 closed — `self-update` saves the wheel under its PEP 427 name and finds the tag with `git ls-remote` without a token, verified with pip itself, ADR-0035; revision 13: the review's F16 closed — `adopt` no longer refuses a stale plan and `plan`/`status`/`adopt` run on a torn state, ADR-0034, so a broken index plus a moved trunk has a way out; revision 12: an external review of v0.7.0 found the write path overwriting a file that moved between the preview and the confirmation — writing through symlinks, a torn harness after a write error, and `adopt` lifting the hand-edit guard on base files — closed as M3f with compare-and-swap, a symlink guard, atomic writes with rollback and base files as yours, ADR-0030 to 0033, §10.4) · **Author:** Claude (Opus 5) with Andrei
 > **Status:** v0.7.6 — M0, M1, M1a, M2, M2b, M3a, M3t, M3c, M3d, M3e, M3f, M3i (two slices: see what exists, take back what is sherpa's) done; order from here: M3h → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (§7.3, §9, §10)
 > **Origin of the patterns:** production Claude Code harnesses built and analysed in practice (owner docs, agents with
 > knowledge manifests, librarians, deterministic checkers) plus the industry patterns in §2. Sherpa is a generic
@@ -256,7 +256,7 @@ the status line), one or two sentences per row there, the full reasoning and the
 | M3a ✅ | `apply` with dry-run default, managed blocks, state, **outcome minimum** (hook, labels, `harness_rev`), checker with rollback, `status`, `check` | second run = all `=`, state and tree hash unchanged; hand-edited blocks skipped, other blocks still regenerated; rollback on a new FAIL tested; 213 tests, 98 %; 61 files for a 15k-file monorepo plan in 0.15 s |
 | M3t ✅ | target layer: neutral core under `.agents`/`.claude`, adapters `claude` and `agents-md`, nested proximity files, `[apply]` config, ask when both homes exist | five-module fixture with both targets: 18 files, second run all `=`; existing root and nested `AGENTS.md` get the block appended; a 122-module corpus repo: 243 files in 0.2 s; 222 tests |
 | M3c ✅ | `sherpa adopt` (§2.6) — reads `.claude/`, `.agents/` and AGENTS.md hierarchies; covered entries; rebuildable state (ADR-0017) | existing-harness fixture: 6 files adopted, 0 bytes changed, 2 entries covered, gaps listed; torn state rebuilt with the same `harness_rev`; a 16-module corpus repo with 12 hand-written AGENTS.md: 0.22 s, 32 files rebuilt after a lost state; 230 tests, 98 % |
-| M2b ✅ | distribution + onboarding: `sherpa doctor`, `release.yml` (tag → wheel → GitHub release), `sherpa self-update`, daily update hint (`SHERPA_NO_UPDATE_CHECK`), GitHub Releases as the index (ADR-0018) | `doctor`: nine checks with a fix each, exit 1 only on a fail; `self-update` through the owning installer (uv/pipx/pip), git-tag fallback without a token via `git ls-remote` and the wheel under its PEP 427 name (ADR-0035, F17), clones refused; the hint is a background thread plus cache — zero wait; 282 tests, 98 % |
+| M2b ✅ | distribution + onboarding: `sherpa doctor`, `release.yml` (tag → wheel → GitHub release), `sherpa self-update`, daily update hint (`SHERPA_NO_UPDATE_CHECK`), GitHub Releases as the index (ADR-0018) | `doctor`: nine checks with a fix each (eleven since ADR-0045), exit 1 only on a fail; `self-update` through the owning installer (uv/pipx/pip), git-tag fallback without a token via `git ls-remote` and the wheel under its PEP 427 name (ADR-0035, F17), clones refused; the hint is a background thread plus cache — zero wait; 282 tests, 98 % |
 | M3d ✅ | low-hanging fruit from the retro (§7) plus the two preconditions the review found (§8): stamp without rev (ADR-0019) with legacy-stamp recognition in `adopt` (ADR-0022), model v4 with `sub_dirs` and sub-units by the depth rule (ADR-0020), change coupling with a size cap (ADR-0021), `plan --accept/--reject` by address, root index capped at 20 by rank, privacy note for the hook, session-built fixtures | `test_trunk_move_without_activity_changes_no_block`: two revs, no activity → `nothing to do.`; `test_adopt_recognises_an_older_stamp…`: 0.5.0 bytes → lost state → adopt → apply → `nothing to do.`; Sherpa's own plan lists `src/sherpa/apply`, `plan`, `scan` as units; `test_root_index_is_capped_and_ordered_by_rank`; suite 12 s → 7 s on Linux; 296 tests, 98 % |
 | M3e ✅ | fruit of the whole-product review (§10): `status` names a stale plan and has `--json`, `doctor --json`; two manifests in one directory decided by language share (ADR-0025, closes Q4); coupling without the root catch-all (ADR-0026); the depth rule on a dominant root module (ADR-0027); proximity-file budgets in C7 (ADR-0029); the M5 denominator decided (ADR-0028); the architect agent's stale facts removed | `test_status_reports_a_stale_plan_and_json`; `test_find_modules_two_manifests_the_language_with_more_files_wins`; `test_coupling_excludes_the_root_catch_all`; `test_sub_units_for_a_root_module_only_when_alone_or_dominant`; `test_c7_proximity_file_budgets_in_bytes`; `test_status_names_adopt_on_a_foreign_state_schema`; corpus: the polyglot root is `python` now, coupling rows 21 → 11 and 15 → 13, 9 sub-units on the dominant root, C7 fires on a 9.9 KB nested file; 305 tests, 98 % |
 | M3f ✅ | write safety: `apply` never overwrites a file that changed between the preview and the write — `write()` re-reads and compares with the preview's read, skips with `changed since the preview` and keeps the record, a rollback touches only what was written (ADR-0030); a path with a symlink in it is never written through, in or out of the repository (ADR-0031); every file is written whole or not at all and an `OSError` half-way rolls back what was written (ADR-0032); `adopt` records a differing base file as yours instead of sherpa's by name (ADR-0033, amends 0017 §2; §10.4); `adopt` ignores a stale plan and `plan`, `status`, `adopt` run on a torn state with the way out on stderr — only `apply` refuses both (ADR-0034, F16); a preview (`apply --dry-run`, `adopt --dry-run`, `status`) with two homes and nothing decided assumes `.agents` and says so instead of refusing, a write still asks or refuses (ADR-0036, F18); a home or `.claude/` that is a repository of its own is named with one note, never refused (ADR-0037, F19) | `test_write_skips_a_file_that_changed_since_the_preview` (managed, blocks, hooks; prose outside the markers survives), `test_write_skips_a_file_that_appeared_since_the_preview`, `test_rollback_never_touches_a_file_skipped_since_the_preview`, `test_plan_never_writes_through_a_symlink`, `test_plan_never_writes_through_a_symlink_to_a_sibling`, `test_write_skips_a_path_that_became_a_symlink_since_the_preview`, `test_write_rolls_back_when_a_write_fails_half_way`, `test_write_names_what_a_failed_rollback_left_behind`, `test_write_is_atomic_per_file`, `test_adopt_keeps_hand_edits_in_blocks_and_in_base_files`, `test_adopt_and_plan_run_on_a_torn_state_after_the_trunk_moved`, `test_resolve_layout_preview_assumes_agents_when_both_homes_exist`, `test_cli_dry_run_assumes_a_home_and_the_write_refuses_without_a_terminal`, `test_resolve_layout_names_a_target_directory_that_is_a_repository_of_its_own`, `test_cli_apply_names_a_nested_repository_in_the_dry_run_and_the_write`; 326 tests, 98 % |
@@ -307,7 +307,7 @@ Many tests, small units, everything reproducible:
 | Corpus | real repos under `tests/corpus/` (ignored) | smoke: scan runs through, schema valid, runtime < 60 s; never in CI |
 | Schema | `codebase-model`, `harness-plan`, `harness-state` | JSON Schema under `src/sherpa/schemas/`; validated on every read and write by the stdlib validator `sherpa/schema.py` (ADR-0042); `jsonschema` (dev extra) is the reference the tests compare it with on one input matrix |
 
-Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M3i: 411 tests, 98 %.
+Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` green before every milestone. Status M3i: 411 tests, 97 %.
 The conftest sets `SHERPA_NO_UPDATE_CHECK` and a temporary cache directory for every test, in-process and in
 subprocesses: no test reaches the network.
 
@@ -464,6 +464,30 @@ subprocesses: no test reaches the network.
     default off — and print the file count per kind in the dry run's last line so the team sees `39 owner
     docs · 11 agents · …` before it says yes. Alternative: a `--top N` on `plan` for owner docs — but a
     reasoned no per unit exists already, and a limit hides the reasoning.
+34. **A nested `AGENTS.md` at a unit's path is the owner doc (§13 F39, amends ADR-0046).** The AGENTS.md
+    convention makes the nearest file the one an agent reads; a team that keeps `gateway/AGENTS.md` has its
+    owner doc there. Today `adopt` classes it `nested`, links nothing, and `apply` writes a skeleton
+    `.agents/docs/modules/gateway.md` **and** appends the facts block into `gateway/AGENTS.md` — two owner
+    docs, one empty. Recommendation: a nested `AGENTS.md` whose directory equals a unit's `scope` covers the
+    unit's owner-doc entry by path — exact, no heuristic — `apply` writes the facts block there and no
+    skeleton, `adopt` records the cover. Before M3h: the `hermes` target is `agents-md` plus a root file, and
+    this is `agents-md`'s behaviour on the repositories Hermes users own. With "no": every Hermes repository
+    gets two owner docs per module on day one.
+35. **Q33 now, together with Q34 (§13 F40).** 243 files on the 122-module corpus repository, 229 of them owner-doc
+    files for 77 entries (`docs/modules/x.md` + `x/AGENTS.md` + `x/CLAUDE.md`). Recommendation: as Q33 says —
+    proximity `CLAUDE.md` opt-in, counts per kind on the dry run's last line — decided in the same PR as Q34,
+    they are one table row.
+36. **Q27 before M5 (§13 F41)** — reaffirmed: after `--remove` every repository ends at the same `harness_rev`
+    for one version and another for the next; the first outcome samples must not restart at 0.7.7.
+37. **Q23 with the corpus number (§13 F45).** The busiest corpus repository has 24 215 commits in 90 days; the
+    checked-in plan changes on every merge while the harness does not. Recommendation: split the decisions
+    (and covers) into a small checked-in file and let the full plan join the model as an ignored artefact.
+    With "keep": say so with this number so the question stops reopening.
+38. **Fruit of §13, no decision needed** — F42 dropped decisions named (F32, carried twice), F43 the uninstall's
+    reporting moves from `cli.py` into `apply`, F44 README quick start and the doctor count, F46 one
+    troubleshooting row for `kept, yours` on an older harness, F47 two tests for the untested removal branches
+    and the real coverage number (97 %).
+
 
 Decided (2026-09-17): the `hermes` target and the reordered direction → ADR-0023; runtime plugins from one
 source, thin, no hook in the plugin → ADR-0024; manifest tie-break → ADR-0025; coupling without the root
@@ -786,3 +810,61 @@ reported `check: 0 FAIL, 42 WARN`, `sherpa check` exited 0, `--strict` showed th
 abbreviated names (`kes.md`, `wsh.md`, `fev.md`) stay the team's line in the plan, by design. For this
 repository the way to those numbers is now to keep the harness in the repository itself, or to run Sherpa
 inside the clone.
+
+## 13. Review at v0.7.6 (2026-09-18) — the whole product, after M3i
+
+Method: `architect-review` without a focus (§7 method): the suite with coverage and `ruff`; the four corpus
+repositories through `doctor --offline`, `scan` (timed), `plan`, `apply --dry-run`, `adopt --dry-run` and
+`check`; on the Python repository the full round trip `apply --yes` → `apply --remove --yes` against `git
+status --ignored`; the AGENTS.md specification read for the premise of the `agents-md` target. Ten findings,
+five of them fruit; the decisions as Q34 to Q38.
+
+### 13.1 Gaps
+
+| # | Finding | Evidence | Consequence |
+|---|---|---|---|
+| F39 | **A nested `AGENTS.md` at a unit's path is not an owner doc to Sherpa.** On the corpus repository with 12 nested `AGENTS.md` (13.8k files, 16 modules) `adopt --dry-run` lists all twelve as `· nested no sherpa markers — apply appends its block` and then `22 proposed owner docs without an existing doc`; `apply --dry-run`: `38 to add, 10 to change` — a skeleton under `.agents/docs/modules/` and a facts block appended into the team's file, per module. | `adopt.kind_of` → `nested`; `_link_entry` links only agents and docs under `docs/modules/` (ADR-0046 §3). The AGENTS.md specification: "Agents automatically read the nearest file in the directory tree, so the closest one takes precedence" (agents.md). | The owner principle breaks on the convention M3h targets. Cover by path — a file at the unit's own path is stronger evidence than any name or mention → Q34. |
+| F40 | **First-apply count at scale: 243 files on the 122-module corpus repository**, 229 of them owner-doc files for 77 owner-doc entries; 93 on the 79-module one. | `apply --dry-run` kinds counted: 229 owner-doc, 6 harness, 6 agent, 2 librarian. | Q33 with the number a maintainer of a 20k-file repository sees in the pull request → Q35. |
+| F41 | **`harness_rev` still moves with the Sherpa version** (§11 F26, Q27 open). After `--remove` every repository ends at `c18941ba2b37` for 0.7.6 and at another value for 0.7.7 with byte-identical content. | `state.py` `harness_rev()` hashes `sherpa {version}`. | M5's first samples restart at every release → Q36. |
+| F42 | **F32 is still open and was carried twice**: a decision on a renamed or removed unit is dropped without a line; `merge_decisions` counts kept decisions only, while `merge_covers` (ADR-0046) already names a dropped cover. | `plan/yamlio.py`; M3i's row lists F32 as moved. | With ADR-0048 the silent reactivation now also removes the old rendering and writes the new one. Ten lines, the pattern exists next to it. |
+| F43 | **The uninstall's reporting lives in `cli.py`.** `cmd_apply` decides when the index goes and composes `kept, yours` and `uninstalled —`; `apply.write()` knows nothing of `--remove`. | `cli.py` `cmd_apply` after `apply.write`. | A second entry point (M7a's `/sherpa-apply`) would copy the logic. Move into `apply`: `Result.uninstalled`, `Result.yours`, printed by `render_result`. |
+| F44 | **README and the M2b row say the doctor has nine checks; it has eleven** (ADR-0045). The README quick start has no `adopt`, `check`, `apply --remove` although all three run. | `plan.md` M2b row; `README.md` quick start block. | Invariant 8. |
+| F45 | **Q23 is measurable now**: the busiest corpus repository has 24 215 commits in 90 days (`git rev-list --count --since=90.days`); the checked-in plan changes on every merge. | Q23's own flip criterion. | → Q37. |
+| F46 | **Removal on a harness written before 0.7.6 is conservative and says so only in the ADR**: a blocks file without the whole-file hash loses its blocks and stays as `kept, yours`. | ADR-0048 Consequences; measured on a clone of this repository before the upgrade path existed. | One troubleshooting row in `docs/commands/apply.md`: run `apply` once, then `--remove`. |
+| F47 | **Coverage is 97 %, the plan and README say 98 %**; the 89 uncovered lines include `_prune_empty_dirs`'s OSError branch and `uninstall_index`'s `left` branch — a read-only directory, a stray file in `.sherpa/`. | `pytest --cov=sherpa`: `TOTAL 3467 89 97%`. | Two tests and the real number. |
+| F48 | **Q28 and Q29 open since §11, unchanged.** With ADR-0047 the FAIL exit finally means something; `status --exit-code` on drift would complete the contract (Terraform `-detailed-exitcode`: 0 / 1 / 2). | `render.py` `HOOK_COMMAND`; `status.py` exit rule. | Each under half a day; listed so they are decided, not carried. |
+
+### 13.2 What holds
+
+- Gate: 411 tests in 23 s, coverage 97 %, `ruff check` and `format --check` clean.
+- Determinism: two scans on the 79-module corpus repository → identical `md5sum`.
+- Corpus (54 → 20.6k files; 1 / 79 / 16 / 122 modules): `doctor --offline` ready on all four; scan 0.07 / 0.47 /
+  4.49 / 2.72 s; plan ≤ 0.14 s; `check` 0 FAIL everywhere; ADR-0045 refused nowhere falsely.
+- Idempotence: the second `apply --dry-run` after a write is `nothing to do.`, `status` says `drift: none`.
+- The M3i acceptance on a foreign repository: `apply --yes` 93 files → `apply --remove --yes` `1 files written,
+  92 removed`, index removed → `git status --ignored` byte-identical to before (0 lines before, 0 after).
+- Never overwrite, even where the content is wrong (F39): every existing `AGENTS.md` is appended, none rewritten.
+- Upgrade tolerance without a migration mechanism: plan and state schemas at `const: 1`, `decisions_of` and
+  `covers_of` read the raw dictionary — a bump costs a re-plan and an `adopt`, never a decision.
+- Bloat control: 6 / 6 agents on 79 / 122 modules.
+
+### 13.3 Innovation candidates
+
+1. **Measured facts inside the nearest `AGENTS.md`** (F39 turned around): the specification makes the nearest
+   file the one an agent reads; nobody generates measured facts — dependents, coupling with its denominator,
+   hotspots — into it. Sherpa already writes the block; it only has to stop writing the skeleton beside it.
+   Smallest proof: cover by path on the five-module fixture with a pre-existing `svc/pay/AGENTS.md`, one golden.
+2. **The clean round trip as a CI contract**: `sherpa apply --yes && sherpa apply --remove --yes && git diff
+   --exit-code` — a property no AGENTS.md generator states, let alone tests; one line in `docs/commands/apply.md`.
+3. **Skeleton ratio as the harness health metric** (§11 F29, unbuilt): with F39 fixed it becomes measurable on
+   AGENTS.md-native repositories too — the number M5 can correlate with outcomes.
+
+### 13.4 Proposed next step
+
+One slice **M3j — owner docs where the team already writes them**: Q34 (a nested `AGENTS.md` covers by path),
+Q35/Q33 (kind counts, proximity `CLAUDE.md` opt-in), F42 (dropped decisions named), Q36/Q27 decided in the same
+PR, and the fruit F43, F44, F46, F47. Before M3h, because the `hermes` target is the `agents-md` target plus a
+root file — and F39 is the `agents-md` target's behaviour on the repositories Hermes users own; shipping M3h
+first would demo the skeleton problem to the audience M3h is for. It displaces M3h by one short slice; M5 stays
+after M3h and starts on a stable revision.
+

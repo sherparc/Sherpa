@@ -120,10 +120,13 @@ Straight from the repo, no clone — releases are tags with the wheel `sherpa-ha
 
 ```bash
 uv tool install git+https://github.com/sherparc/Sherpa.git     # or: pipx install …; a tag pins a release: …Sherpa.git@v0.5.0
-sherpa doctor                                                    # Python, git, origin, trunk, runtime, install, update — with a fix each
+sherpa doctor                                                    # Python, git, origin, trunk, runtime, layout, nested repositories, install, update — with a fix each
 sherpa plan /path/to/repo                                        # scans when needed → .sherpa/harness-plan.yaml
 sherpa apply /path/to/repo                                       # dry run, then asks → .claude/**, .sherpa/state.json
+sherpa adopt /path/to/repo                                       # an existing harness enters the state, not a byte changes
 sherpa status /path/to/repo                                      # drift, checks, outcome labels
+sherpa check /path/to/repo                                       # the structural rules alone (also as a deployed copy, no sherpa needed)
+sherpa apply /path/to/repo --remove                              # the uninstall: takes back what sherpa wrote and nobody changed
 sherpa scan /path/to/repo --out -                                # model only, JSON to stdout
 ```
 
@@ -255,7 +258,7 @@ Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generat
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 411 tests, ~98 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 411 tests, ~97 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
