@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
-  "sherpa": "0.7.6",
-  "harness_rev": "0f03531baf6c",
+  "sherpa": "0.7.7",
+  "harness_rev": "359eeea87394",
   "home": ".claude",
   "targets": [
     "claude"
   ],
   "plan": {
     "trunk": "origin/main",
-    "rev": "b1ad43653395513b95c3525c69f5fc5456d4a0bc",
-    "as_of": "2026-09-18T09:19:03Z"
+    "rev": "85ca33d3a7e5c922cc72e0100ac7b31fd7d5d242",
+    "as_of": "2026-09-18T11:04:36Z"
   },
-  "applied_at": "2026-09-18T09:42:04Z",
+  "applied_at": "2026-09-18T11:05:08Z",
   "files": {
     ".claude/agents/architect.md": {
       "mode": "managed",
@@ -32,27 +32,29 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:sherpa-harness:",
+      "hash": "75bb950f11a31de7",
       "blocks": {
-        "facts": "354386fc5c5b16bd"
+        "facts": "dca68f9aff6bf0b5"
       }
     },
     ".claude/docs/modules/src-sherpa-apply.md": {
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
+      "hash": "5a7c4e2d85752dbf",
       "blocks": {
-        "facts": "8cf4143035caf033"
+        "facts": "584046b3f39de034"
       }
     },
     ".claude/hooks/sherpa-outcome.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "37c0f8effd4ab0be"
+      "hash": "f719171bbd33a4b7"
     },
     ".claude/scripts/sherpa-check.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "918dbc2f0ace89ad"
+      "hash": "c74b4715fd9788a5"
     },
     ".claude/settings.json": {
       "mode": "json-hooks",
@@ -73,8 +75,9 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "librarian:sherpa-harness:",
+      "hash": "e00509e1cc9494d8",
       "blocks": {
-        "scope": "e08ef38112bf1f51"
+        "scope": "1608332f79bd2ff8"
       }
     },
     ".claude/skills/sync-kb/SKILL.md": {
@@ -98,8 +101,9 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
+      "hash": "8dafe3d97ca774f4",
       "blocks": {
-        "harness": "7e627b955277585a"
+        "harness": "3f3c26bfb3500bc1"
       }
     }
   }
