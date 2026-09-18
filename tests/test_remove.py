@@ -151,3 +151,28 @@ def test_adopt_records_a_leftover_of_a_deselected_entry_as_sherpas_not_yours(act
     assert "[reject]" in capsys.readouterr().out and "[covered by .claude/agents/pay.md]" not in plan_text
     assert main(["apply", str(active_repo), "--yes"]) == 0
     assert "1 removed" in capsys.readouterr().out and not (active_repo / ".claude" / "agents" / "pay.md").exists()
+
+
+def test_a_crlf_file_keeps_its_line_endings_through_append_and_removal(active_repo: Path, capsys):
+    """ADR-0016 on Windows: sherpa appends its block to a CRLF `CLAUDE.md` and merges hooks into a CRLF
+    `settings.json` without touching a single line ending of theirs — and takes both back byte for byte."""
+    claude_md = active_repo / "CLAUDE.md"
+    settings = active_repo / ".claude" / "settings.json"
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    original = {  # settings.json in the shape sherpa's own dump has: only the line endings are at stake
+        claude_md: b"# Shop\r\n\r\nHand-written.\r\n",
+        settings: (json.dumps({"permissions": {"allow": ["Bash(ls)"]}}, indent=2) + "\n")
+        .replace("\n", "\r\n")
+        .encode(),
+    }
+    for path, raw in original.items():
+        path.write_bytes(raw)
+    applied(active_repo)
+    for path, raw in original.items():
+        text = path.read_bytes()
+        assert text.startswith(raw[:8]) and b"\r\n" in text and b"sherpa" in text
+        assert text.count(b"\n") == text.count(b"\r\n"), f"{path.name}: sherpa introduced a bare LF"
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--remove", "--yes"]) == 0
+    for path, raw in original.items():
+        assert path.read_bytes() == raw, f"{path.name}: not byte-identical after the uninstall"

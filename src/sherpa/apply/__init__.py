@@ -57,6 +57,7 @@ class Action:
     record: FileRecord | None  # state after this action; None = keep the previous record (or drop it, see forget)
     delete: bool = False  # remove the file instead of writing it (ADR-0048); ``old`` restores it on rollback
     forget: bool = False  # drop the state record — the file is gone or yours now
+    crlf: bool = False  # the file on disk had CRLF line endings when it was written or removed — a rollback keeps them
 
     @property
     def path(self) -> str:
@@ -230,6 +231,19 @@ def _read(path: Path) -> str | None:
     if not path.is_file():
         return None
     return path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
+
+
+def _uses_crlf(path: Path) -> bool:
+    """A file that has CRLF line endings on disk keeps them (ADR-0016: sherpa rewrites only its own bytes — the
+    line endings of a file it appends to or cuts from are the user's). Read as bytes: text mode would hide it."""
+    try:
+        return b"\r\n" in path.read_bytes()
+    except OSError:
+        return False
+
+
+def _put(path: Path, text: str, crlf: bool) -> None:
+    atomic.write_text(path, text.replace("\n", "\r\n") if crlf else text)
 
 
 def _plan_one(t: Target, current: str | None, rec: FileRecord | None, repo: Path) -> Action:
@@ -416,7 +430,7 @@ def _roll_back(written: list[Action], repo: Path) -> list[str]:
             if a.old is None:
                 p.unlink(missing_ok=True)
             else:
-                atomic.write_text(p, a.old)
+                _put(p, a.old, a.crlf)
         except OSError:
             left.append(a.path)
     return left
@@ -482,13 +496,15 @@ def write(
     try:
         for a in actions:
             if a.delete:
+                crlf = _uses_crlf(repo / a.path)
                 (repo / a.path).unlink()  # ``old`` brings it back on rollback
-                written.append(a)
+                written.append(Action(a.target, a.op, a.detail, a.new, a.old, a.record, a.delete, a.forget, crlf))
                 continue
             if a.new is None:
                 continue
-            atomic.write_text(repo / a.path, a.new)  # whole or not at all (ADR-0032)
-            written.append(a)
+            crlf = a.old is not None and _uses_crlf(repo / a.path)  # an existing file keeps its line endings
+            _put(repo / a.path, a.new, crlf)  # whole or not at all (ADR-0032)
+            written.append(Action(a.target, a.op, a.detail, a.new, a.old, a.record, a.delete, a.forget, crlf))
     except OSError as e:
         result.error = f"{a.path}: {e}"
         result.rolled_back, result.left = True, _roll_back(written, repo)
