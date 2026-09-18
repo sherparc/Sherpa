@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sherpa.apply import state as state_mod
 from sherpa.cli import main
-from tests.conftest import commit
+from tests.conftest import commit, git
 from tests.test_apply import applied, tree_hash
 
 
@@ -89,8 +89,8 @@ def test_remove_is_the_uninstall_and_leaves_only_what_is_yours(active_repo: Path
     settings = active_repo / ".claude" / "settings.json"
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(json.dumps({"permissions": {"allow": ["Bash(ls)"]}}, indent=2) + "\n", encoding="utf-8")
-    subprocess.run(["git", "add", "CLAUDE.md", ".claude/settings.json"], cwd=active_repo, check=True)
-    subprocess.run(["git", "commit", "-qm", "theirs"], cwd=active_repo, check=True)
+    git(active_repo, "add", "CLAUDE.md", ".claude/settings.json")
+    git(active_repo, "commit", "-qm", "theirs")  # the conftest helper carries a git identity (CI has none)
     clean = _git_status(active_repo)
     applied(active_repo)
     (active_repo / ".sherpa" / "telemetry" / "outcomes.ndjson").write_text('{"kind": "outcome"}\n', encoding="utf-8")
