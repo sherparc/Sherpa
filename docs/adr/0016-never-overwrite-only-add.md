@@ -1,6 +1,6 @@
 # ADR-0016 — In the user's repository Sherpa never overwrites what exists; it only adds
 
-**Status:** accepted · **Amended by:** ADR-0048 (sherpa takes back its own unchanged bytes; the rule stays: never another's) · **Date:** 2026-09-17 · **Decision:** Andrei ("if something exists, Sherpa must never overwrite, only add")
+**Status:** accepted · **Amended by:** ADR-0048 (sherpa takes back its own unchanged bytes; the rule stays: never another's) · **Clarified 2026-09-18:** the line endings of an existing file are the user's bytes — a CRLF file stays CRLF when sherpa appends to, cuts from or restores it · **Date:** 2026-09-17 · **Decision:** Andrei ("if something exists, Sherpa must never overwrite, only add")
 
 ## Context
 ADR-0013 defined ownership by managed files and blocks with hashes in the state. Two paths still rewrote content

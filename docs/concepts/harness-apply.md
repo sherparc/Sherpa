@@ -80,7 +80,9 @@ the sherpa version is not in the blocks — an upgrade must not rewrite every do
 ## Ownership: managed, blocks, json-hooks (ADR-0013) — never overwrite, only add (ADR-0016)
 
 In the user's repository Sherpa creates, appends and merges; it rewrites only bytes it wrote itself and that
-nobody changed since (hash in the state). Everything else is skipped with a reason. The dry run shows exactly
+nobody changed since (hash in the state). Everything else is skipped with a reason. A file sherpa appends to,
+cuts from or restores keeps its line endings: a CRLF `CLAUDE.md` stays CRLF, block and all — hashes are taken
+over normalised text, the bytes on disk are the user's (new files are written with LF). The dry run shows exactly
 what a file's line means:
 
 | Line | Meaning |
@@ -89,7 +91,7 @@ what a file's line means:
 | `~ block facts updated` | file exists, sherpa's block differs from the render — only that block is rewritten |
 | `~ block facts updated; block manifest hand-edited` | one block regenerated, the other left alone |
 | `~ block harness appended` | `CLAUDE.md` existed without markers — the block is appended, nothing else moves |
-| `~ hooks added: Stop, …` | `settings.json` existed — sherpa's entries merged in, everything else kept |
+| `~ hooks added: Stop, …` | `settings.json` existed — sherpa's entries merged in, everything else kept (the JSON is re-serialised with two-space indent) |
 | `= unchanged` | nothing to do (the second run is all `=`) |
 | `! hand-edited (skipped)` | managed file whose hash differs from the state |
 | `! block facts hand-edited (skipped)` | the block's hash differs — the human took it over; the drift stays visible in `status` |
