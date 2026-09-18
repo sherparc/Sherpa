@@ -26,8 +26,10 @@ sherpa adopt [REPO] [--dry-run]
 
 1. **Inventory.** Every file under `.claude/` and `.agents/`, every `CLAUDE.md` and `AGENTS.md` in the tree (root
    and nested), plus sherpa's own files outside the homes (`.sherpa/telemetry/.gitignore`). Git-ignored files
-   (`.claude/settings.local.json`, a private `memory/`) are not the harness and are skipped. Each file gets a
-   **kind** from its path alone — never guessed from its content:
+   (`.claude/settings.local.json`, a private `memory/`) are not the harness and are skipped. A directory in
+   the tree that is a repository of its own — a harness kept in a clone under `.claude/`, a submodule — stops
+   `adopt` before the inventory: sherpa works with one repository (ADR-0045); `--dry-run` prints it as a note
+   and goes on. Each file gets a **kind** from its path alone — never guessed from its content:
 
    | Kind | Path |
    |---|---|
@@ -52,16 +54,23 @@ sherpa adopt [REPO] [--dry-run]
    | is at sherpa's path for a plan entry and differs, no markers | `adopted`, linked to that entry — **covers** it |
    | is a root or nested `CLAUDE.md`/`AGENTS.md` without markers, or `settings.json` without the hook | not recorded — `apply` may still append its block or merge the hook (ADR-0016) |
 
-3. **Link.** An adopted agent or doc elsewhere is linked to a unit of the plan, in this order: the file stem (or
-   the skill directory) equals the unit's slug → *name matches*; the front matter `name` does → *front matter
-   name matches*; otherwise the unit whose repository path the file mentions most often, at least twice and
-   unambiguously (a deeper unit wins over its parent) → *mentions svc/pay 6×*. Anything else: *no unit matches*
-   or *ambiguous: …* — listed, not guessed. A linked agent covers the unit's `agent` entry, a linked doc its
-   `owner-doc` (or `test-infra`) entry.
+3. **Link.** An adopted agent, or a doc under `<home>/docs/modules/` (the owner-doc location — reference pages,
+   archives and reports are never owner docs, ADR-0046), is linked to a unit of the plan, in this order: the
+   entry's own `covered:` names the file → *covered: set in the plan*; the file stem (or the skill directory)
+   equals the unit's slug → *name matches*; the front matter `name` does → *front matter name matches*;
+   otherwise the unit whose repository path the file mentions most often, at least twice and unambiguously (a
+   deeper unit wins over its parent) → *mentions svc/pay 6×*. Anything else: *no unit matches* or *ambiguous: …*
+   — listed, not guessed. A linked agent covers the unit's `agent` entry, a linked doc its `owner-doc` (or
+   `test-infra`) entry — **one file per entry**: the plan's word beats a name match, a name match beats a mention
+   count, and the others are listed as *matches owner-doc pay (…) — yours, another file covers the entry*. Two
+   files that tie (three analysis notes that all mention `src/Shop.Pricing`) cover nothing; the gap names them
+   and the way out: `covered: <path>` on the entry.
 
 4. **Gaps** — what an analysis by hand would find, from the same inventory:
    - an agent over the size budget (150 lines) without a `knowledge` manifest — rotation candidate;
-   - a doc under `docs/` that matches no unit — moved, renamed or not a module doc;
+   - a doc under `docs/modules/` that matches no unit — moved, renamed or not a module doc; if it is the owner
+     doc of a unit, `covered: <path>` on that entry says so;
+   - several files that match one entry equally — none covers it until the entry names one;
    - an agent for a unit the plan proposes none for (below the threshold) — yours, noted;
    - proposed owner docs with no existing doc (`apply` creates them);
    - files of unknown kind.
@@ -83,7 +92,7 @@ sherpa adopt — home .claude · targets claude: 7 harness files
   · CLAUDE.md                       root     no sherpa markers — `apply` appends its block (ADR-0016)
 gaps:
   - .claude/agents/pay-expert.md: 175 lines, no knowledge manifest — rotation candidate, facts belong in an owner doc
-  - .claude/docs/modules/legacy.md: no unit matches by name or path mentions — moved, renamed or not a module doc
+  - .claude/docs/modules/legacy.md: no unit matches by name or path mentions — moved, renamed or not a module doc; if it is the owner doc of a unit, name it on that entry: `covered: <path>`
   - 2 proposed owner docs without an existing doc — `apply` creates them
   - 1 file of unknown kind — recorded as yours, listed above with `?`
 state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 592b1a201d0c → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
@@ -122,14 +131,17 @@ and `--dry-run` assumes `.agents` and says so instead of asking (ADR-0036).
 $ sherpa plan .
   + owner-doc   pay   24 commits/90d, 1 dependents ✓ · 40 files ✓ [covered by .claude/docs/modules/pay.md]
   + agent       pay   rank 1/4 churn ✓ · … [covered by .claude/agents/pay-expert.md]
-→ .sherpa/harness-plan.yaml (2 covered by adopted files)
+→ .sherpa/harness-plan.yaml (2 covered by existing files)
 $ sherpa apply .
 ```
 
 `apply` renders nothing for a covered entry; agents and proximity files of that unit point at the adopted owner
 doc instead of a generated one, and the nested `CLAUDE.md`/`AGENTS.md` still carry the measured facts. To get
 sherpa's version anyway, set `decision: accept` on the covered entry — a second agent for the same unit is a
-decision, never a default. `sherpa status` adds `note: N adopted files are yours and never touched`; a hand edit
+decision, never a default. The link itself is a decision too: `covered: .claude/docs/modules/kes.md` written
+on an entry by hand is kept across re-plans like a decision, honoured by the next `adopt` over its own linking,
+and dropped with a note when the file is gone (ADR-0046). `sherpa status` adds `note: N adopted files are yours
+and never touched`; a hand edit
 to an adopted file is not drift and not a C8 finding; only a deleted one is listed (`-`), and the next `adopt`
 drops its record.
 
@@ -146,15 +158,15 @@ revision from then on.
 
 Home and targets are resolved as for [`sherpa apply`](apply.md) (`sherpa.toml [apply]`, then the state, then
 the repository; a question on a terminal when both homes exist and nothing decides it, an assumed `.agents`
-with a note under `--dry-run`). A home or `.claude/` that is a repository of its own gets the same note as
-under `apply` (ADR-0037).
+with a note under `--dry-run`). A nested repository anywhere in the tree refuses as under `apply`; `--dry-run`
+prints it as a note (ADR-0045).
 
 ## Exit codes
 
 | Exit | When |
 |---|---|
 | 0 | done, including `--dry-run` and "nothing to adopt" (no harness files, no previous state) |
-| 1 | no plan or model (`run sherpa plan first`), both homes and no terminal to ask (never under `--dry-run`) |
+| 1 | no plan or model (`run sherpa plan first`), both homes and no terminal to ask, a nested repository in the tree (ADR-0045) — neither under `--dry-run` |
 
 A stale plan (the trunk moved since `sherpa plan`) is not refused: `adopt` imports what is there against the plan it
 finds, like `terraform import` (ADR-0034); only `apply` insists on a fresh plan. A torn or foreign `state.json` is
@@ -165,7 +177,10 @@ reported on stderr (`… is unreadable (…) — `sherpa adopt` rebuilds it from
 | Symptom | Cause | Fix |
 |---|---|---|
 | An agent shows `no unit matches` although it is about one module | it names neither the unit's slug nor its repository path twice | mention the module path (`src/Shop.Pricing`) in the agent, or rename the file to the slug; re-run `adopt` |
-| `ambiguous: A and B mentioned 3× each` | two units are mentioned equally often | make the file about one unit, or accept the entry in the plan and keep your file as it is |
+| An owner doc named by abbreviation (`kes.md`, `fev.md`) shows `no unit matches` | the name is not the unit's slug and the doc mentions the path fewer than twice | write `covered: .claude/docs/modules/kes.md` on the unit's `owner-doc` entry in `harness-plan.yaml`; `plan` keeps it, `adopt` records it |
+| `3 files match owner-doc pay (…) — none covers it` | analysis notes under `docs/modules/` mention the module as often as its owner doc | `covered: <the owner doc>` on the entry; the notes stay yours |
+| `ambiguous: A and B mentioned 3× each` | two units are mentioned equally often | make the file about one unit, `covered:` on the right entry, or accept the entry in the plan and keep your file as it is |
+| `.claude/ is a repository of its own (.claude/.git) — sherpa works with one repository: move the clone out of the tree, or run sherpa in that repository` | the harness lives in a clone of its own under `.claude/`, or the tree holds a submodule or vendored clone | sherpa works with one repository: move the clone out of the tree, or run sherpa inside it; `--dry-run` prints it as a note and goes on, `status` runs as before |
 | A generated file shows `block facts differs … — stays` after a rebuild | the file was written by an older model or hand-edited; adopt cannot tell the two apart | if it was an old rendering, remove the block's lines between the markers and run `apply` — a missing block is skipped, not re-added; or delete the file and let `apply` recreate it |
 | `a .agents/skills/x/SKILL.md … covers the entry` but you want sherpa's skill | your file sits at sherpa's path | rename yours or set `decision: accept` on the entry |
 | Nothing listed for `.claude/memory/` or `settings.local.json` | git-ignored files are not the harness | nothing — that is the intent |

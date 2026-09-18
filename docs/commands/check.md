@@ -7,9 +7,19 @@ seconds, no LLM — and it runs without sherpa installed, because `apply` deploy
 ## Synopsis
 
 ```
-sherpa check [REPO] [--json]
-python3 .agents/scripts/sherpa-check.py [REPO] [--json]      # the deployed copy (<home>/scripts/)
+sherpa check [REPO] [--json] [--strict]
+python3 .agents/scripts/sherpa-check.py [REPO] [--json] [--strict]      # the deployed copy (<home>/scripts/)
 ```
+
+## Scope
+
+With a state (`.sherpa/state.json`), C1 to C5 are FAIL only in the files sherpa generated (`origin: generated`).
+In every other file under the homes — adopted or unrecorded, yours either way — they are WARN with the suffix
+`(yours)`: a vendored
+skill with a dead link or a refinement note that points at a moved file is worth a line, not a red exit
+(ADR-0047). `--strict` makes them FAIL everywhere; without a state nothing is managed yet and every rule is
+strict. C6 (hook wiring), C7 (budgets) and C8 (drift) do not change. `apply` checks with the files it is about
+to write counted as managed and rolls back only on a **new** FAIL (ADR-0032); `status` shows the same counts.
 
 ## Rules
 
@@ -60,8 +70,8 @@ There is exactly one implementation of the rules (ADR-0013).
 
 | Exit | When |
 |---|---|
-| 0 | no FAIL (warnings allowed) |
-| 1 | at least one FAIL |
+| 0 | no FAIL (warnings allowed — including `(yours)` findings) |
+| 1 | at least one FAIL: in a managed file, or anywhere with `--strict` or without a state |
 
 ## Use in CI
 
@@ -75,7 +85,8 @@ or, with sherpa installed, `sherpa check`. Pair it with `sherpa status` when you
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Dozens of C4 FAILs on an existing harness | genuinely broken relative links (moved files) | fix or remove them; `apply` is not blocked by pre-existing FAILs |
+| Dozens of C4 FAILs on an existing harness before the first `apply` | genuinely broken relative links (moved files); without a state every file is strict | run `apply` or `adopt` once — the state scopes them to WARN `(yours)`; fix the ones you care about; `--strict` lists them all as FAIL again |
+| `WARN C4 … (yours)` | a dead link in a file sherpa did not generate — adopted or not | fix it or leave it; the exit code is not affected |
 | C4 on a link that exists | the link is relative to the *file's directory*, as markdown resolves it — not to the repo root | rewrite the link |
 | C1 on an agent that works | the front matter has `name:` but no `description:` — Claude Code still lists it, but routing needs the description | add one |
 | C6 after moving the repo | absolute paths in hook commands | use `$CLAUDE_PROJECT_DIR`, as sherpa does |

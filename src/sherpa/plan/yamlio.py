@@ -201,16 +201,47 @@ def entry_from_dict(d: dict[str, Any]) -> Entry:
     )
 
 
-def mark_covered(plan: Plan, state: State) -> tuple[Plan, int]:
+def covers_of(data: dict[str, Any]) -> dict[tuple[str, str, str], str]:
+    return {
+        (e["kind"], e["target"], e.get("scope", "")): e["covered"]
+        for e in data.get("entries", [])
+        if isinstance(e.get("covered"), str) and e["covered"]
+    }
+
+
+def merge_covers(plan: Plan, previous: dict[str, Any] | None, repo: Path) -> tuple[Plan, int, list[str]]:
+    """Carry ``covered:`` over from the previous plan — the human's word on which existing file fills an entry
+    (ADR-0046), kept like a decision. A path that no longer exists is dropped and named. Returns (plan, kept,
+    dropped lines)."""
+    if not previous:
+        return plan, 0, []
+    keep = covers_of(previous)
+    entries, n, dropped = [], 0, []
+    for e in plan.entries:
+        path = keep.get(e.key)
+        if path is None:
+            entries.append(e)
+        elif (repo / path).is_file():
+            n += 1
+            entries.append(replace(e, covered=path))
+        else:
+            dropped.append(f"{e.address} was covered by {path}, which no longer exists — dropped")
+            entries.append(e)
+    return replace(plan, entries=entries), n, dropped
+
+
+def mark_covered(plan: Plan, state: State, repo: Path | None = None) -> tuple[Plan, int]:
     """An adopted file linked to an entry covers it (ADR-0007): the plan shows the file, ``apply`` renders nothing
-    for the entry unless a human accepts it explicitly. Recomputed from the state on every plan."""
+    for the entry unless a human accepts it explicitly. From the state on every plan, for entries the plan does
+    not already cover by hand (ADR-0046); a record whose file is gone covers nothing (``status`` names it,
+    ``adopt`` drops it). Returns the plan and the number of covered entries."""
     by_key: dict[str, str] = {}
     for path, rec in sorted(state.files.items()):
-        if rec.origin == ADOPTED and rec.entry:
+        if rec.origin == ADOPTED and rec.entry and (repo is None or (repo / path).is_file()):
             by_key.setdefault(rec.entry, path)
     entries, n = [], 0
     for e in plan.entries:
-        covered = by_key.get(f"{e.kind}:{e.target}:{e.scope}")
+        covered = e.covered or by_key.get(e.address)
         n += covered is not None
         entries.append(replace(e, covered=covered))
     return replace(plan, entries=entries), n

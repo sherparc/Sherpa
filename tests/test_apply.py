@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import replace
@@ -419,6 +420,24 @@ def tree_hash(root: Path) -> str:
 def applied(repo: Path) -> None:
     assert main(["plan", str(repo), "--no-fetch"]) == 0
     assert main(["apply", str(repo), "--yes"]) == 0
+
+
+def test_apply_and_check_treat_foreign_findings_as_hints(active_repo: Path, capsys):
+    """ADR-0047: a dead link in a file sherpa never wrote is a WARN `(yours)` — apply writes, `check` exits
+    0, `--strict` exits 1; a dead link in sherpa's own rendering would still roll back."""
+    (active_repo / ".claude" / "refinements").mkdir(parents=True)
+    (active_repo / ".claude" / "refinements" / "note.md").write_text("[x](../nowhere.md)\n", encoding="utf-8")
+    applied(active_repo)
+    out = capsys.readouterr().out
+    assert "check: 0 FAIL, 1 WARN" in out and "C4" not in out  # apply lists FAILs only
+    assert main(["check", str(active_repo)]) == 0
+    assert "WARN C4 .claude/refinements/note.md: link target ../nowhere.md does not exist (yours)\n" in (
+        capsys.readouterr().out
+    )
+    assert main(["check", str(active_repo), "--strict"]) == 1
+    assert "FAIL C4 .claude/refinements/note.md: link target ../nowhere.md does not exist\n" in capsys.readouterr().out
+    assert main(["status", str(active_repo)]) == 0
+    assert "check: 0 FAIL, 1 WARN" in capsys.readouterr().out
 
 
 def test_apply_is_idempotent_and_deterministic(active_repo: Path, capsys):
@@ -905,29 +924,41 @@ def test_resolve_layout_preview_assumes_agents_when_both_homes_exist(tmp_path: P
     assert _resolve_layout(tmp_path, State(), ask=False, preview=True) == (".claude", ("claude", "agents-md"), [])
 
 
-def test_resolve_layout_names_a_target_directory_that_is_a_repository_of_its_own(tmp_path: Path):
-    """ADR-0037: .claude/ (or the home) with a .git inside is a nested repository — one note per directory."""
+def test_resolve_layout_refuses_a_repository_with_nested_repositories(tmp_path: Path):
+    """ADR-0045: a directory anywhere in the tree with a .git inside — a harness clone under .claude/, a
+    submodule, a vendored clone — means two repositories; sherpa works with one: the write refuses, a preview
+    names them and goes on."""
+    from sherpa import gitinfo
     from sherpa.cli import _resolve_layout
 
+    layout = State(home=".agents", targets=("claude", "agents-md"))
+    assert gitinfo.nested_repositories(tmp_path) == [] and _resolve_layout(tmp_path, layout, ask=False)[2] == []
     (tmp_path / ".claude").mkdir()
     (tmp_path / ".claude" / ".git").mkdir()  # a clone
-    assert _resolve_layout(tmp_path, State(home=".agents", targets=("claude", "agents-md")), ask=False) == (
+    line = (
+        ".claude/ is a repository of its own (.claude/.git) — sherpa works with one repository: move the clone "
+        "out of the tree, or run sherpa in that repository"
+    )
+    with pytest.raises(ValueError, match=re.escape(line)):
+        _resolve_layout(tmp_path, layout, ask=False)
+    assert _resolve_layout(tmp_path, layout, ask=False, preview=True) == (
         ".agents",
         ("claude", "agents-md"),
-        [
-            "note: .claude/ is a repository of its own (.claude/.git) — files written there are not tracked by this repository."
-        ],
+        [f"note: {line} — this preview goes on; `apply` and `adopt` refuse."],
     )
-    # the home itself, as a worktree (.git is a file); .claude named once when it is the home
-    (tmp_path / ".agents").mkdir()
-    (tmp_path / ".agents" / ".git").write_text("gitdir: ../.git/worktrees/agents\n", encoding="utf-8")
-    notes = _resolve_layout(tmp_path, State(home=".agents", targets=("claude", "agents-md")), ask=False)[2]
-    assert [n.split(" is ")[0] for n in notes] == ["note: .agents/", "note: .claude/"]
-    assert len(_resolve_layout(tmp_path, State(home=".claude", targets=("claude",)), ask=False)[2]) == 1
-    # a target without a directory of its own says nothing
-    assert _resolve_layout(tmp_path, State(home=".agents", targets=("agents-md",)), ask=False)[2] == [
-        "note: .agents/ is a repository of its own (.agents/.git) — files written there are not tracked by this repository."
-    ]
+    # a worktree (.git is a file) deep in the tree, a submodule-like directory; node_modules is not walked
+    (tmp_path / "src" / "vendor-lib").mkdir(parents=True)
+    (tmp_path / "src" / "vendor-lib" / ".git").write_text("gitdir: ../../.git/modules/lib\n", encoding="utf-8")
+    (tmp_path / "node_modules" / "pkg" / ".git").mkdir(parents=True)
+    assert gitinfo.nested_repositories(tmp_path) == [".claude", "src/vendor-lib"]
+    notes = _resolve_layout(tmp_path, layout, ask=False, preview=True)[2]
+    assert notes[0].startswith("note: .claude/, src/vendor-lib/ are repositories of their own (.claude/.git)")
+    for i in range(6):
+        (tmp_path / "libs" / f"lib{i}" / ".git").mkdir(parents=True)
+    notes = _resolve_layout(tmp_path, layout, ask=False, preview=True)[2]
+    assert (
+        ".claude/, libs/lib0/, libs/lib1/, libs/lib2/, libs/lib3/ and 3 more are repositories of their own" in notes[0]
+    )
 
 
 def test_cli_dry_run_assumes_a_home_and_the_write_refuses_without_a_terminal(active_repo: Path, capsys):
@@ -949,19 +980,26 @@ def test_cli_dry_run_assumes_a_home_and_the_write_refuses_without_a_terminal(act
     assert not (active_repo / ".agents" / "scripts").exists()
 
 
-def test_cli_apply_names_a_nested_repository_in_the_dry_run_and_the_write(active_repo: Path, capsys):
+def test_cli_apply_and_adopt_refuse_a_nested_repository_and_the_previews_go_on(active_repo: Path, capsys):
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
     (active_repo / ".claude").mkdir()
     (active_repo / ".claude" / ".git").mkdir()
     capsys.readouterr()
     assert main(["apply", str(active_repo), "--dry-run"]) == 0
-    note = "note: .claude/ is a repository of its own (.claude/.git) — files written there are not tracked by this repository."
-    assert note in capsys.readouterr().out
-    assert main(["apply", str(active_repo), "--yes"]) == 0
     out = capsys.readouterr().out
-    assert note in out and (active_repo / ".claude" / "hooks" / "sherpa-outcome.py").is_file()  # a note, not a refusal
+    assert "note: .claude/ is a repository of its own (.claude/.git) — sherpa works with one repository" in out
+    assert "this preview goes on; `apply` and `adopt` refuse." in out and "to add" in out
+    assert main(["apply", str(active_repo), "--yes"]) == 1
+    err = capsys.readouterr().err
+    assert err.startswith(
+        "sherpa apply: .claude/ is a repository of its own (.claude/.git) — sherpa works with one repository"
+    )
+    assert not (active_repo / ".claude" / "hooks").exists()
     assert main(["adopt", str(active_repo), "--dry-run"]) == 0
-    assert note in capsys.readouterr().out
+    assert "note: .claude/ is a repository of its own" in capsys.readouterr().out
+    assert main(["adopt", str(active_repo)]) == 1
+    assert "sherpa adopt: .claude/ is a repository of its own" in capsys.readouterr().err
+    assert main(["status", str(active_repo)]) == 0  # read-only: never refuses
 
 
 def test_existing_nested_agents_md_gets_the_block_appended(active_repo: Path, capsys):

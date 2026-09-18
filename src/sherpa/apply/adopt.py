@@ -215,7 +215,9 @@ def adopt(
     units = {e.target: e.scope for e in plan.entries if e.kind in ("owner-doc", "test-infra")}
     keys = {(e.kind, e.target): f"{e.kind}:{e.target}:{e.scope}" for e in plan.entries}
     proposed_agents = {e.target for e in plan.entries if e.kind == "agent" and e.default == PROPOSE}
+    by_hand = {e.covered: e.address for e in plan.entries if e.covered}  # the plan's word beats the heuristic
     files: dict[str, FileRecord] = {}
+    ranks: dict[str, int] = {}  # linked file → 0 by the plan, 1 by name, 2 by mentions
     a = Adoption(files)
     for f in found:
         prev = previous.files.get(f.path)
@@ -237,11 +239,19 @@ def adopt(
             else:
                 a.adopted += 1
                 a.rows.append((ADOPT, f.path, f.kind, detail))
+                if rec.entry:
+                    ranks[f.path] = 1  # at sherpa's path: as good as a name match
             continue
         if f.kind in ("root", "nested") and not f.markers:
             a.rows.append((UNRECORDED, f.path, f.kind, "no sherpa markers — `apply` appends its block (ADR-0016)"))
             continue
-        entry, detail = _link_entry(f, units, keys)
+        if f.path in by_hand:
+            entry, detail = by_hand[f.path], f"→ {' '.join(by_hand[f.path].split(':')[:2])} (covered: set in the plan)"
+            ranks[f.path] = 0
+        else:
+            entry, detail = _link_entry(f, units, keys)
+            if entry:
+                ranks[f.path] = 1 if "name matches" in detail else 2
         files[f.path] = FileRecord(MANAGED, ADOPTED, entry, content_hash(f.text))
         a.adopted += 1
         a.rows.append((UNKNOWN if f.kind == "unknown" else ADOPT, f.path, f.kind, detail))
@@ -249,6 +259,7 @@ def adopt(
             unit = entry.split(":")[1]
             if unit not in proposed_agents:
                 a.gaps.append(f"{f.path}: agent for `{unit}` — the plan proposes none (below the threshold); yours")
+    _one_cover_per_entry(files, ranks, a)
     a.dropped = sorted(p for p in previous.files if p not in files and not (repo / p).is_file())
     _gaps(a, found, files, plan, {t.path for t in targets if t.mode == MANAGED and t.entry is None}, version)
     a.covered = sum(1 for r in files.values() if r.origin == ADOPTED and r.entry in set(keys.values()))
@@ -307,14 +318,56 @@ def _reconcile(t: Target, f: Found) -> tuple[FileRecord | None, str]:
     return FileRecord(BLOCKS, GENERATED, t.entry, blocks=known), detail
 
 
+def is_owner_doc_location(path: str) -> bool:
+    """Only a doc under ``<home>/docs/modules/`` can be an owner doc (ADR-0046): reference pages, archives and
+    reports mention modules too and were linked as covers before."""
+    parts = path.split("/")
+    return len(parts) == 4 and parts[0] in HOMES and parts[1:3] == ["docs", "modules"]
+
+
 def _link_entry(f: Found, units: dict[str, str], keys: dict[tuple[str, str], str]) -> tuple[str | None, str]:
-    if f.kind not in ("agent", "doc"):
+    if f.kind not in ("agent", "doc") or (f.kind == "doc" and not is_owner_doc_location(f.path)):
         return None, "yours"
     unit, why = link(f, units)
     if unit is None:
         return None, why
     kind = "agent" if f.kind == "agent" else ("test-infra" if ("test-infra", unit) in keys else "owner-doc")
     return f"{kind}:{unit}:{units[unit]}", f"→ {kind} {unit} ({why})"
+
+
+def _one_cover_per_entry(files: dict[str, FileRecord], ranks: dict[str, int], a: Adoption) -> None:
+    """Several linked files for one entry: the plan's own ``covered:`` beats a name match, a name match beats a
+    mention count; equals are a decision the plan must take — none covers, the gap names them (ADR-0046)."""
+    by_entry: dict[str, list[str]] = {}
+    for path, rec in files.items():
+        if rec.origin == ADOPTED and rec.entry and path in ranks:
+            by_entry.setdefault(rec.entry, []).append(path)
+    for entry, paths in sorted(by_entry.items()):
+        if len(paths) < 2:
+            continue
+        best = min(ranks[p] for p in paths)
+        winners = sorted(p for p in paths if ranks[p] == best)
+        losers = [p for p in paths if p not in winners] + (winners if len(winners) > 1 else [])
+        for p in losers:
+            files[p] = FileRecord(MANAGED, ADOPTED, None, files[p].hash)
+        a.rows = [
+            (
+                op,
+                p,
+                k,
+                d.replace("→ ", "matches ", 1)
+                + (" — yours, another file covers the entry" if len(winners) == 1 else " — yours, see gaps"),
+            )
+            if p in losers
+            else (op, p, k, d)
+            for op, p, k, d in a.rows
+        ]
+        if len(winners) > 1:
+            what = " ".join(entry.split(":")[:2])
+            a.gaps.append(
+                f"{len(winners)} files match {what} ({', '.join(winners)}) — none covers it; name the owner doc "
+                "on the entry: `covered: <path>`"
+            )
 
 
 def _gaps(
@@ -327,7 +380,10 @@ def _gaps(
             )
         rec = files.get(f.path)
         if f.kind == "doc" and rec is not None and rec.origin == ADOPTED and rec.entry is None:
-            a.gaps.append(f"{f.path}: no unit matches by name or path mentions — moved, renamed or not a module doc")
+            a.gaps.append(
+                f"{f.path}: no unit matches by name or path mentions — moved, renamed or not a module doc; "
+                "if it is the owner doc of a unit, name it on that entry: `covered: <path>`"
+            )
         if rec is not None and rec.origin == ADOPTED and rec.entry is None and f.path in base_paths:
             a.gaps.append(
                 f"{f.path}: differs from sherpa {version}'s copy — yours; delete it and run `apply` for the current one"
@@ -383,4 +439,14 @@ def render(a: Adoption, *, home: str, targets: tuple[str, ...]) -> str:
     return "\n".join(lines) + "\n"
 
 
-__all__ = ["KINDS", "Adoption", "Found", "adopt", "inventory", "kind_of", "link", "new_state", "render"]
+__all__ = [
+    "KINDS",
+    "Adoption",
+    "Found",
+    "adopt",
+    "inventory",
+    "kind_of",
+    "link",
+    "new_state",
+    "render",
+]

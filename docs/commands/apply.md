@@ -21,9 +21,10 @@ sherpa apply [REPO] [--yes | -y] [--dry-run] [--no-check]
    `.agents/` present → that one; **both present → `apply` asks** (a write refuses without a terminal; a
    `--dry-run` assumes `.agents` and says so, ADR-0036); **neither → `apply` asks, `.agents` is the default**
    (Enter, `--yes`, `--dry-run` or no terminal take it). The first output line says what was resolved:
-   `targets: claude, agents-md · home: .agents`. A home or `.claude/` that is a repository of its own (a
-   `.git` inside — a harness kept in a separate clone) gets one note after that line: files written there are
-   not tracked by this repository (ADR-0037); it is a note, not a refusal.
+   `targets: claude, agents-md · home: .agents`. A directory anywhere in the tree that is a repository of its
+   own (a `.git` inside — a harness kept in a separate clone under `.claude/`, a submodule, a vendored clone)
+   stops the write: sherpa works with one repository (ADR-0045). The dry run prints the same line as a note
+   after the first line and goes on.
 2. Selects the entries: every `default: propose` without `decision: reject`, every `default: skip` with
    `decision: accept`. A rejected `outcome` entry is an error.
 3. Renders the target files from the plan and the model (pure, no clock) and compares them with the files on disk
@@ -133,8 +134,10 @@ the always-part), detail. The detail lines and what each means:
 | `changed since the preview (skipped)` | the file moved between the preview and your `y` — nothing written, run `sherpa apply` again (ADR-0030) |
 | `symlink in the path — never written through (skipped)` | the file or one of its directories is a symlink; sherpa writes only real files (ADR-0031) — `AGENTS.md → CLAUDE.md` is managed as `CLAUDE.md` |
 
-After the write: the checker summary, files skipped since the preview (`! CLAUDE.md  changed since the preview
-(skipped)`), then `N files written · harness_rev <12 hex> → .sherpa/state.json`. On a rollback:
+After the write: the checker summary (C1–C5 count as FAIL only in files sherpa generated — the files of this
+run included; findings in adopted or unrecorded files are WARN `(yours)`, ADR-0047), files skipped since the preview
+(`! CLAUDE.md  changed since the preview (skipped)`), then `N files written · harness_rev <12 hex> →
+.sherpa/state.json`. On a rollback:
 `check: 1 new FAIL — rolled back, nothing written` followed by the findings; on a write error:
 `write failed: .claude/docs/modules/two.md: [Errno 28] No space left on device — rolled back, nothing written`.
 Should the rollback fail too, the line `rollback failed for: <paths> — restore with \`git checkout -- <path>\`
@@ -185,6 +188,7 @@ The hook command is `sh -c '… python3 "$0" || python "$0"' "$CLAUDE_PROJECT_DI
 | 1 | outcome rejected | `sherpa apply: the outcome entry is rejected — a harness without a signal is not created (ADR-0008)` |
 | 1 | rolled back | `check: N new FAIL — rolled back, nothing written` + findings |
 | 1 | plan file invalid | `sherpa apply: harness-plan.yaml invalid at …` |
+| 1 | a nested repository in the tree | `sherpa apply: .claude/ is a repository of its own (.claude/.git) — sherpa works with one repository: move the clone out of the tree, or run sherpa in that repository` (ADR-0045) |
 
 ## Determinism
 
@@ -201,7 +205,7 @@ Proven by `test_apply_is_idempotent_and_deterministic`: the second run is all `=
 | Everything is `! exists, not managed by sherpa` | the repo already has a `.claude/` — those files have no state record | `sherpa adopt` takes them over and marks the entries they cover |
 | `sherpa apply: .sherpa/state.json is unreadable (…)` | a crash left a torn state, or the file is foreign | `sherpa adopt` rebuilds it from the harness files (ADR-0017) |
 | `both .agents/ and .claude/ exist — where should owner docs and skills live?` | two homes, nothing decided, no terminal, `--yes` | set `[apply] home` in `sherpa.toml`, or run `apply` interactively once — the answer is remembered; the dry run assumes `.agents` meanwhile and says so |
-| `note: .claude/ is a repository of its own (.claude/.git) — files written there are not tracked by this repository.` | the harness lives in a separate clone under `.claude/` (or the home) | intended? then nothing — commit the files in that clone; otherwise move the clone away or set `[apply] home`/`targets` so sherpa writes elsewhere |
+| `.claude/ is a repository of its own (.claude/.git) — sherpa works with one repository: move the clone out of the tree, or run sherpa in that repository` | a directory in the tree has a `.git` of its own — a harness clone, a submodule, a vendored clone; sherpa works with one repository (ADR-0045) | move the clone out of the tree (a clone under `.claude/`: keep the harness in this repository, or run sherpa inside the clone); the dry run prints it as a note and goes on, `status` runs as before |
 | No `CLAUDE.md`, no hook after apply | the repo had `AGENTS.md` and no `.claude/`, so only `agents-md` was detected | add `targets = ["claude", "agents-md"]` to `[apply]` |
 | `status` shows `~ block facts updated` right after `apply` | `apply` was run with an older model than the plan | run `sherpa plan` then `sherpa apply` |
 | CLAUDE.md got a block at the very end, below my own sections | intended — sherpa appends, never reorders | move the block; its markers are what matters, not its position |

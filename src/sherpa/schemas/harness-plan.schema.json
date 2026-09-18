@@ -158,7 +158,7 @@
           },
           "covered": {
             "type": "string",
-            "description": "Repo-relative path of an adopted file that already fills this entry (sherpa adopt, ADR-0007); apply renders nothing for it unless decision is accept."
+            "description": "Repo-relative path of an existing file that fills this entry — set by sherpa adopt from the state (ADR-0007) or by hand (ADR-0046, kept across re-plans like a decision; dropped with a note when the file is gone); apply renders nothing for it unless decision is accept."
           },
           "reason": {
             "type": "string",

@@ -190,6 +190,48 @@ def test_c8_drift_against_state(tmp_path: Path):
     ]
 
 
+def test_scope_fails_only_in_files_the_state_records(tmp_path: Path, capsys):
+    """ADR-0047: with a state, C1–C5 FAIL in files sherpa generated and WARN `(yours)` in every other — adopted or not;
+    `--strict` and a repository without a state fail everywhere; C6 and C8 are untouched."""
+    files = {
+        ".claude/docs/modules/mine.md": "# mine\n[gone](../nowhere.md)\n",
+        ".claude/refinements/theirs.md": "# theirs\n[gone](../nowhere.md)\n",
+        ".claude/agents/vendored.md": "no front matter\n",
+    }
+    harness(tmp_path, files)
+    strict = sorted((f.level, f.rule, f.path) for f in check.check(tmp_path))
+    assert strict == [
+        (FAIL, "C1", ".claude/agents/vendored.md"),
+        (FAIL, "C4", ".claude/docs/modules/mine.md"),
+        (FAIL, "C4", ".claude/refinements/theirs.md"),
+    ], "without a state nothing is managed and everything is strict"
+    mine = files[".claude/docs/modules/mine.md"]
+    state = {
+        "files": {
+            ".claude/docs/modules/mine.md": {"mode": "managed", "origin": "generated", "hash": content_hash(mine)},
+            ".claude/refinements/theirs.md": {"mode": "managed", "origin": "adopted", "hash": "x"},  # yours (ADR-0007)
+        }
+    }
+    harness(tmp_path, {".sherpa/state.json": json.dumps(state)})
+    scoped = sorted((f.level, f.rule, f.path, f.message) for f in check.check(tmp_path) if f.rule != "C8")
+    assert scoped == [
+        (FAIL, "C4", ".claude/docs/modules/mine.md", "link target ../nowhere.md does not exist"),
+        (WARN, "C1", ".claude/agents/vendored.md", "no front matter (name, description required) (yours)"),
+        (WARN, "C4", ".claude/refinements/theirs.md", "link target ../nowhere.md does not exist (yours)"),
+    ]
+    assert sorted((f.level, f.rule, f.path) for f in check.check(tmp_path, strict=True)) == strict
+    also = check.check(tmp_path, managed_too={".claude/refinements/theirs.md"})
+    assert [(f.level, f.path) for f in also if f.rule == "C4"] == [
+        (FAIL, ".claude/docs/modules/mine.md"),
+        (FAIL, ".claude/refinements/theirs.md"),
+    ]
+    (tmp_path / ".claude/docs/modules/mine.md").write_text("# mine\n", encoding="utf-8")  # fixed by hand: C8, no FAIL
+    assert check.main([str(tmp_path)]) == 0, "two foreign findings are hints, not a red exit"
+    assert "0 FAIL, 3 WARN" in capsys.readouterr().out
+    assert check.main([str(tmp_path), "--strict"]) == 1
+    assert "2 FAIL, 1 WARN" in capsys.readouterr().out
+
+
 def test_render_and_main(tmp_path: Path, capsys):
     harness(tmp_path, {".claude/agents/a.md": "x\n"})
     assert check.main([str(tmp_path)]) == 1

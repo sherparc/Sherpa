@@ -16,7 +16,7 @@ from sherpa.apply.render import selected
 from sherpa.apply.state import ADOPTED, GENERATED
 from sherpa.cli import main
 from sherpa.plan import yamlio
-from tests.conftest import commit
+from tests.conftest import commit, git
 from tests.test_apply import applied
 from tests.test_apply import tree_hash as _tree_hash
 from tests.test_plan import check_golden
@@ -154,7 +154,7 @@ def test_adopt_takes_over_without_touching_a_byte_and_covers_entries(active_repo
     assert (active_repo / "CLAUDE.md").read_text(encoding="utf-8").startswith("# Shop\n\nHand-written.\n")
     assert tree_hash(active_repo) != before  # apply did add sherpa's own files
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
-    assert "2 covered by adopted files" in capsys.readouterr().out
+    assert "2 covered by existing files" in capsys.readouterr().out
     assert main(["status", str(active_repo)]) == 0
     out = capsys.readouterr().out
     assert "note: 6 adopted files are yours and never touched" in out and "drift: none" in out
@@ -170,6 +170,60 @@ def test_adopt_takes_over_without_touching_a_byte_and_covers_entries(active_repo
     assert "- .claude/agents/ops.md" in capsys.readouterr().out
     assert main(["adopt", str(active_repo)]) == 0
     assert "dropped from the state (file gone): .claude/agents/ops.md" in capsys.readouterr().out
+
+
+def test_adopt_refuses_a_home_that_is_a_repository_of_its_own(active_repo: Path, capsys):
+    """ADR-0045: a `.claude/` that is a clone of its own is not this repository's harness — adopt refuses instead
+    of reading it through the outer repository's ignore rules, which usually exclude the clone whole."""
+    existing_harness(active_repo)
+    git(active_repo / ".claude", "init", "-q")
+    (active_repo / ".git" / "info" / "exclude").write_text(".claude/*\n", encoding="utf-8")
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    assert main(["adopt", str(active_repo)]) == 1
+    err = capsys.readouterr().err
+    assert "sherpa adopt: .claude/ is a repository of its own (.claude/.git) — sherpa works with one repository" in err
+    assert not (active_repo / ".sherpa" / "state.json").exists()
+
+
+def test_a_hand_set_cover_survives_the_replan_and_reaches_the_state(active_repo: Path, capsys):
+    """ADR-0046: `covered:` written by a human — for a doc whose name matches no unit — is kept like a decision,
+    honoured by adopt over its own linking and by apply, and dropped with a note when the file is gone."""
+    existing_harness(active_repo)
+    (active_repo / ".claude/docs/modules/legacy.md").write_text("# legacy\n\nThe owner doc of svc/web.\n", "utf-8")
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    plan_path = active_repo / ".sherpa" / "harness-plan.yaml"
+    text = plan_path.read_text(encoding="utf-8")
+    assert "covered:" not in text and "  target: web\n  scope: svc/web\n" in text
+    plan_path.write_text(
+        text.replace(
+            "  target: web\n  scope: svc/web\n",
+            "  target: web\n  scope: svc/web\n  covered: .claude/docs/modules/legacy.md\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    out = capsys.readouterr().out
+    assert "owner-doc   web" in out and "[covered by .claude/docs/modules/legacy.md]" in out
+    assert "1 covered by existing files" in out
+    assert main(["adopt", str(active_repo)]) == 0
+    out = capsys.readouterr().out
+    assert "a .claude/docs/modules/legacy.md" in out and "→ owner-doc web (covered: set in the plan)" in out
+    assert "legacy.md: no unit matches" not in out
+    state = state_mod.load(active_repo / state_mod.STATE_PATH)
+    assert state.files[".claude/docs/modules/legacy.md"].entry == "owner-doc:web:svc/web"
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    assert "docs/modules/web.md" not in capsys.readouterr().out
+    assert "../../.claude/docs/modules/legacy.md" in (active_repo / "svc/web/CLAUDE.md").read_text(encoding="utf-8")
+    # the file goes: the next plan says so and renders the doc again
+    (active_repo / ".claude/docs/modules/legacy.md").unlink()
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    out = capsys.readouterr().out
+    assert (
+        "owner-doc:web:svc/web was covered by .claude/docs/modules/legacy.md, which no longer exists — dropped" in out
+    )
+    assert "[covered by .claude/docs/modules/legacy.md]" not in out
 
 
 def test_adopt_rebuilds_a_lost_or_torn_state(active_repo: Path, capsys):
@@ -299,7 +353,7 @@ def test_existing_harness_goldens(active_repo: Path, capsys):
     check_golden("active-adopt-console.txt", capsys.readouterr().out)
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
     out = capsys.readouterr().out
-    assert out.endswith("harness-plan.yaml (2 covered by adopted files)\n")
+    assert out.endswith("harness-plan.yaml (2 covered by existing files)\n")
     check_golden("active-plan-covered-console.txt", out[: out.rindex("→ ")])
 
 

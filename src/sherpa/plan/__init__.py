@@ -47,7 +47,7 @@ class Entry:
     cost: str
     reason: str | None = None  # skip only: what is missing + flip criterion
     decision: str | None = None  # set by a human: accept | reject; survives a re-plan
-    covered: str | None = None  # path of an adopted file that already fills this entry (ADR-0007); from the state
+    covered: str | None = None  # existing file that fills this entry: from the state (ADR-0007) or by hand (ADR-0046)
 
     @property
     def key(self) -> tuple[str, str, str]:

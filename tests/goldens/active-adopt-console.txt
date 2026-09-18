@@ -8,7 +8,7 @@ sherpa adopt — home .claude · targets claude: 7 harness files
   · CLAUDE.md                       root     no sherpa markers — `apply` appends its block (ADR-0016)
 gaps:
   - .claude/agents/pay-expert.md: 175 lines, no knowledge manifest — rotation candidate, facts belong in an owner doc
-  - .claude/docs/modules/legacy.md: no unit matches by name or path mentions — moved, renamed or not a module doc
+  - .claude/docs/modules/legacy.md: no unit matches by name or path mentions — moved, renamed or not a module doc; if it is the owner doc of a unit, name it on that entry: `covered: <path>`
   - 2 proposed owner docs without an existing doc — `apply` creates them
   - 1 file of unknown kind — recorded as yours, listed above with `?`
-state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 0c1e6d388fd5 → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
+state: 6 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev b746c44c9315 → .sherpa/state.json · 2 plan entries covered → .sherpa/harness-plan.yaml
