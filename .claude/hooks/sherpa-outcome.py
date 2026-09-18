@@ -36,7 +36,7 @@ import sys
 import time
 from pathlib import Path
 
-SHERPA_VERSION = "0.7.6"  # replaced on deploy
+SHERPA_VERSION = "0.7.7"  # replaced on deploy
 
 # A test run is a test runner as the *command word* of a shell segment, not the word anywhere in the line:
 # `cat pytest.ini`, `pip install pytest` and `grep jest src/` are not test runs (ADR-0040).
