@@ -88,6 +88,7 @@ def _session_repo(name: str, module: str, builder: str):
 
 active_repo_built, active_repo = _session_repo("active_repo", "tests.test_plan", "build_active_repo")
 poly_repo_built, poly_repo = _session_repo("poly_repo", "tests.test_t1_modules", "build_poly_repo")
+root_repo_built, root_repo = _session_repo("root_repo", "tests.test_apply", "build_root_repo")
 
 
 @pytest.fixture

@@ -425,7 +425,9 @@ def _reconcile(a: Action, repo: Path) -> Action:
 
 
 def _roll_back(written: list[Action], repo: Path) -> list[str]:
-    """Restore every written file to ``old`` (or remove it); returns the paths that could not be restored."""
+    """Restore every written file to ``old`` (or remove it); returns the paths that could not be restored.
+    Directories the run created go with their files — an empty ``.agents/`` and ``.claude/`` left behind made
+    the next run ask which home to use, a question the rollback had caused (ADR-0032, amended)."""
     left = []
     for a in written:
         p = repo / a.path
@@ -436,6 +438,7 @@ def _roll_back(written: list[Action], repo: Path) -> list[str]:
                 _put(p, a.old, a.crlf)
         except OSError:
             left.append(a.path)
+    _prune_empty_dirs(repo, [a.path for a in written if a.old is None and a.path not in left])
     return left
 
 

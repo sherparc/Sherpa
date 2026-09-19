@@ -4,19 +4,19 @@
 > copying (owner principle). Keep anchor headings small and stable — links hang on them.
 
 <!-- sherpa:begin facts -->
-## facts (as of 2026-09-18)
+## facts (as of 2026-09-19)
 
 | field | value |
 |---|---|
 | path | `.` |
 | kind | python module (`pyproject.toml`) |
-| files / LOC | 157 / 20032 — 7 files in 1 sub-units, described in their own owner docs |
-| commits 90d / 30d | 35 / 35 · 2 authors |
+| files / LOC | 160 / 20637 — 7 files in 1 sub-units, described in their own owner docs |
+| commits 90d / 30d | 37 / 37 · 2 authors |
 | depends on | — |
 | dependents | — |
 | tested by | — |
 | hotspots | `docs/plan.md`, `tests/test_apply.py`, `README.md` |
-| contains | [src/sherpa/apply](src-sherpa-apply.md) (7 files, 14 commits/90d) |
+| contains | [src/sherpa/apply](src-sherpa-apply.md) (7 files, 15 commits/90d) |
 <!-- sherpa:end facts -->
 
 ## structure

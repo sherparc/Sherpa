@@ -35,7 +35,8 @@ sherpa apply [REPO] [--yes | -y] [--dry-run] [--no-check]
    to ask; otherwise asks `apply? [y/N]` (skipped with `--yes`).
 5. Re-reads every file it is about to write and skips one that changed since the preview — an editor, a second
    agent (ADR-0030); a path with a symlink in it is never written through (ADR-0031). Each file is written
-   whole or not at all, and a write error half-way rolls back what was written (ADR-0032). Runs the checker
+   whole or not at all, and a write error half-way rolls back what was written, directories the run created
+   included (ADR-0032). Runs the checker
    ([`sherpa check`](check.md)) before and after writing. A write that introduces a **new** FAIL is rolled back
    completely; pre-existing FAILs are reported and do not block.
 6. Writes `.sherpa/state.json` with one record per file, `harness_rev` and `applied_at`; records of removed and
