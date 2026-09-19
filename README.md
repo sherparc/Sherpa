@@ -57,7 +57,7 @@ Then `sherpa apply` — dry run first, like `terraform plan` (golden [active-app
 ```console
 $ sherpa apply .
 targets: claude, agents-md · home: .agents
-sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 18 files
+sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 6 selected → 18 files
   + .agents/docs/modules/core.md                          owner-doc core                new
   + .agents/docs/modules/pay.md                           owner-doc pay                 new
   + .agents/docs/modules/suite.md                         test-infra suite              new
@@ -274,7 +274,7 @@ Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an AD
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 439 tests, ~97 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 442 tests, ~97 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 

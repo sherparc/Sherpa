@@ -89,6 +89,15 @@ class Config:
     apply: ApplyConfig = ApplyConfig()
 
 
+def detect_targets(repo: Path) -> tuple[str, ...]:
+    """The runtimes the repository shows (ADR-0015): ``claude`` for ``.claude/`` or ``CLAUDE.md``, ``agents-md`` for
+    ``.agents/`` or ``AGENTS.md``; nothing found → every target. ``sherpa.toml`` and the state beat this."""
+    has_claude = (repo / ".claude").is_dir() or (repo / "CLAUDE.md").is_file()
+    has_agents = (repo / ".agents").is_dir() or (repo / "AGENTS.md").is_file()
+    detected = tuple(t for t, on in (("claude", has_claude), ("agents-md", has_agents)) if on)
+    return detected or tuple(TARGETS)
+
+
 def load(repo: Path) -> Config:
     p = repo / CONFIG_NAME
     if not p.exists():

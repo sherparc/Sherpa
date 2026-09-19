@@ -58,7 +58,7 @@ takes over (ADR-0011: generated code is regenerated, not explained). All thresho
 | `--out PATH` | `REPO/.sherpa/harness-plan.yaml` | write the plan elsewhere; decisions are read from that file too |
 | `--out -` | — | YAML to stdout, console view to stderr |
 | `--accept ADDRESS` | — | set `decision: accept` on one entry; repeatable. `ADDRESS` is `kind:target` or `kind:target:scope` (`agent:pay`, `owner-doc:web:svc/web`) — the same address the state and `status` use |
-| `--reject ADDRESS` | — | set `decision: reject`; repeatable. An unknown address is an error that lists the entries of that kind; a short address that matches two scopes is an error that asks for the scope |
+| `--reject ADDRESS` | — | set `decision: reject`; repeatable. An unknown address is an error that lists the entries of that kind (five at most, `(+N more)`); an address without a kind, or with a kind the plan does not have, names the kinds in the plan; a short address that matches two scopes is an error that asks for the scope |
 
 ## Output
 

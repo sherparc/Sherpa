@@ -83,7 +83,9 @@ drift: unknown until the state is rebuilt
 
 Files recorded as `origin: adopted` ([`sherpa adopt`](adopt.md)) never appear as drift — a hand edit to them is
 the intended state of affairs; only a deleted one is listed (`-`) until the next `adopt` drops the record. A
-note counts them: `note: 6 adopted files are yours and never touched (ADR-0007)`.
+note counts them: `note: 6 adopted files are yours and never touched (ADR-0007)`. When both `.agents/` and
+`.claude/` exist and nothing decides where the core lives, `status` — like every preview — assumes `.agents`
+and says so in a note first (ADR-0036); the drift below it is what `apply` would do under that assumption.
 
 ### Outcomes
 

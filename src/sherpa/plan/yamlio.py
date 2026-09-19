@@ -156,8 +156,13 @@ def decide(plan: Plan, accept: list[str], reject: list[str]) -> tuple[Plan, int]
         else:
             hits = [a for a in by_address if a.startswith(addr + ":")]
         if not hits:
-            near = ", ".join(a for a in by_address if a.split(":")[0] == addr.split(":")[0]) or "none of that kind"
-            raise ValueError(f"--{decision} {addr}: no such entry — entries of that kind: {near}")
+            kind = addr.split(":")[0]
+            same = [a for a in by_address if a.split(":")[0] == kind]
+            if ":" not in addr or not same:
+                kinds = ", ".join(sorted({a.split(":")[0] for a in by_address}))
+                raise ValueError(f"--{decision} {addr}: expected <kind>:<unit> — kinds in this plan: {kinds}")
+            shown = ", ".join(same[:5]) + (f" (+{len(same) - 5} more)" if len(same) > 5 else "")
+            raise ValueError(f"--{decision} {addr}: no such entry — entries of that kind: {shown}")
         if len(hits) > 1:
             raise ValueError(f"--{decision} {addr}: ambiguous — {', '.join(hits)}; give the scope")
         if resolved.get(hits[0], decision) != decision:

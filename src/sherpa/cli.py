@@ -217,8 +217,6 @@ def _resolve_layout(repo: Path, state, *, ask: bool, preview: bool = False) -> t
 
     cfg = config.load(repo).apply
     notes: list[str] = []
-    has_claude = (repo / ".claude").is_dir() or (repo / "CLAUDE.md").is_file()
-    has_agents = (repo / ".agents").is_dir() or (repo / "AGENTS.md").is_file()
     home = cfg.home or state.home
     if not home:
         both = (repo / ".agents").is_dir() and (repo / ".claude").is_dir()
@@ -242,11 +240,7 @@ def _resolve_layout(repo: Path, state, *, ask: bool, preview: bool = False) -> t
             home = ".claude"
         else:
             home = ".agents"  # the cross-tool default, also without a terminal
-    targets = cfg.targets or state.targets
-    if not targets:
-        detected = tuple(t for t, on in (("claude", has_claude), ("agents-md", has_agents)) if on)
-        targets = detected or config.TARGETS
-    targets = tuple(targets)
+    targets = tuple(cfg.targets or state.targets or config.detect_targets(repo))
     nested = _nested_repositories(repo)
     if nested and not preview:
         raise ValueError(nested[0])
@@ -311,6 +305,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
             return EXIT_OK
     result = apply.write(actions, repo, state, plan, check=not args.no_check, home=home, targets=targets)
     sys.stdout.write(apply.render_result(result))
+    if result.rolled_back:  # the one line a CI job watching stderr needs (files-and-exit-codes.md)
+        print(f"sherpa apply: {apply.render_result(result).splitlines()[0]}", file=sys.stderr)
     if args.remove and not result.rolled_back:
         yours = sorted(a.path for a in result.actions if a.forget and not a.delete and a.new is None and a.old)
         if yours:
@@ -355,9 +351,10 @@ def cmd_status(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
     state, state_error = _load_state_or_empty(repo, "status")
     plan, model = _load_plan_and_model(repo)
-    home, targets, _ = _resolve_layout(repo, state, ask=False, preview=True)
+    home, targets, notes = _resolve_layout(repo, state, ask=False, preview=True)
     actions = apply.plan_files(apply.targets_for(plan, model, home=home, targets=targets), repo, state)
     report = status_mod.report(repo, state, actions, stale=_stale(repo, plan), state_error=state_error)
+    report.notes[:0] = [n.removeprefix("note: ") for n in notes]  # the assumed home first (ADR-0036, F56)
     sys.stdout.write(status_mod.render_json(report) if args.json else status_mod.render(report))
     return EXIT_ERROR if report.fails else EXIT_OK
 

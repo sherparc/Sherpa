@@ -387,8 +387,14 @@ def test_decide_by_address_short_and_full_ambiguous_unknown_and_conflict():
     assert yamlio.decide(p, [], []) == (p, 0)
     with pytest.raises(ValueError, match="no such entry — entries of that kind: agent:M00:src/M00"):
         yamlio.decide(p, ["agent:Nope"], [])
-    with pytest.raises(ValueError, match="no such entry — entries of that kind: none of that kind"):
-        yamlio.decide(p, ["eval:M00"], [])
+    with pytest.raises(ValueError, match="eval:M00: expected <kind>:<unit> — kinds in this plan: agent, .*owner-doc"):
+        yamlio.decide(p, ["eval:M00"], [])  # a kind the plan does not have
+    with pytest.raises(ValueError, match="bogus: expected <kind>:<unit> — kinds in this plan: agent"):
+        yamlio.decide(p, ["bogus"], [])  # no kind at all
+    agent = next(e for e in p.entries if e.kind == "agent")
+    many = replace(p, entries=p.entries + [replace(agent, target=f"X{i}", scope=f"src/X{i}") for i in range(7)])
+    with pytest.raises(ValueError, match=r"entries of that kind: .*\(\+\d+ more\)$"):
+        yamlio.decide(many, ["agent:Nope"], [])  # the list is capped at five
     with pytest.raises(ValueError, match="both --accept and --reject"):
         yamlio.decide(p, ["agent:M00"], ["agent:M00"])
     # two entries of one kind and target in different scopes: the short address is ambiguous

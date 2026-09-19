@@ -22,3 +22,18 @@ def test_generated_globs_extend_defaults(tmp_path: Path):
 def test_unknown_sections_ignored(tmp_path: Path):
     (tmp_path / "sherpa.toml").write_text('[llm]\nprovider = "openai"\n[scan]\nhotspots = 5\n')
     assert load(tmp_path).scan.hotspots == 5
+
+
+def test_detect_targets_from_the_repository(tmp_path: Path):
+    """ADR-0015: `.claude/` or `CLAUDE.md` → claude, `.agents/` or `AGENTS.md` → agents-md, nothing → every target;
+    one rule, shared by `apply` and `doctor`."""
+    from sherpa.config import TARGETS, detect_targets
+
+    assert detect_targets(tmp_path) == tuple(TARGETS)
+    (tmp_path / "AGENTS.md").write_text("# x\n", encoding="utf-8")
+    assert detect_targets(tmp_path) == ("agents-md",)
+    (tmp_path / "CLAUDE.md").write_text("# x\n", encoding="utf-8")
+    assert detect_targets(tmp_path) == ("claude", "agents-md")
+    (tmp_path / "AGENTS.md").unlink()
+    (tmp_path / ".agents").mkdir()
+    assert detect_targets(tmp_path) == ("claude", "agents-md")
