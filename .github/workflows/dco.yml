@@ -1,0 +1,29 @@
+# DCO: every commit of a pull request carries a `Signed-off-by:` line (CONTRIBUTING.md, ADR-0052). Its own
+# workflow so it runs on docs-only pull requests too, which `ci.yml` skips; no third-party app, no token beyond
+# the job's own. Merge commits are skipped — GitHub writes them, not the contributor.
+name: dco
+
+on:
+  pull_request:
+
+permissions:
+  pull-requests: read
+
+jobs:
+  dco:
+    name: signed-off commits
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: every commit is signed off
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          missing=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${{ github.event.pull_request.number }}/commits" \
+            --jq '.[] | select((.parents | length) < 2) | select(.commit.message | split("\n") | any(test("^Signed-off-by: .+ <.+@.+>$")) | not) | .sha[0:10]')
+          if [ -n "$missing" ]; then
+            echo "commits without a Signed-off-by line: $missing"
+            echo "sign them with 'git commit -s --amend' or 'git rebase --signoff main' (CONTRIBUTING.md)"
+            exit 1
+          fi
+          echo "every commit is signed off"

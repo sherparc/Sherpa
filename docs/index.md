@@ -62,3 +62,5 @@ One page per command: synopsis, every option, inputs and outputs, exit codes, re
 
 - [Plan and roadmap](plan.md) — architecture, milestones, open questions, what is deliberately not built.
 - [Architecture decision records](adr/README.md) — one file per decision; what has no ADR is not decided.
+- [Contributing](../CONTRIBUTING.md) — DCO sign-off, the rules CI and the reviewer enforce, the workflow;
+  [security policy](../SECURITY.md) for reports that must not be public; [code of conduct](../CODE_OF_CONDUCT.md).
