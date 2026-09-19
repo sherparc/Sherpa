@@ -332,6 +332,9 @@ def _plan_blocks(t: Target, current: str | None, rec: FileRecord | None) -> Acti
     new_rec = FileRecord(BLOCKS, entry=t.entry, hash=rec.hash if whole else None, blocks=kept)
     if skipped:
         return Action(t, SKIPPED, "; ".join(skipped) + " (skipped)", None, current, new_rec)
+    if whole and current != t.content:  # sherpa's whole with an older seed outside the blocks (ADR-0022)
+        new_rec = FileRecord(BLOCKS, entry=t.entry, hash=content_hash(t.content), blocks=hashes)
+        return Action(t, UPDATED, "seed refreshed", t.content, current, new_rec)
     return Action(t, UNCHANGED, "unchanged", None, current, new_rec)
 
 

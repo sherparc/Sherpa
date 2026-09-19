@@ -55,16 +55,25 @@ class Target:
     append: bool = False  # blocks: when the file exists without our markers, append them (CLAUDE.md)
 
 
-# Older stamp formats, newest first: what ``adopt`` recognises as sherpa's own rendering when it rebuilds a state
-# for a harness written by an earlier version (ADR-0019, ADR-0022). Each pattern rewrites to the current form.
-LEGACY_STAMPS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"origin/[^\s,()]+@[0-9a-f]{7,40}, as of (\d{4}-\d{2}-\d{2})"), r"as of \1"),  # ≤ 0.5.0
+# Older renderings, newest first: what ``adopt`` recognises as sherpa's own when it rebuilds a state for a harness
+# written by an earlier version (ADR-0019, ADR-0022). Each pattern rewrites to the current form — stamps inside
+# the blocks, and prose sherpa seeded outside them (a seed change would otherwise leave every older agent file
+# "not sherpa's whole", and ``apply --remove`` would cut its blocks and leave the rest behind, ADR-0048).
+LEGACY_FORMS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"origin/[^\s,()]+@[0-9a-f]{7,40}, as of (\d{4}-\d{2}-\d{2})"), r"as of \1"),  # stamp ≤ 0.5.0
+    (  # agent Role line ≤ 0.7.7: named the owner doc by path outside the markers (ADR-0049)
+        re.compile(
+            r"(> Role: expert for `[^`\n]+` \(`[^`\n]+`\)\. Facts do NOT live in this file — they live) in\n"
+            r"> (?:\[[^\]\n]+\]\([^)\n]+\)|the owner doc); cite from there instead of from memory\."
+        ),
+        r"\1\n> in the owner doc named in the knowledge manifest; cite from there instead of from memory.",
+    ),
 )
 
 
-def modernize_stamp(text: str) -> str:
-    """``text`` with every older stamp rewritten to the current format; unchanged when none is present."""
-    for pattern, repl in LEGACY_STAMPS:
+def modernize(text: str) -> str:
+    """``text`` with every older stamp or seed rewritten to the current form; unchanged when none is present."""
+    for pattern, repl in LEGACY_FORMS:
         text = pattern.sub(repl, text)
     return text
 
@@ -252,9 +261,10 @@ class Renderer:
     def nested_claude_md(self, e: Entry) -> Target:
         """Claude Code loads a subdirectory's CLAUDE.md when it works there — the same proximity AGENTS.md has.
         With the agents-md target on, the file imports its sibling instead of repeating the facts."""
-        inner = "@AGENTS.md" if "agents-md" in self.runtime_targets else self.proximity_block(e)
+        path = f"{e.scope}/CLAUDE.md"
+        inner = "@AGENTS.md" if "agents-md" in self.runtime_targets else self.proximity_block(e, path)
         block = html_block("harness", inner)
-        return Target(f"{e.scope}/CLAUDE.md", BLOCKS, entry_key(e), f"{block}\n", {"harness": inner}, append=True)
+        return Target(path, BLOCKS, entry_key(e), f"{block}\n", {"harness": inner}, append=True)
 
     def skill_description(self, e: Entry) -> str:
         if e.kind == "librarian":
@@ -315,18 +325,20 @@ class Renderer:
                     f"`{self.home}/docs/modules/`"
                 )
         for e in root_units:
-            lines += ["", self.proximity_block(e)]
+            lines += ["", self.proximity_block(e, "AGENTS.md")]
         out = [self.root_file("AGENTS.md", "\n".join(lines))]
         for e in nested:
-            inner = self.proximity_block(e)
+            path = f"{e.scope}/AGENTS.md"
+            inner = self.proximity_block(e, path)
             block = html_block("facts", inner)
-            out.append(
-                Target(f"{e.scope}/AGENTS.md", BLOCKS, entry_key(e), f"{block}\n", {"facts": inner}, append=True)
-            )
+            out.append(Target(path, BLOCKS, entry_key(e), f"{block}\n", {"facts": inner}, append=True))
         return out
 
-    def proximity_block(self, e: Entry) -> str:
-        """Short facts for the runtime that lands in this directory — the owner doc stays the place for detail."""
+    def proximity_block(self, e: Entry, for_path: str) -> str:
+        """Short facts for the runtime that lands in this directory — the owner doc stays the place for detail.
+        ``for_path`` is the file the block lands in: when the unit's owner doc is that very file (a nested
+        AGENTS.md covering its entry by path, ADR-0049), the pointer to it would point at itself and is dropped.
+        Required, not defaulted — an adapter that forgot it would render the self-pointer back in."""
         u = self.unit(e)
         doc = self.docs.get(e.target)
         what = "test infrastructure" if e.kind == "test-infra" else "module"
@@ -350,7 +362,7 @@ class Renderer:
         if gens:
             rows.append(("generated code", ", ".join(f"{fam} → `{p}` (never edit the output)" for fam, p in gens)))
         lines = [f"## {e.target} (managed by sherpa, {self.stamp})", "", _table(rows), ""]
-        if doc:
+        if doc and doc != for_path:
             lines.append(
                 f"Read the owner doc [{doc}]({_relpath(e.scope, doc)}) before answering questions about this unit; "
                 "facts live there, not here."
@@ -511,17 +523,15 @@ class Renderer:
         u = self.unit(e)
         name = self.slugs[entry_key(e)]
         doc_rel = _relpath(AGENTS, doc) if doc else None
-        doc_text = doc
         always = [_relpath(CLAUDE, doc)] if doc else []
         on_demand = [_relpath(CLAUDE, p) for _, p in self.generator_skills(e)]
         knowledge = "\n".join(["knowledge:", *_yaml_list("always", always), *_yaml_list("on_demand", on_demand)])
         deps = u.dependents if isinstance(u, ModuleStat) else []
-        doc_link = f"[{doc_text}]({doc_rel})" if doc_rel else "the owner doc"
         manifest = "\n".join(
             [
                 "## Knowledge manifest",
                 "",
-                f"Read first: {doc_link if doc_rel else 'the owner doc, once the plan has one'}.",
+                f"Read first: {f'[{doc}]({doc_rel})' if doc_rel else 'the owner doc, once the plan has one'}.",
                 f"Dependents that see your changes: {_list(deps, 'none in the repo')}.",
                 f"Scope: `{e.scope or '.'}` ({self.stamp}).",
             ]
@@ -540,8 +550,8 @@ class Renderer:
                 "",
                 f"# {e.target} — agent",
                 "",
-                f"> Role: expert for `{e.target}` (`{e.scope or '.'}`). Facts do NOT live in this file — they live in",
-                f"> {doc_link}; cite from there instead of from memory.",
+                f"> Role: expert for `{e.target}` (`{e.scope or '.'}`). Facts do NOT live in this file — they live",
+                "> in the owner doc named in the knowledge manifest; cite from there instead of from memory.",
                 "",
                 html_block("manifest", manifest),
                 "",
@@ -567,13 +577,12 @@ class Renderer:
         c30 = u.commits_30d if u else e.evidence.get("commits_30d", 0)
         cadence = "weekly" if int(c30) >= 30 else "every two weeks"
         doc_rel = _relpath(self.librarian_path(e).rsplit("/", 1)[0], doc) if doc else None
-        doc_text = doc
         scope = "\n".join(
             [
                 "## Scope",
                 "",
                 f"- pathspec: `{e.scope or '.'}` — {c30} commits/30d, suggested cadence: {cadence}",
-                f"- owner doc: {f'[{doc_text}]({doc_rel})' if doc_rel else 'none in the plan yet'}",
+                f"- owner doc: {f'[{doc}]({doc_rel})' if doc_rel else 'none in the plan yet'}",
                 "- the facts block in the owner doc is regenerated by `sherpa apply` — never edit it by hand",
                 f"- scanned: {self.stamp}",
             ]

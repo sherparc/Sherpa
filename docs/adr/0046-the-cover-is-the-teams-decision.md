@@ -1,7 +1,7 @@
 # ADR-0046 — Which existing file covers a plan entry is the team's decision; the heuristic proposes, never overrides
 
 **Status:** accepted · **Date:** 2026-09-17 · **Deciders:** Andrei · **Amends:** ADR-0007 (`covered:` came from
-the state only)
+the state only) · **Amended by:** ADR-0049 (the unit's own nested `AGENTS.md` covers by path)
 
 ## Context
 

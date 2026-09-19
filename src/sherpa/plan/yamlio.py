@@ -230,18 +230,24 @@ def merge_covers(plan: Plan, previous: dict[str, Any] | None, repo: Path) -> tup
     return replace(plan, entries=entries), n, dropped
 
 
-def mark_covered(plan: Plan, state: State, repo: Path | None = None) -> tuple[Plan, int]:
+def mark_covered(
+    plan: Plan, state: State, repo: Path | None = None, by_path: dict[str, str] | None = None
+) -> tuple[Plan, int]:
     """An adopted file linked to an entry covers it (ADR-0007): the plan shows the file, ``apply`` renders nothing
-    for the entry unless a human accepts it explicitly. From the state on every plan, for entries the plan does
-    not already cover by hand (ADR-0046); a record whose file is gone covers nothing (``status`` names it,
-    ``adopt`` drops it). Returns the plan and the number of covered entries."""
+    for the entry unless a human accepts it explicitly. One precedence, in one place: the plan's own word (a
+    hand-written ``covered:``, ADR-0046) · the unit's own ``AGENTS.md`` (``by_path``, entry address → path,
+    ADR-0049; written like a hand-written one, so ``merge_covers`` keeps it) · the state's link, for entries
+    without a decision. A record whose file is gone covers nothing (``status`` names it, ``adopt`` drops it).
+    Returns the plan and the number of covered entries."""
     by_key: dict[str, str] = {}
     for path, rec in sorted(state.files.items()):
         if rec.origin == ADOPTED and rec.entry and (repo is None or (repo / path).is_file()):
             by_key.setdefault(rec.entry, path)
     entries, n = [], 0
     for e in plan.entries:
-        covered = e.covered or (by_key.get(e.address) if e.decision is None else None)  # a decision stands alone
+        covered = e.covered or (by_path or {}).get(e.address)
+        if covered is None and e.decision is None:  # a decision stands alone
+            covered = by_key.get(e.address)
         n += covered is not None
         entries.append(replace(e, covered=covered))
     return replace(plan, entries=entries), n

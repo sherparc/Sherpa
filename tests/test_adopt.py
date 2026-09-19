@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from dataclasses import replace
 from pathlib import Path
@@ -11,11 +12,11 @@ import pytest
 
 from sherpa import __version__, atomic
 from sherpa.apply import state as state_mod
-from sherpa.apply.adopt import Found, kind_of, link
+from sherpa.apply.adopt import Found, covers_by_path, kind_of, link, own_prose
 from sherpa.apply.render import selected
 from sherpa.apply.state import ADOPTED, GENERATED
 from sherpa.cli import main
-from sherpa.plan import yamlio
+from sherpa.plan import PROPOSE, Entry, Plan, yamlio
 from tests.conftest import commit, git
 from tests.test_apply import applied
 from tests.test_apply import tree_hash as _tree_hash
@@ -381,3 +382,282 @@ def test_adopt_and_plan_run_on_a_torn_state_after_the_trunk_moved(active_repo: P
     assert "`sherpa adopt` rebuilds it" in capsys.readouterr().err
     assert main(["adopt", str(active_repo)]) == 0
     assert main(["apply", str(active_repo), "--yes"]) == 0
+
+
+# ---------------------------------------------------------------- ADR-0049: a nested AGENTS.md covers by path
+
+
+def _entry(kind: str, target: str, scope: str, **kw) -> Entry:
+    return Entry(kind, target, scope, PROPOSE, {}, (), "", **kw)
+
+
+def test_covers_by_path_only_a_hand_written_nested_agents_md():
+    """The exact-match rule: the unit's own AGENTS.md, hand-written (no sherpa markers), nothing decided yet."""
+    plan = Plan(
+        "r",
+        {},
+        {},
+        {},
+        [
+            _entry("owner-doc", "pay", "svc/pay"),
+            _entry("owner-doc", "rootmod", ""),
+            _entry("test-infra", "suite", "tests/suite"),
+            _entry("owner-doc", "decided", "svc/decided", decision="accept"),
+            _entry("owner-doc", "hand", "svc/hand", covered="docs/own.md"),
+            _entry("owner-doc", "managed", "svc/managed"),
+            _entry("owner-doc", "again", "svc/again", covered="svc/again/AGENTS.md"),
+            _entry("owner-doc", "applied", "svc/applied", covered="svc/applied/AGENTS.md"),
+            _entry("owner-doc", "rebuilt", "svc/rebuilt"),
+        ],
+    )
+    block = "<!-- sherpa:begin facts -->\nfacts\n<!-- sherpa:end facts -->\n"
+    found_files = [
+        found("svc/pay/AGENTS.md", "# pay\n"),  # the unit's own file: covers
+        found("svc/again/AGENTS.md", "# a\n"),  # covered by this very path already: covers again, every run
+        replace(found("svc/applied/AGENTS.md", block), markers=True),  # same, after `apply` appended its block
+        replace(found("svc/rebuilt/AGENTS.md", f"# r\n\n{block}"), markers=True),  # prose of its own: the team's
+        found("AGENTS.md", "# root\n"),  # the harness index: covers nothing
+        found("svc/pay/CLAUDE.md", "# claude\n"),  # runtime-specific: covers nothing
+        found("tests/suite/AGENTS.md", "# suite\n"),  # a test-infra unit's own file: covers
+        found("svc/decided/AGENTS.md", "# d\n"),  # the team decided the entry itself
+        found("svc/hand/AGENTS.md", "# h\n"),  # a hand-written covered: stands
+        replace(found("svc/managed/AGENTS.md", block), markers=True),  # nothing but sherpa's block: sherpa's own
+    ]
+    assert covers_by_path(plan, found_files) == {
+        "owner-doc:pay:svc/pay": "svc/pay/AGENTS.md",
+        "test-infra:suite:tests/suite": "tests/suite/AGENTS.md",
+        "owner-doc:again:svc/again": "svc/again/AGENTS.md",
+        "owner-doc:applied:svc/applied": "svc/applied/AGENTS.md",
+        "owner-doc:rebuilt:svc/rebuilt": "svc/rebuilt/AGENTS.md",
+    }
+    assert own_prose("<!-- sherpa:begin x -->\nno end\n") == "", "broken markers are not a doc"
+
+
+def test_adopt_covers_a_unit_whose_own_path_has_an_agents_md(active_repo: Path, capsys):
+    """ADR-0049: the team's own AGENTS.md at the unit's path is the owner doc — recorded on the entry, kept
+    across a re-plan like a hand-written `covered:`, dropped and named when the file vanishes."""
+    (active_repo / "svc/pay/AGENTS.md").write_text("# pay\n\nOur payment module.\n", encoding="utf-8")
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    before = tree_hash(active_repo)
+    assert main(["adopt", str(active_repo)]) == 0
+    out = capsys.readouterr().out
+    assert tree_hash(active_repo) == before, "adopt changed a harness file"
+    assert "· svc/pay/AGENTS.md" in out
+    assert "covers owner-doc pay (the unit's own path) — `apply` appends its facts block" in out
+    assert "2 proposed owner docs without an existing doc" in out  # pay is covered; core and suite are not
+    plan_path = active_repo / ".sherpa/harness-plan.yaml"
+    plan = yamlio.plan_from_dict(yamlio.load(plan_path))
+    assert {e.address: e for e in plan.entries}["owner-doc:pay:svc/pay"].covered == "svc/pay/AGENTS.md"
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    plan = yamlio.plan_from_dict(yamlio.load(plan_path))
+    assert {e.address: e for e in plan.entries}["owner-doc:pay:svc/pay"].covered == "svc/pay/AGENTS.md"
+    (active_repo / "svc/pay/AGENTS.md").unlink()
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    assert "was covered by svc/pay/AGENTS.md, which no longer exists — dropped" in capsys.readouterr().out
+
+
+def test_adopt_is_the_same_on_the_second_run_and_after_apply(active_repo: Path, capsys):
+    """A cover by path is the same fact on every run: the second `adopt` (the plan now carries the `covered:`)
+    prints the same rows and gaps and records the same state as the first, and so does the one after `apply`
+    appended its facts block — the hand-written doc at sherpa's path stays yours and never regains the entry."""
+    existing_harness(active_repo)  # .claude/docs/modules/pay.md would link by name
+    (active_repo / "svc/pay/AGENTS.md").write_text("# pay\n\nOurs.\n", encoding="utf-8")
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    capsys.readouterr()
+
+    def run() -> tuple[str, str, dict]:
+        assert main(["adopt", str(active_repo)]) == 0
+        out = capsys.readouterr().out
+        state = state_mod.load(active_repo / state_mod.STATE_PATH)
+        return out, out[out.index("gaps:") :].split("state:")[0], {p: r.entry for p, r in state.files.items()}
+
+    first, gaps, entries = run()
+    assert entries[".claude/docs/modules/pay.md"] is None
+    assert "svc/pay/AGENTS.md covers it (the unit's own path)" in first
+    assert "covers owner-doc pay (the unit's own path)" in first
+    assert "2 proposed owner docs without an existing doc" in gaps
+    second, gaps2, entries2 = run()  # the plan now carries the `covered:` — the wording moves, the facts do not
+    assert (gaps2, entries2) == (gaps, entries), "the second adopt differs from the first"
+    assert "svc/pay/AGENTS.md covers it (the unit's own path)" in second
+    assert "covers owner-doc pay (the unit's own path)" in second
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    capsys.readouterr()
+    after, gaps3, entries3 = run()
+    assert entries3[".claude/docs/modules/pay.md"] is None
+    assert "svc/pay/AGENTS.md covers it (the unit's own path)" in after
+    assert "pay.md: no unit matches" not in after and "proposed owner doc" not in gaps3
+    plan = yamlio.plan_from_dict(yamlio.load(active_repo / ".sherpa/harness-plan.yaml"))
+    assert {e.address: e for e in plan.entries}["owner-doc:pay:svc/pay"].covered == "svc/pay/AGENTS.md"
+
+
+def test_a_hand_written_covered_stands_against_a_by_path_cover(active_repo: Path, capsys):
+    """ADR-0046 beats ADR-0049: the plan's own word is never overridden by the path rule."""
+    (active_repo / "docs").mkdir()
+    (active_repo / "docs/pay.md").write_text("# pay — ours\n", encoding="utf-8")
+    (active_repo / "svc/pay/AGENTS.md").write_text("# pay\n", encoding="utf-8")
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    plan_path = active_repo / ".sherpa/harness-plan.yaml"
+    plan = yamlio.plan_from_dict(yamlio.load(plan_path))
+    plan = replace(
+        plan,
+        entries=[
+            replace(e, covered="docs/pay.md") if e.address == "owner-doc:pay:svc/pay" else e for e in plan.entries
+        ],
+    )
+    yamlio.write(plan, plan_path)
+    assert main(["adopt", str(active_repo)]) == 0
+    out = capsys.readouterr().out
+    assert "covers owner-doc pay (the unit's own path)" not in out
+    assert "· svc/pay/AGENTS.md" in out and "no sherpa markers — `apply` appends its block" in out
+    plan = yamlio.plan_from_dict(yamlio.load(plan_path))
+    assert {e.address: e for e in plan.entries}["owner-doc:pay:svc/pay"].covered == "docs/pay.md"
+
+
+def test_a_by_path_cover_beats_a_doc_at_sherpas_path(active_repo: Path, capsys):
+    """A hand-written owner doc at sherpa's own path loses to the unit's own AGENTS.md — the file stays the
+    team's, linked to nothing, and the row says why. `plan` sets the cover itself (no `adopt` needed before
+    `apply`); on a plan an older sherpa wrote without it, `adopt` finds the same cover and says so. With the
+    claude target only, the facts land in the nested CLAUDE.md and the row names it."""
+    existing_harness(active_repo)  # .claude/docs/modules/pay.md is hand-written and would cover the entry
+    (active_repo / "svc/pay/AGENTS.md").write_text("# pay\n\nOurs.\n", encoding="utf-8")
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    assert "(1 covered by existing files)" in capsys.readouterr().out
+    plan_path = active_repo / ".sherpa/harness-plan.yaml"
+    plan = yamlio.plan_from_dict(yamlio.load(plan_path))
+    assert {e.address: e for e in plan.entries}["owner-doc:pay:svc/pay"].covered == "svc/pay/AGENTS.md"
+    assert main(["adopt", str(active_repo)]) == 0
+    out = capsys.readouterr().out
+    assert "a .claude/docs/modules/pay.md" in out
+    assert "matches owner-doc pay (name matches) — yours, svc/pay/AGENTS.md covers it (the unit's own path)" in out
+    assert "covers owner-doc pay (the unit's own path) — the facts go to svc/pay/CLAUDE.md" in out
+    state = state_mod.load(active_repo / state_mod.STATE_PATH)
+    assert state.files[".claude/docs/modules/pay.md"].entry is None
+    # a plan from before ADR-0049: the doc at sherpa's path is rendered, and still loses to the unit's own file
+    yamlio.write(replace(plan, entries=[replace(e, covered=None) for e in plan.entries]), plan_path)
+    assert main(["adopt", str(active_repo)]) == 0
+    out = capsys.readouterr().out
+    assert "at sherpa's path, yours — svc/pay/AGENTS.md covers it (the unit's own path)" in out
+    plan = yamlio.plan_from_dict(yamlio.load(plan_path))
+    assert {e.address: e for e in plan.entries}["owner-doc:pay:svc/pay"].covered == "svc/pay/AGENTS.md"
+    assert state_mod.load(active_repo / state_mod.STATE_PATH).files[".claude/docs/modules/pay.md"].entry is None
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    assert not (active_repo / ".claude/docs/modules/pay.md").read_text(encoding="utf-8").count("sherpa:begin")
+    nested = (active_repo / "svc/pay/CLAUDE.md").read_text(encoding="utf-8")
+    assert "sherpa:begin harness" in nested and "Read the owner doc [svc/pay/AGENTS.md](AGENTS.md)" in nested
+    assert "sherpa:" not in (active_repo / "svc/pay/AGENTS.md").read_text(encoding="utf-8"), "no agents-md target"
+
+
+def test_a_by_path_cover_beats_a_name_link(active_repo: Path, capsys):
+    """The name/mention heuristic loses to the unit's own AGENTS.md (here on a skipped entry, whose doc path
+    is not rendered): the doc stays the team's, unlinked, and the row names the cover."""
+    doc = active_repo / ".agents/docs/modules/web.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("# web — our notes on svc/web\n", encoding="utf-8")
+    (active_repo / "svc/web/AGENTS.md").write_text("# web\n", encoding="utf-8")
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    assert main(["adopt", str(active_repo)]) == 0
+    out = capsys.readouterr().out
+    assert "matches owner-doc web (name matches) — yours, svc/web/AGENTS.md covers it (the unit's own path)" in out
+    state = state_mod.load(active_repo / state_mod.STATE_PATH)
+    assert state.files[".agents/docs/modules/web.md"].entry is None
+
+
+def test_an_ignored_agents_md_covers_nothing(active_repo: Path, capsys):
+    """A git-ignored file is not the harness — it is not even seen, so it covers nothing."""
+    (active_repo / "svc/pay/AGENTS.md").write_text("# pay\n", encoding="utf-8")
+    (active_repo / ".gitignore").write_text("svc/pay/AGENTS.md\n", encoding="utf-8")
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    assert main(["adopt", str(active_repo)]) == 0
+    assert "svc/pay/AGENTS.md" not in capsys.readouterr().out
+    plan = yamlio.plan_from_dict(yamlio.load(active_repo / ".sherpa/harness-plan.yaml"))
+    assert {e.address: e for e in plan.entries}["owner-doc:pay:svc/pay"].covered is None
+
+
+def test_apply_after_a_by_path_cover_writes_no_skeleton(active_repo: Path, capsys):
+    """The F39 flow, `plan` → `apply` with no `adopt` in between: the team's own svc/pay/AGENTS.md is the owner
+    doc — apply writes the facts block into it and no skeleton under docs/modules/; agents point at the unit's
+    own file; the second run is all `=`. A lost `.sherpa/` rebuilds the cover from the files (ADR-0017): the
+    file has prose of its own outside sherpa's block, so plan, adopt and apply agree again — nothing to do."""
+    (active_repo / "svc/pay/AGENTS.md").write_text("# pay\n\nOur payment module.\n", encoding="utf-8")
+    applied(active_repo)
+    assert "check: 0 FAIL" in capsys.readouterr().out
+    assert not (active_repo / ".agents/docs/modules/pay.md").exists(), "no skeleton next to the team's doc"
+    assert (active_repo / ".agents/docs/modules/core.md").exists(), "uncovered units keep their owner doc"
+    agents_md = (active_repo / "svc/pay/AGENTS.md").read_text(encoding="utf-8")
+    assert agents_md.startswith("# pay\n\nOur payment module.\n"), "the team's prose stays"
+    assert "sherpa:begin facts" in agents_md
+    assert "Read the owner doc" not in agents_md, "the file is the owner doc — no pointer to itself"
+    agent = (active_repo / ".claude/agents/pay.md").read_text(encoding="utf-8")
+    assert "../../svc/pay/AGENTS.md" in agent  # knowledge manifest and "Read first" point at the unit's file
+    assert ".agents/docs/modules/pay.md" not in agent
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    assert "nothing to do." in capsys.readouterr().out
+    shutil.rmtree(active_repo / ".sherpa")
+    before = tree_hash(active_repo)
+    applied(active_repo)  # plan finds the cover in the file itself; apply has nothing to write
+    assert main(["adopt", str(active_repo)]) == 0
+    out = capsys.readouterr().out
+    assert tree_hash(active_repo) == before, "the rebuilt index changed a harness file"
+    assert "svc/pay/AGENTS.md" in out and "1 of 1 blocks match the plan; covers owner-doc pay" in out
+    assert "hand edit" not in out and "gaps:" not in out
+    assert not (active_repo / ".agents/docs/modules/pay.md").exists()
+
+
+def test_an_agent_seeded_by_an_older_sherpa_is_still_sherpas_whole(active_repo: Path, capsys):
+    """ADR-0022 for prose outside the markers: the Role line sherpa ≤ 0.7.7 seeded named the owner doc by path.
+    After a state rebuild the file must still count as sherpa's whole — otherwise `apply --remove` would cut
+    the blocks and leave the seed behind (ADR-0048)."""
+    applied(active_repo)
+    agent = active_repo / ".claude/agents/pay.md"
+    text = agent.read_text(encoding="utf-8")
+    old = text.replace(
+        "they live\n> in the owner doc named in the knowledge manifest; cite",
+        "they live in\n> [.agents/docs/modules/pay.md](../../.agents/docs/modules/pay.md); cite",
+    )
+    assert old != text
+    agent.write_text(old, encoding="utf-8")
+    (active_repo / state_mod.STATE_PATH).unlink()
+    assert main(["adopt", str(active_repo)]) == 0
+    assert "= .claude/agents/pay.md" in capsys.readouterr().out
+    rec = state_mod.load(active_repo / state_mod.STATE_PATH).files[".claude/agents/pay.md"]
+    assert rec.origin == GENERATED and rec.hash is not None, "sherpa's whole, up to the older seed"
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    assert agent.read_text(encoding="utf-8") == text, "apply refreshes the seed"
+    assert main(["apply", str(active_repo), "--remove", "--yes"]) == 0
+    assert not agent.exists()
+
+
+def test_a_hand_cover_on_an_applied_unit_takes_the_skeleton_back(active_repo: Path, capsys):
+    """ADR-0048 meets ADR-0049: a `covered:` on an already-applied unit — the skeleton is sherpa's and
+    unchanged, so apply takes it back; the team's file keeps the facts block; nothing links into the void."""
+    applied(active_repo)
+    skeleton = active_repo / ".agents/docs/modules/pay.md"
+    assert skeleton.exists()
+    plan_path = active_repo / ".sherpa/harness-plan.yaml"
+    plan = yamlio.plan_from_dict(yamlio.load(plan_path))
+    plan = replace(
+        plan,
+        entries=[
+            replace(e, covered="svc/pay/AGENTS.md") if e.address == "owner-doc:pay:svc/pay" else e for e in plan.entries
+        ],
+    )
+    yamlio.write(plan, plan_path)
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    out = capsys.readouterr().out
+    assert "removed (no longer in the plan)" in out and "check: 0 FAIL" in out
+    assert not skeleton.exists()
+    agents_md = (active_repo / "svc/pay/AGENTS.md").read_text(encoding="utf-8")
+    assert "sherpa:begin facts" in agents_md and "Read the owner doc" not in agents_md
+    agent = (active_repo / ".claude/agents/pay.md").read_text(encoding="utf-8")
+    assert "../../svc/pay/AGENTS.md" in agent and ".agents/docs/modules/pay.md" not in agent
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    assert "nothing to do." in capsys.readouterr().out
+
+
+def test_adopt_by_path_cover_golden(active_repo: Path, capsys):
+    """§13.3: the cover by path on the five-module fixture — the console view is the golden."""
+    (active_repo / "svc/pay/AGENTS.md").write_text("# pay\n\nOur payment module.\n", encoding="utf-8")
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    capsys.readouterr()
+    assert main(["adopt", str(active_repo)]) == 0
+    check_golden("active-adopt-bypath-console.txt", capsys.readouterr().out)

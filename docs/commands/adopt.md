@@ -49,6 +49,7 @@ sherpa adopt [REPO] [--dry-run]
    | equals the rendering byte for byte | `generated`, whole file — sherpa's, as if `apply` had just written it |
    | has sherpa markers; a block equals its rendering | `generated`, that block's hash — `apply` keeps it current |
    | has sherpa markers; a block equals its rendering except for an **older stamp format** (`origin/main@<rev>, as of <date>` from sherpa ≤ 0.5.0) | `generated`, the hash of the bytes on disk — sherpa's rendering of its day (ADR-0022); the next `apply` rewrites it in the current form (`~ block facts updated`) |
+   | equals the rendering up to an **older seed** outside the markers (the agent *Role* line of sherpa ≤ 0.7.7 named the owner doc by path) | `generated`, whole file — the row says `sherpa's, an older seed — apply refreshes it`; the next `apply` rewrites it (`~ seed refreshed`), and `apply --remove` takes the whole file back (ADR-0022, ADR-0049) |
    | has sherpa markers; a block differs otherwise | that block is **not** recorded: a hand edit stays as it is; the console says `block facts differs (hand edit) — stays` |
    | is a base file sherpa names itself (`sherpa-check.py`, `sherpa-outcome.py`, the telemetry ignore file) and differs | `adopted` — a hand edit or an older copy, adopt cannot tell (ADR-0033); the gap line says `differs from sherpa <version>'s copy — yours; delete it and run `apply` for the current one` |
    | is at sherpa's path for a plan entry and differs, no markers | `adopted`, linked to that entry — **covers** it |
@@ -66,6 +67,19 @@ sherpa adopt [REPO] [--dry-run]
    count, and the others are listed as *matches owner-doc pay (…) — yours, another file covers the entry*. Two
    files that tie (three analysis notes that all mention `src/Shop.Pricing`) cover nothing; the gap names them
    and the way out: `covered: <path>` on the entry.
+
+   Stronger than any link — the **cover by path** (ADR-0049): a nested `AGENTS.md` whose directory is a unit's
+   own `scope` covers the unit's `owner-doc`/`test-infra` entry exactly, with no heuristic at all. `plan`
+   already sets it (the entry gets `covered: <unit path>/AGENTS.md`, kept across re-plans like a hand-written
+   one), so `apply` renders no skeleton with or without an `adopt` in between; `adopt` finds the same cover in
+   the same files and reports it. The file stays unrecorded so `apply` still appends its facts block (with the
+   `claude` target only, the facts go to the nested `CLAUDE.md` and the row says so). Only the plan's own word
+   (`decision:`, or `covered:` naming another file) beats it; a file that loses its link to a by-path cover is
+   yours and the row says why. The team's doc is a file with prose of its own outside sherpa's markers — so the
+   cover is the same fact on every run, before and after `apply` appended its block, and a lost `.sherpa/`
+   rebuilds it from the files. The root `AGENTS.md` (the harness index), nested `CLAUDE.md` files
+   (runtime-specific) and a file that is nothing but sherpa's block (sherpa's own proximity file) never cover
+   by path.
 
 4. **Gaps** — what an analysis by hand would find, from the same inventory:
    - an agent over the size budget (150 lines) without a `knowledge` manifest — rotation candidate;
