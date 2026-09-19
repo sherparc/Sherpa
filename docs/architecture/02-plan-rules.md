@@ -11,7 +11,7 @@ stateDiagram-v2
     propose --> accepted: decision accept (edit or --accept)
     propose --> rejected: decision reject (edit or --reject)
     skip --> accepted: decision accept
-    propose --> covered: adopt links an existing file to the entry
+    propose --> covered: adopt links an existing file to the entry,<br/>or the unit's own AGENTS.md sits at its path (ADR-0049)
     covered --> accepted: decision accept — a second file is a decision, never a default
     state "rendered by apply" as rendered
     propose --> rendered

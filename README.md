@@ -111,7 +111,7 @@ nothing there ([golden](tests/goldens/active-plan-covered-console.txt)). The sam
 - `sherpa plan` 🟢 **Live** — proposals and reasoned no's with evidence as YAML; decisions survive a re-plan or come from the command line (`--accept agent:pay`)
 - `sherpa apply` 🟢 **Live** — dry run first, managed blocks, state file, outcome hook, checker with rollback; targets `claude` and `agents-md` from one neutral core
 - `sherpa status` · `sherpa check` 🟢 **Live** — drift per file and block, structural rules, outcome labels per harness version
-- `sherpa adopt` 🟢 **Live** — take an existing harness into the state without changing a byte; files that already fill a plan entry cover it; a lost state is rebuilt from the files
+- `sherpa adopt` 🟢 **Live** — take an existing harness into the state without changing a byte; files that already fill a plan entry cover it, and a nested `AGENTS.md` at a unit's own path is its owner doc (no skeleton next to it); a lost state is rebuilt from the files
 - `sherpa doctor` · `sherpa self-update` 🟢 **Live** — every prerequisite with a fix; the next release via the installer that owns this copy; a daily hint that never blocks
 
 Documentation: [docs/index.md](docs/index.md) — [getting started](docs/getting-started.md), one reference page per command ([scan](docs/commands/scan.md), [plan](docs/commands/plan.md), [apply](docs/commands/apply.md), [adopt](docs/commands/adopt.md), [status](docs/commands/status.md), [check](docs/commands/check.md), [doctor](docs/commands/doctor.md), [self-update](docs/commands/self-update.md)), [configuration](docs/reference/configuration.md); milestones: [docs/plan.md](docs/plan.md).
@@ -240,6 +240,7 @@ flowchart LR
 | M3e | review fruit: `status` names a stale plan, `status --json` and `doctor --json`, manifest tie-break by language share, coupling without the root catch-all, sub-units for a dominant root module, proximity-file budgets in the checker | ✅ |
 | M3f | write safety: `apply` compares every file with the preview's read before writing, never writes through a symlink, writes each file whole or not at all and rolls back on a write error; `adopt` treats a differing base file as yours, takes a stale plan and rebuilds a torn state without a dead end; a dry run never refuses (two homes → assumes `.agents` and says so) and names a target directory that is a repository of its own | ✅ |
 | M3i | the manager sees what exists and takes back what is sherpa's: refuses on a nested repository (`doctor` says it first), a hand-written `covered:` is kept like a decision, the checker fails only in sherpa's own files; `apply` removes a rejected entry's files when they are still sherpa's and `apply --remove` uninstalls — a clean repository is clean again | ✅ |
+| M3j | owner docs where the team already writes them: a nested `AGENTS.md` at a unit's own path covers its owner-doc entry — `plan` sets it from the file, `adopt` reports it, `apply` writes the facts block into the team's file and no skeleton next to it (first slice, ADR-0049) | ✅ |
 | M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
 | M3k | host adapters `codex`, `opencode`, `copilot`, `cursor`, `gemini` — thin on top of `agents-md` like `hermes`: `doctor` names the host, its native rule file only where `AGENTS.md` cannot carry it, the outcome hook where the host has hooks | ⏳ |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev` with `n` and the share of `unknown`; a comparison between revisions from 30 labelled executions each | ⏳ |
@@ -250,7 +251,7 @@ flowchart LR
 | M3b | language adapters `dotnet` + `python` (T2: anchors, patterns) | ⏳ |
 | M7 | librarians, multi-repo | ⏳ |
 
-Order from here: M3h → M3k → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §9.1, §10).
+Order from here: M3j's second slice → M3h → M3k → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §9.1, §10, §13).
 
 Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an ADR: [docs/adr/](docs/adr/README.md)
 
@@ -268,7 +269,7 @@ Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generat
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 412 tests, ~97 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 423 tests, ~97 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 

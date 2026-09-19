@@ -116,6 +116,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     """Load the model (or scan), apply the rules, keep decisions from the previous plan, write."""
     from sherpa import config, gitinfo
     from sherpa import model as model_mod
+    from sherpa.apply import adopt as adopt_mod
     from sherpa.plan import build_plan, render_console, yamlio
     from sherpa.scan import scan
 
@@ -144,7 +145,10 @@ def cmd_plan(args: argparse.Namespace) -> int:
     plan, _, dropped_covers = yamlio.merge_covers(plan, previous, repo)
     plan.notes.extend(dropped_covers)
     plan, decided = yamlio.decide(plan, args.accept, args.reject)
-    plan, covered = yamlio.mark_covered(plan, _load_state_or_empty(repo, "plan")[0], repo)
+    # The unit's own AGENTS.md covers its entry (ADR-0049) — decided here, so that `apply` straight after `plan`
+    # renders no skeleton next to it; `adopt` finds the same cover from the same files and reports it.
+    by_path = adopt_mod.covers_by_path(plan, adopt_mod.inventory(repo))
+    plan, covered = yamlio.mark_covered(plan, _load_state_or_empty(repo, "plan")[0], repo, by_path)
 
     if out is None:
         sys.stdout.write(yamlio.dumps(plan))
@@ -378,11 +382,11 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     if args.dry_run:
         print(f"dry run: {a.counts()} · harness_rev {new_state.harness_rev} (state not written)", file=sys.stdout)
         return EXIT_OK
-    if not a.files and not state.files:
+    if not a.files and not state.files and not a.path_covers:
         print("nothing to adopt — no harness files here; `sherpa apply` creates one.", file=sys.stdout)
         return EXIT_OK
     new_state.write(repo / state_mod.STATE_PATH)
-    plan, covered = yamlio.mark_covered(plan, new_state, repo)
+    plan, covered = yamlio.mark_covered(plan, new_state, repo, a.path_covers)
     yamlio.write(plan, repo / PLAN_OUT)
     print(
         f"state: {a.counts()} · harness_rev {new_state.harness_rev} → {state_mod.STATE_PATH.as_posix()} · "

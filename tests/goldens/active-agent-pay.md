@@ -12,8 +12,8 @@ knowledge:
 
 # pay — agent
 
-> Role: expert for `pay` (`svc/pay`). Facts do NOT live in this file — they live in
-> [.agents/docs/modules/pay.md](../../.agents/docs/modules/pay.md); cite from there instead of from memory.
+> Role: expert for `pay` (`svc/pay`). Facts do NOT live in this file — they live
+> in the owner doc named in the knowledge manifest; cite from there instead of from memory.
 
 <!-- sherpa:begin manifest -->
 ## Knowledge manifest

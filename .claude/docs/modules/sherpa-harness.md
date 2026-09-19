@@ -10,13 +10,13 @@
 |---|---|
 | path | `.` |
 | kind | python module (`pyproject.toml`) |
-| files / LOC | 157 / 20028 — 7 files in 1 sub-units, described in their own owner docs |
-| commits 90d / 30d | 34 / 34 · 2 authors |
+| files / LOC | 157 / 20032 — 7 files in 1 sub-units, described in their own owner docs |
+| commits 90d / 30d | 35 / 35 · 2 authors |
 | depends on | — |
 | dependents | — |
 | tested by | — |
 | hotspots | `docs/plan.md`, `tests/test_apply.py`, `README.md` |
-| contains | [src/sherpa/apply](src-sherpa-apply.md) (7 files, 13 commits/90d) |
+| contains | [src/sherpa/apply](src-sherpa-apply.md) (7 files, 14 commits/90d) |
 <!-- sherpa:end facts -->
 
 ## structure

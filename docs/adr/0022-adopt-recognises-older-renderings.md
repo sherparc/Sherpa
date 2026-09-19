@@ -1,6 +1,7 @@
 # ADR-0022 — `adopt` recognises older stamp formats as sherpa's own rendering
 
-**Status:** accepted · **Date:** 2026-09-17 · **Decision:** Andrei (architect review before M3d, finding #1)
+**Status:** accepted · **Date:** 2026-09-17 · **Decision:** Andrei (architect review before M3d, finding #1) ·
+**Amended by:** ADR-0049 (older seeds outside the markers are modernised like older stamps)
 
 ## Context
 `adopt` rebuilds a lost state by comparing every block with its current rendering: equal → sherpa's, recorded
