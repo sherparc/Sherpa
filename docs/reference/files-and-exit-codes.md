@@ -54,6 +54,7 @@ Errors go to stderr as `sherpa <command>: <message>`, a rollback included (`sher
 | `CLAUDE_PROJECT_DIR` | the outcome hook, the deployed checker | repository root when run by Claude Code; the checker falls back to `.` |
 | `SHERPA_CHECK_STANDALONE=1` | the deployed checker | run the copy's own rules instead of delegating to an installed sherpa |
 | `SHERPA_UPDATE_GOLDENS=1` | the test suite | rewrite `tests/goldens/` after an intended rule change |
+| `SHERPA_E2E_REPO` | the test suite (`pytest tests/e2e`) | run the end-to-end theses on this local repository instead of the built-in corpus (ADR-0055); it must be clean and is left clean |
 | `SHERPA_NO_UPDATE_CHECK=1` | every command | no release check, no daily hint (`doctor --offline` for one run) |
 | `SHERPA_CACHE_DIR` | the update check | cache directory instead of `$XDG_CACHE_HOME/sherpa`, `~/.cache/sherpa` or `%LOCALAPPDATA%\sherpa` |
 | `GITHUB_TOKEN`, `GH_TOKEN` | `self-update`, `doctor`, the update check | the GitHub fallback of the release check (PyPI needs none): the Releases API with the token, `gh auth token` when unset, `git ls-remote` without one |

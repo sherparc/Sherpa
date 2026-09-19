@@ -20,7 +20,8 @@ description: "The ritual for every step of work on Sherpa: branch, build with te
 3. **Build with tests**: every new function has tests; fixture repos are built programmatically
    (`tests/conftest.py`); goldens in `tests/goldens/` are refreshed only on purpose
    (`SHERPA_UPDATE_GOLDENS=1`). Gate: `.venv/bin/pytest -q --cov=sherpa` ≥ 90 %, `ruff check` and
-   `ruff format --check` clean.
+   `ruff format --check` clean. A new claim in README, CLAUDE.md or an ADR is a new thesis in `tests/e2e`;
+   a command whose output changes changes its thesis in the same pull request (`pytest tests/e2e -q`).
 4. **Calibrate locally**: run the commands on the local corpus repositories (never named in the repo), dry run
    only, delete every `.sherpa/` you created there.
 5. **Plan revision**: `docs/plan.md` — status line, the section of the slice, the milestone table, open
@@ -40,7 +41,7 @@ description: "The ritual for every step of work on Sherpa: branch, build with te
 13. **Release** when the slice bumped the version (`pyproject.toml` and `src/sherpa/__init__.py` together):
     `git tag v<version> && git push origin v<version>` on the merged `main` — `release.yml` tests, builds the
     wheel and creates the GitHub release (ADR-0018). Then `sherpa self-update --check` from an installed copy,
-    and **the e2e run** (`/e2e-test`, the `e2e-tester` agent on the corpus repository) on the tagged `main` —
+    and **the e2e run** (`/e2e-test`: `pytest tests/e2e` on the corpus repository, ADR-0055) on the tagged `main` —
     every release is measured on a real repository; a FAIL there opens the next slice with its fixture.
 
 ## Done when
