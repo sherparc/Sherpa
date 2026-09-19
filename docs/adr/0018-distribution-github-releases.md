@@ -1,6 +1,6 @@
 # ADR-0018 — Distribution through GitHub Releases: wheel per tag, `self-update`, a daily hint that never blocks
 
-**Status:** accepted · **Date:** 2026-09-17 · **Decision:** Andrei (§6 Q5) · **§5 taken by:** ADR-0053 (PyPI is the index, 2026-09-19)
+**Status:** accepted · **Date:** 2026-09-17 · **Decision:** Andrei (§6 Q5) · **§5 taken by:** ADR-0053 (PyPI is the index, 2026-09-19) · **§1 amended 2026-09-19:** the version lives in one place, `src/sherpa/__init__.py`; `pyproject.toml` declares it `dynamic` and reads it from there, so a release bumps one line and the tag check compares against one file
 
 ## Context
 Until M2b a customer installed sherpa with `uv tool install git+https://…` from `main`: no versions, no way to
@@ -12,7 +12,7 @@ user with repository access already has.
 
 ## Decision
 1. **A release is a tag.** `v<version>` pushed to `sherparc/Sherpa` runs `release.yml`: the tag must equal the
-   version in `pyproject.toml` and `src/sherpa/__init__.py`, tests and lint run, `python -m build` produces the
+   version in `src/sherpa/__init__.py` (`pyproject.toml` reads it as a dynamic field), tests and lint run, `python -m build` produces the
    wheel and sdist, the wheel is installed into a fresh venv and `sherpa --version` and `doctor` run, then
    `gh release create` attaches both files with generated notes. What ships is exactly `src/sherpa/` plus the
    schemas and the hook asset (`pyproject.toml` owns the list); tests, docs, the repository's own harness and
