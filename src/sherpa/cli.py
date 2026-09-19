@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 from sherpa import __version__, update
@@ -87,6 +88,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     from sherpa.scan import parse_as_of, scan
 
     repo = Path(args.repo)
+    t0 = time.perf_counter()
     model = scan(
         repo,
         trunk=args.trunk,
@@ -94,6 +96,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
         as_of=parse_as_of(args.as_of) if args.as_of else None,
         hotspots=args.top,
     )
+    seconds = time.perf_counter() - t0
     from dataclasses import asdict
 
     validate(asdict(model))
@@ -106,7 +109,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     print(
         f"sherpa scan: {model.repo} @ {g.trunk.ref} {g.trunk.rev[:10]} ({g.trunk.source}) — "
         f"{len(g.files)} files, {g.commits_90d} commits/90d, {g.commits_30d}/30d, "
-        f"{len(g.hotspots)} hotspots, {len(model.modules)} modules → {out}",
+        f"{len(g.hotspots)} hotspots, {len(model.modules)} modules in {seconds:.1f} s → {out}",
         file=sys.stderr,
     )
     return EXIT_OK

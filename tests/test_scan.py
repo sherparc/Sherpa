@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -94,7 +95,10 @@ def test_cli_scan_writes_model(clone: Path, capsys):
     data = json.loads(out.read_text())
     validate(data)
     assert data["git"]["trunk"]["ref"] == "origin/main"
-    assert "→" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert re.search(r" modules in \d+\.\d s → ", err), (
+        err
+    )  # wall time in the summary line, against the README benchmark
 
 
 def test_cli_scan_stdout_and_as_of(clone: Path, capsys):
