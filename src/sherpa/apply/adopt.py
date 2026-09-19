@@ -15,7 +15,10 @@ things happen, all deterministic and all from the files:
    are left unrecorded so that ``apply`` can append its block.
 3. **Link** — an adopted agent or doc is linked to a unit of the plan: by name (file stem = unit slug) or by the
    unit path it mentions most (at least twice, unambiguous). A linked file **covers** the plan entry: ``sherpa
-   plan`` shows ``[covered by …]``, ``apply`` renders nothing for it.
+   plan`` shows ``[covered by …]``, ``apply`` renders nothing for it. Stronger than any link: a nested
+   ``AGENTS.md`` whose directory is a unit's own path covers the unit's owner-doc entry by path (ADR-0049) —
+   the file stays unrecorded so ``apply`` still appends its facts block, and the plan entry gets
+   ``covered: <path>``, kept like a hand-written one.
 
 What adopt cannot know it says: a block that differs from the current rendering may be a hand edit or an older
 rendering — it stays as it is either way. Gaps (fat agents without a manifest, docs that match no unit, units the
@@ -25,14 +28,14 @@ plan proposes an owner doc for and nothing exists) are reported, never fixed sil
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from sherpa import __version__, gitinfo
 from sherpa.apply import state as state_mod
-from sherpa.apply.render import Target, modernize_stamp, slug
+from sherpa.apply.render import Target, modernize, slug
 from sherpa.apply.state import ADOPTED, BLOCKS, GENERATED, JSON_HOOKS, MANAGED, FileRecord, State
-from sherpa.check import BUDGETS, SKIP_DIRS, block_contents, content_hash, front_matter
+from sherpa.check import BUDGETS, SKIP_DIRS, block_contents, content_hash, front_matter, parse_blocks
 from sherpa.plan import PROPOSE, Plan
 
 KINDS = (
@@ -74,7 +77,7 @@ class Adoption:
     rebuilt: int = 0  # generated records recovered from the rendering
     adopted: int = 0
     dropped: list[str] = field(default_factory=list)  # records of files that are gone
-    covered: int = 0
+    path_covers: dict[str, str] = field(default_factory=dict)  # entry address → nested AGENTS.md (ADR-0049)
 
     def counts(self) -> str:
         return f"{self.adopted} adopted, {self.rebuilt} rebuilt, {self.kept} kept, {len(self.dropped)} dropped"
@@ -197,6 +200,55 @@ def link(f: Found, units: dict[str, str]) -> tuple[str | None, str]:
     return top[2], f"mentions {top[3]} {top[0]}×"
 
 
+def own_prose(text: str) -> str:
+    """What the team wrote: the file without sherpa's blocks, markers included. Empty for a file that is nothing
+    but sherpa's block — and for broken markers, which are not a doc either way."""
+    try:
+        spans = parse_blocks(text)
+    except ValueError:
+        return ""
+    inside = {i for b, e in spans.values() for i in range(b, e + 1)}
+    return "\n".join(line for i, line in enumerate(text.split("\n")) if i not in inside).strip()
+
+
+def covers_by_path(plan: Plan, found: list[Found]) -> dict[str, str]:
+    """A nested ``AGENTS.md`` whose directory is a unit's own path covers the unit's owner-doc entry — an exact
+    match on the path, no heuristic (ADR-0049; Backstage: the file next to the code is the owner). It beats a
+    name or mention link; only the team's own word beats it, so entries with a ``decision:`` or a ``covered:``
+    naming another file are left alone. The team's doc is a file with prose of its own outside sherpa's markers
+    — before ``apply`` appended its facts block and after, so the cover is the same fact on every run and a
+    lost ``.sherpa/`` rebuilds it from the files (ADR-0017); a file that is nothing but sherpa's block is
+    sherpa's own proximity file and covers nothing. The root ``AGENTS.md`` is the harness index and covers
+    nothing; a nested ``CLAUDE.md`` is runtime-specific and covers nothing. Returns entry address → path."""
+    by_scope = {
+        e.scope: e
+        for e in plan.entries
+        if e.kind in ("owner-doc", "test-infra")
+        and e.scope
+        and e.decision is None
+        and e.covered in (None, f"{e.scope}/AGENTS.md")
+    }
+    out: dict[str, str] = {}
+    for f in found:
+        if f.kind == "nested" and f.path.endswith("/AGENTS.md"):
+            e = by_scope.get(f.path.rsplit("/", 1)[0])
+            if e is not None and (not f.markers or e.covered == f.path or own_prose(f.text)):
+                out[e.address] = f.path
+    return out
+
+
+def _covers(address: str) -> str:
+    return f"covers {' '.join(address.split(':')[:2])} (the unit's own path)"
+
+
+def _cover_row(address: str, scope: str, runtime_targets: tuple[str, ...]) -> str:
+    """The row for a covering file without markers (ADR-0049): unrecorded stays unrecorded — the facts land in
+    it with the agents-md target, in the nested CLAUDE.md with claude only; the prose stays the team's."""
+    if "agents-md" in runtime_targets:
+        return f"{_covers(address)} — `apply` appends its facts block"
+    return f"{_covers(address)} — the facts go to {scope}/CLAUDE.md"
+
+
 # ---------------------------------------------------------------- adopt
 
 
@@ -221,9 +273,12 @@ def adopt(
     keys = {(e.kind, e.target): f"{e.kind}:{e.target}:{e.scope}" for e in plan.entries}
     proposed_agents = {e.target for e in plan.entries if e.kind == "agent" and e.default == PROPOSE}
     by_hand = {e.covered: e.address for e in plan.entries if e.covered}  # the plan's word beats the heuristic
+    covers = covers_by_path(plan, found)  # entry address → nested AGENTS.md; beats the heuristic (ADR-0049)
+    cover_of = {path: address for address, path in covers.items()}
+    demoted: set[str] = set()  # files that lost their entry to a by-path cover — the row says why, no gap
     files: dict[str, FileRecord] = {}
     ranks: dict[str, int] = {}  # linked file → 0 by the plan, 1 by name, 2 by mentions
-    a = Adoption(files)
+    a = Adoption(files, path_covers=covers)
     for f in found:
         prev = previous.files.get(f.path)
         if prev is not None and prev.origin == GENERATED and _still_matches(prev, f.text):
@@ -236,12 +291,24 @@ def adopt(
             a.rebuilt += 1
             a.rows.append((REBUILT, f.path, f.kind, "sherpa's, no longer in the plan — `apply` removes it"))
             continue
+        address = cover_of.get(f.path)
+        if address is not None and not f.markers:  # the team's doc at the unit's own path: never recorded
+            a.rows.append((UNRECORDED, f.path, f.kind, _cover_row(address, f.path.rsplit("/", 1)[0], runtime_targets)))
+            continue
         t = rendered.get(f.path)
         if t is not None:
             rec, detail = _reconcile(t, f)
+            if address is not None:
+                detail += f"; {_covers(address)}"
             if rec is None:
                 a.rows.append((UNRECORDED, f.path, f.kind, detail))
                 continue
+            if rec.origin == ADOPTED and rec.entry in covers:
+                # the nested AGENTS.md at the unit's own path covers the entry — this file stays the team's,
+                # linked to nothing (ADR-0049: by-path beats at-sherpa's-path and name/mention links)
+                detail = f"at sherpa's path, yours — {covers[rec.entry]} covers it (the unit's own path)"
+                demoted.add(f.path)
+                rec = replace(rec, entry=None)
             files[f.path] = rec
             if rec.origin == GENERATED:
                 a.rebuilt += 1
@@ -261,7 +328,15 @@ def adopt(
         else:
             entry, detail = _link_entry(f, units, keys)
             if entry:
-                ranks[f.path] = 1 if "name matches" in detail else 2
+                if entry in covers:
+                    detail = (
+                        f"{detail.replace('→ ', 'matches ', 1)} — yours, {covers[entry]} covers it "
+                        "(the unit's own path)"
+                    )
+                    demoted.add(f.path)
+                    entry = None
+                else:
+                    ranks[f.path] = 1 if "name matches" in detail else 2
         files[f.path] = FileRecord(MANAGED, ADOPTED, entry, content_hash(f.text))
         a.adopted += 1
         a.rows.append((UNKNOWN if f.kind == "unknown" else ADOPT, f.path, f.kind, detail))
@@ -271,8 +346,7 @@ def adopt(
                 a.gaps.append(f"{f.path}: agent for `{unit}` — the plan proposes none (below the threshold); yours")
     _one_cover_per_entry(files, ranks, a)
     a.dropped = sorted(p for p in previous.files if p not in files and not (repo / p).is_file())
-    _gaps(a, found, files, plan, {t.path for t in targets if t.mode == MANAGED and t.entry is None}, version)
-    a.covered = sum(1 for r in files.values() if r.origin == ADOPTED and r.entry in set(keys.values()))
+    _gaps(a, found, files, plan, {t.path for t in targets if t.mode == MANAGED and t.entry is None}, version, demoted)
     return a
 
 
@@ -291,7 +365,7 @@ def _reconcile(t: Target, f: Found) -> tuple[FileRecord | None, str]:
     if t.mode == MANAGED:
         if f.text == t.content:
             return FileRecord(MANAGED, GENERATED, t.entry, content_hash(f.text)), "sherpa's, matches the plan"
-        if modernize_stamp(f.text) == t.content:
+        if modernize(f.text) == t.content:
             return FileRecord(
                 MANAGED, GENERATED, t.entry, content_hash(f.text)
             ), "sherpa's, older stamp — `apply` refreshes it"
@@ -316,12 +390,17 @@ def _reconcile(t: Target, f: Found) -> tuple[FileRecord | None, str]:
     older = {
         n: content_hash(have[n])
         for n, v in t.blocks.items()
-        if n in have and n not in known and modernize_stamp(have[n]) == v
+        if n in have and n not in known and modernize(have[n]) == v
     }
     known.update(older)
     stale = [n for n in t.blocks if n in have and n not in known]
-    if f.text == t.content and not stale:  # the seed and every block: sherpa's whole (ADR-0048)
+    if not stale and f.text == t.content:  # the seed and every block: sherpa's whole (ADR-0048)
         return FileRecord(BLOCKS, GENERATED, t.entry, content_hash(f.text), blocks=known), "sherpa's, matches the plan"
+    if not stale and modernize(f.text) == t.content:  # an older stamp or seed: still sherpa's whole (ADR-0022)
+        what = f"block {', '.join(older)} carries an older stamp" if older else "an older seed"
+        return FileRecord(
+            BLOCKS, GENERATED, t.entry, content_hash(f.text), blocks=known
+        ), f"sherpa's, {what} — `apply` refreshes it"
     detail = f"{len(known)} of {len(t.blocks)} blocks match the plan"
     if older:
         detail += f"; block {', '.join(older)} carries an older stamp — `apply` refreshes it"
@@ -341,7 +420,7 @@ def _leftover(t: Target, f: Found) -> FileRecord | None:
     """Sherpa's own rendering of an entry no longer selected — byte for byte or up to an older stamp — as a
     generated record; anything else is not provably sherpa's and goes the normal way."""
     if t.mode == MANAGED:
-        if f.text == t.content or modernize_stamp(f.text) == t.content:
+        if f.text == t.content or modernize(f.text) == t.content:
             return FileRecord(MANAGED, GENERATED, t.entry, content_hash(f.text))
         return None
     if t.mode == JSON_HOOKS:
@@ -351,13 +430,11 @@ def _leftover(t: Target, f: Found) -> FileRecord | None:
     except ValueError:
         return None
     known = {
-        n: content_hash(have[n])
-        for n, v in t.blocks.items()
-        if n in have and (have[n] == v or modernize_stamp(have[n]) == v)
+        n: content_hash(have[n]) for n, v in t.blocks.items() if n in have and (have[n] == v or modernize(have[n]) == v)
     }
     if not known:
         return None
-    whole = f.text == t.content or modernize_stamp(f.text) == t.content
+    whole = f.text == t.content or modernize(f.text) == t.content
     return FileRecord(BLOCKS, GENERATED, t.entry, content_hash(f.text) if whole else None, blocks=known)
 
 
@@ -407,7 +484,13 @@ def _one_cover_per_entry(files: dict[str, FileRecord], ranks: dict[str, int], a:
 
 
 def _gaps(
-    a: Adoption, found: list[Found], files: dict[str, FileRecord], plan: Plan, base_paths: set[str], version: str
+    a: Adoption,
+    found: list[Found],
+    files: dict[str, FileRecord],
+    plan: Plan,
+    base_paths: set[str],
+    version: str,
+    demoted: set[str],
 ) -> None:
     for f in found:
         if f.kind == "agent" and f.lines > BUDGETS["agent"] and not f.manifest:
@@ -415,7 +498,13 @@ def _gaps(
                 f"{f.path}: {f.lines} lines, no knowledge manifest — rotation candidate, facts belong in an owner doc"
             )
         rec = files.get(f.path)
-        if f.kind == "doc" and rec is not None and rec.origin == ADOPTED and rec.entry is None:
+        if (
+            f.kind == "doc"
+            and rec is not None
+            and rec.origin == ADOPTED
+            and rec.entry is None
+            and f.path not in demoted  # lost to a by-path cover — the row already says so (ADR-0049)
+        ):
             a.gaps.append(
                 f"{f.path}: no unit matches by name or path mentions — moved, renamed or not a module doc; "
                 "if it is the owner doc of a unit, name it on that entry: `covered: <path>`"
@@ -431,7 +520,9 @@ def _gaps(
         if e.kind in ("owner-doc", "test-infra")
         and e.default == PROPOSE
         and e.decision != "reject"
-        and f"{e.kind}:{e.target}:{e.scope}" not in present
+        and e.address not in present
+        and e.covered is None  # a cover the state does not carry: by hand outside the homes, or by path (ADR-0049)
+        and e.address not in a.path_covers
     ]
     if open_docs:
         a.gaps.append(f"{_n(len(open_docs), 'proposed owner doc')} without an existing doc — `apply` creates them")

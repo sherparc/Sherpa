@@ -156,7 +156,11 @@ block that equals its rendering, a base file sherpa names itself. Everything els
 touched by `apply`, never drift in `status`, no C8. Adopted agents and owner docs are linked to units (the
 entry's own `covered:`, then name, then path mentions — one file per entry, ties cover nothing) and **cover**
 the plan entries they fill; `selected()` leaves a covered entry out unless a human accepts it. The link is the
-team's decision: `covered:` written by hand is kept like one (ADR-0046). Sherpa works with one repository: a
+team's decision: `covered:` written by hand is kept like one (ADR-0046). Stronger than the heuristic and weaker
+only than the plan's word: a nested `AGENTS.md` at a unit's own path, with prose of its own outside sherpa's
+markers, covers its owner-doc entry **by path** (ADR-0049) — `plan` sets the cover from the files, so `apply`
+writes no skeleton next to the team's doc and appends the facts block into it; the file stays unrecorded, and a
+lost `.sherpa/` finds the cover again in the file itself. Sherpa works with one repository: a
 nested repository anywhere in the tree stops `apply` and `adopt`, the dry runs name it (ADR-0045). The rules, the
 console marks and the gaps are in
 [commands/adopt.md](../commands/adopt.md).

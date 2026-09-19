@@ -124,6 +124,7 @@ the always-part), detail. The detail lines and what each means:
 | `updated` | managed file (a sherpa script) changed with the sherpa version |
 | `block facts updated` | only that block is rewritten; the rest of the file is untouched |
 | `block facts updated; block manifest hand-edited` | one block regenerated, the other left alone |
+| `seed refreshed` | a file sherpa seeded whole (an agent) with prose outside the markers from an older sherpa — still sherpa's by its hash, rewritten in the current form (ADR-0022) |
 | `block harness appended` | `CLAUDE.md` existed without markers — the block is appended at the end |
 | `hooks added: UserPromptSubmit, PostToolUse, PostToolUseFailure, Stop` | `settings.json` existed — sherpa's hook entries merged in |
 | `unchanged` / `hooks present` | nothing to do |

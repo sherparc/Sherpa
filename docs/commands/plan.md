@@ -119,9 +119,10 @@ them like any other decision. Addresses are `kind:target[:scope]` — `sherpa pl
 columns, `status` and the state use the same string.
 
 `covered:` is the path of an existing file that already fills the entry (an agent or owner doc of that unit).
-[`sherpa adopt`](adopt.md) sets it from what it links, and you can write it by hand — `covered:
-.claude/docs/modules/kes.md` on the `owner-doc` entry of a unit whose doc adopt could not match by name or
-mentions (ADR-0046). A hand-set cover is kept across re-plans like a decision and wins over the state; a cover
+Three sources, one precedence: what you write by hand — `covered: .claude/docs/modules/kes.md` on the
+`owner-doc` entry of a unit whose doc adopt could not match by name or mentions (ADR-0046); the unit's own
+nested `AGENTS.md`, which `plan` itself sets on the entry when the file has prose of its own (ADR-0049); and
+what [`sherpa adopt`](adopt.md) links in the state. A hand-set cover is kept across re-plans like a decision and wins over the state; a cover
 whose file is gone is dropped with a note (`owner-doc:kes:src/Kes was covered by …, which no longer exists —
 dropped`). A covered proposal is shown as `[covered by <path>]` and `apply` renders nothing for it; `decision:
 accept` overrides that when you want sherpa's version next to yours. The console tail counts them (`(2 covered
