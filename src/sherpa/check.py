@@ -12,7 +12,8 @@ Rules (FAIL = exit 1, WARN informational):
   C1 agent-frontmatter   every .claude/agents/*.md has front matter with name and description
   C2 skill-frontmatter   every .claude/skills/*/SKILL.md and .agents/skills/*/SKILL.md has name and description
   C3 manifest-paths      every path under knowledge.always / knowledge.on_demand exists (relative to .claude/)
-  C4 links               relative file links in .claude/**, .agents/**, CLAUDE.md and AGENTS.md files resolve
+  C4 links               relative file links in .claude/**, .agents/**, CLAUDE.md and AGENTS.md files resolve;
+                         a harness file that is a symlink pointing nowhere
   C5 blocks              sherpa:begin/end markers are balanced, named and unique per file
   C6 hooks               .claude/settings.json is valid JSON and every hook command under $CLAUDE_PROJECT_DIR exists
   C7 budgets (WARN)      agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate;
@@ -167,7 +168,7 @@ def _md_files(root: Path) -> list[Path]:
     for home in (".claude", ".agents"):
         d = root / home
         if d.is_dir():
-            files.update(p for p in d.rglob("*.md") if p.is_file())
+            files.update(p for p in d.rglob("*.md") if p.is_file() or p.is_symlink())
     stack = [root]
     while stack:
         d = stack.pop()
@@ -182,6 +183,14 @@ def _md_files(root: Path) -> list[Path]:
             elif p.name in ("CLAUDE.md", "AGENTS.md"):
                 files.add(p)
     return sorted(files)
+
+
+def _dangling(p: Path) -> str | None:
+    """The target of a symlink that points nowhere, else ``None`` — a harness file that is a dangling symlink
+    is a C4 finding, not a traceback (found by the e2e run on a corpus repository, plan §13 F51)."""
+    if p.is_symlink() and not p.exists():
+        return os.readlink(p)
+    return None
 
 
 def _rel(root: Path, p: Path) -> str:
@@ -233,8 +242,10 @@ def check(
     findings: list[Finding] = []
     for p in _md_files(root):
         rel = _rel(root, p)
-        text = read_text(p)
-        own = _check_file(rel, p, text, claude)
+        if (target := _dangling(p)) is not None:
+            own = [Finding(FAIL, "C4", rel, f"symlink target {target} does not exist")]
+        else:
+            own = _check_file(rel, p, read_text(p), claude)
         findings.extend(_scope(own, managed is None or rel in managed))
     findings.extend(_check_hooks(root))
     findings.extend(_check_drift(root))

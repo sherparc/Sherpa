@@ -232,6 +232,31 @@ def test_scope_fails_only_in_files_the_state_records(tmp_path: Path, capsys):
     assert "2 FAIL, 1 WARN" in capsys.readouterr().out
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need a privilege on Windows")
+def test_a_dangling_symlink_named_like_a_harness_file_is_a_c4_finding(tmp_path: Path, capsys):
+    """Found by the e2e run on a corpus repository (plan §13 F51): a symlink named ``AGENTS.md`` that points
+    nowhere made ``check`` — and the pre-write check inside ``apply`` — exit with a raw ``[Errno 2]``. It is a
+    C4 finding now, in the tree and under a home; with a state it is yours, a WARN, and the exit stays 0. A
+    symlink that resolves is read like the file it points to."""
+    harness(tmp_path, {"docs/real.md": "# real\n[gone](nowhere.md)\n", "svc/pay/x.py": ""})
+    (tmp_path / "svc" / "pay" / "AGENTS.md").symlink_to("nowhere.md")
+    (tmp_path / ".agents" / "docs").mkdir(parents=True)
+    (tmp_path / ".agents" / "docs" / "x.md").symlink_to("../../gone.md")
+    (tmp_path / "CLAUDE.md").symlink_to("docs/real.md")  # resolves: checked as a file, its dead link is C4
+    found = sorted((f.level, f.rule, f.path, f.message) for f in check.check(tmp_path))
+    assert found == [
+        (FAIL, "C4", ".agents/docs/x.md", "symlink target ../../gone.md does not exist"),
+        (FAIL, "C4", "CLAUDE.md", "link target nowhere.md does not exist"),
+        (FAIL, "C4", "svc/pay/AGENTS.md", "symlink target nowhere.md does not exist"),
+    ]
+    harness(tmp_path, {".sherpa/state.json": json.dumps({"files": {}})})
+    assert check.main([str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert (
+        "0 FAIL, 3 WARN" in out and "WARN C4 svc/pay/AGENTS.md: symlink target nowhere.md does not exist (yours)" in out
+    )
+
+
 def test_render_and_main(tmp_path: Path, capsys):
     harness(tmp_path, {".claude/agents/a.md": "x\n"})
     assert check.main([str(tmp_path)]) == 1

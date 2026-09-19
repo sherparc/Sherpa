@@ -39,7 +39,9 @@ description: "The ritual for every step of work on Sherpa: branch, build with te
     && git pull && git branch -D task/<topic>`.
 13. **Release** when the slice bumped the version (`pyproject.toml` and `src/sherpa/__init__.py` together):
     `git tag v<version> && git push origin v<version>` on the merged `main` — `release.yml` tests, builds the
-    wheel and creates the GitHub release (ADR-0018). Then `sherpa self-update --check` from an installed copy.
+    wheel and creates the GitHub release (ADR-0018). Then `sherpa self-update --check` from an installed copy,
+    and **the e2e run** (`/e2e-test`, the `e2e-tester` agent on the corpus repository) on the tagged `main` —
+    every release is measured on a real repository; a FAIL there opens the next slice with its fixture.
 
 ## Done when
 

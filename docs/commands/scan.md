@@ -46,7 +46,7 @@ Summary line (stderr):
 
 ```console
 $ sherpa scan .
-sherpa scan: shop @ origin/main 5db69c4ddd (origin/HEAD) — 50 files, 52 commits/90d, 52/30d, 20 hotspots, 5 modules → /path/shop/.sherpa/codebase-model.json
+sherpa scan: shop @ origin/main 5db69c4ddd (origin/HEAD) — 50 files, 52 commits/90d, 52/30d, 20 hotspots, 5 modules in 0.3 s → /path/shop/.sherpa/codebase-model.json
 ```
 
 The model (`.sherpa/codebase-model.json`), top level:
