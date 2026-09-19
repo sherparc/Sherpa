@@ -1,6 +1,6 @@
 # ADR-0018 — Distribution through GitHub Releases: wheel per tag, `self-update`, a daily hint that never blocks
 
-**Status:** accepted · **Date:** 2026-09-17 · **Decision:** Andrei (§6 Q5)
+**Status:** accepted · **Date:** 2026-09-17 · **Decision:** Andrei (§6 Q5) · **§5 taken by:** ADR-0053 (PyPI is the index, 2026-09-19)
 
 ## Context
 Until M2b a customer installed sherpa with `uv tool install git+https://…` from `main`: no versions, no way to

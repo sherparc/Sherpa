@@ -28,9 +28,12 @@ class _Resp(io.BytesIO):
         self.close()
 
 
-def _fake_api(monkeypatch, *, tag=f"v{NEWER}", wheel=True, status=None, raise_url=False, seen=None, git=None):
-    """The Releases API and, for the tokenless path, ``git ls-remote`` (``git``: a list of tags, or None for the
-    same failure the API would show — a URLError becomes an OSError, a status becomes exit 128)."""
+def _fake_api(
+    monkeypatch, *, tag=f"v{NEWER}", wheel=True, status=None, raise_url=False, seen=None, git=None, pypi=None
+):
+    """PyPI (``pypi``: the version on the index, or None for "no project yet" — a 404), the Releases API and, for
+    the tokenless path, ``git ls-remote`` (``git``: a list of tags, or None for the same failure the API would
+    show — a URLError becomes an OSError, a status becomes exit 128)."""
 
     class Ran:
         def __init__(self, code, out="", err=""):
@@ -53,6 +56,13 @@ def _fake_api(monkeypatch, *, tag=f"v{NEWER}", wheel=True, status=None, raise_ur
             seen.append(req)
         if raise_url:
             raise urllib.error.URLError("no route to host")
+        if req.full_url == update.PYPI_JSON:
+            if pypi is None:
+                raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, None)
+            urls = (
+                [{"filename": f"sherpa_harness-{pypi}-py3-none-any.whl", "url": "https://files/x.whl"}] if wheel else []
+            )
+            return _Resp(json.dumps({"info": {"version": pypi}, "urls": urls}).encode())
         if status:
             raise urllib.error.HTTPError(req.full_url, status, "nope", {}, None)
         if req.full_url.endswith("/assets/1"):
@@ -122,19 +132,68 @@ def test_latest_release_parses_tag_and_wheel(monkeypatch):
         f"https://github.com/{update.REPO}/releases/tag/v{NEWER}",
         f"sherpa_harness-{NEWER}-py3-none-any.whl",
     )
-    assert seen[0].get_header("Authorization") == "Bearer tok"
+    assert seen[0].full_url == update.PYPI_JSON and seen[0].get_header("Authorization") is None  # the index first
+    assert seen[1].get_header("Authorization") == "Bearer tok"
     _fake_api(monkeypatch, wheel=False)
     assert update.latest_release("tok").wheel_url is None and update.latest_release("tok").wheel_name is None
 
 
 def test_latest_release_without_token_uses_git_ls_remote(monkeypatch):
-    """ADR-0035: no token → no API call at all; the newest ``v*`` tag by version order, pre-releases below."""
+    """ADR-0035: no token → no GitHub API call; the newest ``v*`` tag by version order, pre-releases below."""
     seen = []
     _fake_api(monkeypatch, seen=seen, git=["v0.9.0", f"v{NEWER}", "v0.10.0rc1", "v0.2.0"])
     rel = update.latest_release(None)
     assert rel.tag == f"v{NEWER}" and rel.wheel_url is None and rel.wheel_name is None
     assert rel.html_url == f"https://github.com/{update.REPO}/releases/tag/v{NEWER}"
-    assert seen == [["git", "ls-remote", "--tags", "--refs", update.GIT_URL]]
+    assert seen[0].full_url == update.PYPI_JSON  # the index first, silent here (ADR-0053)
+    assert seen[1:] == [["git", "ls-remote", "--tags", "--refs", update.GIT_URL]]
+
+
+def test_latest_release_prefers_pypi_without_a_token(monkeypatch):
+    """ADR-0053: the index answers → no GitHub API call, no git, no token needed; the wheel comes from the index."""
+    seen = []
+    _fake_api(monkeypatch, seen=seen, pypi=NEWER, git=[])
+    rel = update.latest_release(None)
+    assert rel == update.Release(
+        NEWER,
+        f"v{NEWER}",
+        "https://files/x.whl",
+        f"https://pypi.org/project/{update.PYPI_PROJECT}/{NEWER}/",
+        f"sherpa_harness-{NEWER}-py3-none-any.whl",
+        "pypi",
+    )
+    assert [getattr(r, "full_url", r) for r in seen] == [update.PYPI_JSON]
+    assert update.latest_release("tok") == rel  # a token changes nothing while the index answers
+
+
+@pytest.mark.parametrize("body", [b"{}", b'{"info": {}}', b"[]", b"garbage"])
+def test_latest_on_index_is_none_on_an_answer_without_a_version(monkeypatch, body):
+    monkeypatch.setattr(update.urllib.request, "urlopen", lambda req, timeout=0: _Resp(body))
+    assert update.latest_on_index() is None
+
+
+def test_latest_release_falls_back_to_github_when_the_index_is_silent(monkeypatch):
+    """No project on PyPI yet (404) or no route to it: the GitHub path answers exactly as before ADR-0053."""
+    seen = []
+    _fake_api(monkeypatch, seen=seen)  # pypi=None → 404
+    assert update.latest_release("tok").index == "github"
+    assert seen[0].full_url == update.PYPI_JSON and seen[1].full_url == update.API_LATEST
+
+
+def test_self_update_installs_from_pypi_by_version(monkeypatch):
+    """The installer fetches the wheel itself: no download, the source is the pinned requirement."""
+    monkeypatch.setattr(update, "installer", lambda: "uv")
+    monkeypatch.setattr(update, "token", lambda: None)
+    _fake_api(monkeypatch, pypi=NEWER)
+    calls = []
+
+    class R:
+        returncode, stdout, stderr = 0, "", ""
+
+    out = io.StringIO()
+    assert update.self_update(run=lambda cmd, **k: calls.append(cmd) or R(), out=out) == 0
+    assert calls == [["uv", "tool", "install", "--force", "--reinstall", f"{update.PYPI_PROJECT}=={NEWER}"]]
+    assert f"https://pypi.org/project/{update.PYPI_PROJECT}/{NEWER}/" in out.getvalue()
 
 
 def test_latest_tag_tries_ssh_after_https_and_names_both_failures(monkeypatch):

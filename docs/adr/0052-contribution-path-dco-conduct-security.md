@@ -13,8 +13,9 @@ the first thing a contributor notices. Three choices had to be made: CLA or DCO,
 the sign-off is enforced.
 
 ## Decision
-1. **DCO, not a CLA.** A `Signed-off-by:` line on every commit (`git commit -s`; `git config format.signoff true`
-   once per clone) is the contributor's statement under the
+1. **DCO, not a CLA.** A `Signed-off-by:` line on every commit (`git commit -s`; or once per clone
+   `git config core.hooksPath .githooks`, whose `prepare-commit-msg` hook adds the line — corrected 2026-09-19:
+   `format.signoff` serves `format-patch`, not `commit`) is the contributor's statement under the
    [Developer Certificate of Origin](https://developercertificate.org/) that they may contribute the change under
    the repository's licence. No document to sign, no registry of signers; the sign-off travels with the commit.
    It applies to the maintainer's commits as well — one rule for every pull request.
@@ -45,8 +46,8 @@ the sign-off is enforced.
 ## Consequences
 - The commit rule in `CLAUDE.md` gains the sign-off: one to three sentences, `Signed-off-by:` as the only
   trailer, never `Co-Authored-By`.
-- `README.md` links `CONTRIBUTING.md` and `SECURITY.md` from `## Development`; the once-per-clone block gains
-  `git config format.signoff true`.
+- `README.md` links `CONTRIBUTING.md` and `SECURITY.md` from `## Development`; the once-per-clone
+  `core.hooksPath` now enables two hooks, `pre-push` and `prepare-commit-msg`.
 - GitHub's private vulnerability reporting has to be enabled once in the repository's settings (a click by the
   owner, not a file); until then the email in `SECURITY.md` is the way.
 - Squash merges keep the sign-off lines of the squashed commits in the merge commit's body — GitHub's default;

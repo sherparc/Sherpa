@@ -38,7 +38,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-SHERPA_VERSION = "0.7.9"  # replaced with the real version when the file is deployed into a repo
+SHERPA_VERSION = "0.8.0"  # replaced with the real version when the file is deployed into a repo
 
 FAIL, WARN = "FAIL", "WARN"
 BUDGETS = {"agent": 150, "owner-doc": 600, "skill": 250}  # lines; from harness practice, generic numbers

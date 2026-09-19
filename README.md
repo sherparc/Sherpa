@@ -19,6 +19,10 @@ Sherpa reads your git history and gives a reason for every proposal — and for 
 
 ---
 
+<a href="assets/demo.svg"><img src="assets/demo.svg" alt="sherpa plan on the Sherpa repository itself: five proposals, three reasoned no's, every line with its evidence" width="100%"></a>
+
+`sherpa plan .` on this repository — the real output, rendered as an SVG by [scripts/render-demo.py](scripts/render-demo.py) and refreshed with every release. An agent for the whole package was proposed, rejected by hand, and the rejection is kept (`[reject]`); two small modules get a reasoned no with the knob that would change it.
+
 ## From repo to AI harness in 60 seconds
 
 Live today — real output on a test repo with five Python modules, Django migrations and a test suite
@@ -118,10 +122,10 @@ Documentation: [docs/index.md](docs/index.md) — [getting started](docs/getting
 
 ## Quick start
 
-Straight from the repo, no clone — releases are tags with the wheel `sherpa-harness` attached ([releases](https://github.com/sherparc/Sherpa/releases)); `sherpa self-update` fetches the next one:
+One line, no clone — the wheel `sherpa-harness` is on [PyPI](https://pypi.org/project/sherpa-harness/) and attached to every [release](https://github.com/sherparc/Sherpa/releases); `sherpa self-update` fetches the next one:
 
 ```bash
-uv tool install git+https://github.com/sherparc/Sherpa.git     # or: pipx install …; a tag pins a release: …Sherpa.git@v0.5.0
+uv tool install sherpa-harness                                   # or: pipx install sherpa-harness; from the repository: …install git+https://github.com/sherparc/Sherpa.git
 sherpa doctor                                                    # Python, git, origin, trunk, runtime, layout, nested repositories, install, update — with a fix each
 sherpa plan /path/to/repo                                        # scans when needed → .sherpa/harness-plan.yaml
 sherpa apply /path/to/repo                                       # dry run, then asks → .claude/**, .sherpa/state.json
@@ -241,7 +245,7 @@ flowchart LR
 | M3f | write safety: `apply` compares every file with the preview's read before writing, never writes through a symlink, writes each file whole or not at all and rolls back on a write error; `adopt` treats a differing base file as yours, takes a stale plan and rebuilds a torn state without a dead end; a dry run never refuses (two homes → assumes `.agents` and says so) and names a target directory that is a repository of its own | ✅ |
 | M3i | the manager sees what exists and takes back what is sherpa's: refuses on a nested repository (`doctor` says it first), a hand-written `covered:` is kept like a decision, the checker fails only in sherpa's own files; `apply` removes a rejected entry's files when they are still sherpa's and `apply --remove` uninstalls — a clean repository is clean again | ✅ |
 | M3j | owner docs where the team already writes them: a nested `AGENTS.md` at a unit's own path covers its owner-doc entry — `plan` sets it from the file, `adopt` reports it, `apply` writes the facts block into the team's file and no skeleton next to it (first slice, ADR-0049) | ✅ |
-| M2c | public release: the licence flipped to PolyForm Small Business or Noncommercial (ADR-0051) ✅ · the contribution path — DCO checked on every pull request, code of conduct, security policy, templates (ADR-0052) ✅ · still to do: the wheel on PyPI and `self-update` reading the index, a demo at the top of this README | ⏳ |
+| M2c | public release: the licence flipped to PolyForm Small Business or Noncommercial (ADR-0051) ✅ · the contribution path — DCO checked on every pull request, code of conduct, security policy, templates (ADR-0052) ✅ · the wheel on PyPI through trusted publishing, `self-update` and `doctor` read the index first (ADR-0053) ✅ · the demo card at the top of this README, Sherpa on itself ✅ · still to do: a changelog, then the announcement | ⏳ |
 | M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
 | M3k | host adapters `codex`, `opencode`, `copilot`, `cursor`, `gemini` — thin on top of `agents-md` like `hermes`: `doctor` names the host, its native rule file only where `AGENTS.md` cannot carry it, the outcome hook where the host has hooks | ⏳ |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev` with `n` and the share of `unknown`; a comparison between revisions from 30 labelled executions each | ⏳ |
@@ -270,16 +274,16 @@ Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an AD
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 427 tests, ~97 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 439 tests, ~97 % coverage, gate in CI: 90 %
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
 CI runs with Python 3.12 and 3.13: Linux on every pull request, Linux and Windows on `main`, macOS weekly; a manual run covers all three. Test repos are built programmatically (no corpus in the repo). The repository carries its own harness — `sherpa status .` must be clean before a commit — and an architect agent under [.claude/agents/](.claude/agents/architect.md). Working rules for humans and agents: [CLAUDE.md](CLAUDE.md).
 
-`main` changes only through pull requests with squash merge, every commit signed off (DCO). Once per clone, enable the guard that refuses direct pushes to `main` and the sign-off:
+`main` changes only through pull requests with squash merge, every commit signed off (DCO). Once per clone, enable the hooks — the guard that refuses direct pushes to `main` and the one that adds the sign-off:
 
 ```bash
-git config core.hooksPath .githooks && git config format.signoff true
+git config core.hooksPath .githooks
 ```
 
 Contributions: [CONTRIBUTING.md](CONTRIBUTING.md) · security reports: [SECURITY.md](SECURITY.md) · conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
