@@ -25,6 +25,8 @@ sherpa = ["schemas/*.json", "apply/assets/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--ignore=tests/e2e"   # the end-to-end theses run on their own: `pytest tests/e2e -q` (ADR-0055)
+markers = ["thesis(id, claim, source): an end-to-end thesis of README, CLAUDE.md or an ADR (tests/e2e)"]
 
 [tool.ruff]
 line-length = 120

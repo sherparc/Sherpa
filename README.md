@@ -275,10 +275,11 @@ Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an AD
 
 ```bash
 .venv/bin/pytest -q --cov=sherpa       # 442 tests, ~97 % coverage, gate in CI: 90 %
+.venv/bin/pytest tests/e2e -q          # 31 end-to-end theses: the sherpa command on a built-in monorepo, one test per claim of this README, CLAUDE.md and the ADRs
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
-CI runs with Python 3.12 and 3.13: Linux on every pull request, Linux and Windows on `main`, macOS weekly; a manual run covers all three. Test repos are built programmatically (no corpus in the repo). The repository carries its own harness — `sherpa status .` must be clean before a commit — and an architect agent under [.claude/agents/](.claude/agents/architect.md). Working rules for humans and agents: [CLAUDE.md](CLAUDE.md).
+CI runs with Python 3.12 and 3.13: Linux on every pull request, Linux and Windows on `main`, macOS weekly; a manual run covers all three — the end-to-end theses as a job of their own on the same matrix ([ADR-0055](docs/adr/0055-e2e-theses-as-pytest.md)). Test repos are built programmatically (no corpus in the repo). The repository carries its own harness — `sherpa status .` must be clean before a commit — and an architect agent under [.claude/agents/](.claude/agents/architect.md). Working rules for humans and agents: [CLAUDE.md](CLAUDE.md).
 
 `main` changes only through pull requests with squash merge, every commit signed off (DCO). Once per clone, enable the hooks — the guard that refuses direct pushes to `main` and the one that adds the sign-off:
 

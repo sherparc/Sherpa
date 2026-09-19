@@ -24,7 +24,9 @@ and `sync-kb`, and the files `sherpa apply .` generates (owner doc, hook, checke
   rebuildable index over them (ADR-0017): index files are written through `sherpa.atomic`, and `adopt` rebuilds a
   lost state — never add a second way to recover.
 - Tests: `.venv/bin/pytest -q` from the repo root; lint `.venv/bin/ruff check . && .venv/bin/ruff format --check .` —
-  both must be green before every commit. CI (ADR-0043): Linux on every pull request, Linux + Windows on `main`,
+  both must be green before every commit. The end-to-end theses are `.venv/bin/pytest tests/e2e -q` (ADR-0055): one
+  test per claim of README, CLAUDE.md and the ADRs against the `sherpa` command, on a built-in corpus in CI and on
+  the local corpus repository with `SHERPA_E2E_REPO` set — a new claim is a new thesis there. CI (ADR-0043): Linux on every pull request, Linux + Windows on `main`,
   macOS once a week on `main`; a manual run (`gh workflow run ci.yml --ref <branch>`) covers all three and is the
   way, after asking, to check a large change to Git/path/encoding logic before it merges. Docs-only changes do
   not run CI. Every new function comes with tests; fixture
