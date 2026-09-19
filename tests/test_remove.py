@@ -108,6 +108,8 @@ def test_remove_is_the_uninstall_and_leaves_only_what_is_yours(active_repo: Path
     assert main(["apply", str(active_repo), "--remove", "--yes"]) == 0
     out = capsys.readouterr().out
     assert "2 files written, 11 removed · harness_rev" in out and "check: 0 FAIL" in out
+    summary = next(ln for ln in out.splitlines() if "harness_rev" in ln)
+    assert "state.json" not in summary, "§13 F53: the state is named once, in the uninstalled line below"
     assert (
         "uninstalled — .sherpa/state.json, .sherpa/harness-plan.yaml, .sherpa/codebase-model.json, "
         ".sherpa/telemetry/outcomes.ndjson removed too" in out
@@ -130,6 +132,52 @@ def test_remove_is_the_uninstall_and_leaves_only_what_is_yours(active_repo: Path
     assert nested.is_file() and "| UNIT |" in nested.read_text(encoding="utf-8")
     assert not (active_repo / "svc" / "core" / "CLAUDE.md").exists()
     assert _git_status(active_repo) == clean | {"svc/pay/CLAUDE.md"}
+    # a stray file under .sherpa/ is not sherpa's: the index goes, the file stays and is named (§13 F47)
+    nested.unlink()
+    applied(active_repo)
+    stray = active_repo / ".sherpa" / "notes.txt"
+    stray.write_text("mine\n", encoding="utf-8")
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--remove", "--yes"]) == 0
+    out = capsys.readouterr().out
+    assert "uninstalled — .sherpa/state.json" in out and "left in .sherpa/, not sherpa's: .sherpa/notes.txt" in out
+    assert stray.is_file() and not (active_repo / ".sherpa" / "state.json").exists()
+    stray.unlink()
+    assert _git_status(active_repo) == clean
+
+
+def test_the_uninstall_is_reported_by_apply_not_composed_by_the_cli():
+    """§13 F43: `write(remove=True)` fills the result and `render_result` prints the four lines of the uninstall —
+    a second entry point (M7a) gets the same words from the same place; `cmd_apply` carries none of them."""
+    import inspect
+
+    from sherpa import cli
+    from sherpa.apply import Result, render_result
+
+    source = inspect.getsource(cli.cmd_apply)
+    assert "uninstalled" not in source and "kept, yours" not in source and "records kept" not in source
+    r = Result([], state_mod.State(harness_rev="0123456789ab"), written=2, removed=11)
+    r.yours, r.uninstalled = ["svc/pay/CLAUDE.md"], [".sherpa/state.json", ".sherpa/harness-plan.yaml"]
+    r.stray = [".sherpa/notes.txt"]
+    assert render_result(r).splitlines() == [
+        "check: 0 FAIL, 0 WARN",
+        "2 files written, 11 removed · harness_rev 0123456789ab",
+        "kept, yours: svc/pay/CLAUDE.md",
+        "uninstalled — .sherpa/state.json, .sherpa/harness-plan.yaml removed too",
+        "left in .sherpa/, not sherpa's: .sherpa/notes.txt",
+    ]
+    adopted = {"docs/ours.md": state_mod.FileRecord(state_mod.MANAGED, origin=state_mod.ADOPTED)}
+    r = Result([], state_mod.State(harness_rev="0123456789ab", files=adopted), removed=3)
+    r.uninstalled = [".sherpa/state.json"]
+    assert (
+        render_result(r).splitlines()[-1] == "uninstalled — .sherpa/state.json removed too; 1 adopted files stay yours"
+    )
+    r = Result([], state_mod.State(harness_rev="0123456789ab"), written=0, removed=3)
+    r.records_kept = [".claude/agents/pay.md"]
+    assert render_result(r).splitlines()[1:] == [
+        "0 files written, 3 removed · harness_rev 0123456789ab → .sherpa/state.json",
+        "records kept for: .claude/agents/pay.md — skipped this run; `apply --remove` again",
+    ]
 
 
 def test_adopt_records_a_leftover_of_a_deselected_entry_as_sherpas_not_yours(active_repo: Path, capsys):
@@ -176,3 +224,34 @@ def test_a_crlf_file_keeps_its_line_endings_through_append_and_removal(active_re
     assert main(["apply", str(active_repo), "--remove", "--yes"]) == 0
     for path, raw in original.items():
         assert path.read_bytes() == raw, f"{path.name}: not byte-identical after the uninstall"
+
+
+def test_remove_keeps_the_index_while_a_record_of_sherpas_stays(active_repo: Path, capsys):
+    """A removal skipped since the preview (ADR-0030) leaves a generated record in the state: the index stays,
+    `records kept for:` names the file and the next `apply --remove` finishes the job."""
+    from sherpa.apply import CHANGED_SINCE_PREVIEW, plan_files, write
+    from sherpa.plan import yamlio
+
+    applied(active_repo)
+    state = state_mod.load(active_repo / state_mod.STATE_PATH)
+    plan = yamlio.plan_from_dict(yamlio.load(active_repo / ".sherpa" / "harness-plan.yaml"))
+    actions = plan_files([], active_repo, state, remove_all=True)
+    ignore = active_repo / ".sherpa" / "telemetry" / ".gitignore"  # a harness file without links to lose
+    ignore.write_text(ignore.read_text(encoding="utf-8") + "# edited between the preview and the write\n")
+    r = write(actions, active_repo, state, plan, remove=True)
+    assert not r.rolled_back and r.records_kept == [".sherpa/telemetry/.gitignore"] and r.uninstalled == []
+    skipped = next(a for a in r.actions if a.path == ".sherpa/telemetry/.gitignore")
+    assert skipped.detail == CHANGED_SINCE_PREVIEW and ".sherpa/telemetry/.gitignore" in r.state.files
+    assert (active_repo / ".sherpa" / "state.json").is_file(), "the index stays while a record of sherpa's stays"
+    from sherpa.apply import render_result
+
+    assert "records kept for: .sherpa/telemetry/.gitignore — skipped this run; `apply --remove` again" in render_result(
+        r
+    )
+    # the second --remove sees a hand-edited file: kept as yours, and now the index goes
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--remove", "--yes"]) == 0
+    out = capsys.readouterr().out
+    assert "kept, yours: .sherpa/telemetry/.gitignore" in out and "uninstalled — .sherpa/state.json" in out
+    assert "left in .sherpa/, not sherpa's: .sherpa/telemetry/.gitignore" in out  # yours now, so it stays there
+    assert ignore.is_file() and not (active_repo / ".sherpa" / "state.json").exists()

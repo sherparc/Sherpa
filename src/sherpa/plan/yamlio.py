@@ -4,11 +4,12 @@
 - ``evidence`` in flow style (one line), checks as a list of lines — the plan stays reviewable in a PR diff.
 - Comment header with provenance and instructions; PyYAML cannot preserve comments, so it is prepended.
 - ``decision`` per entry is the only field a human sets; ``merge_decisions`` keeps it across a re-plan via the key
-  ``(kind, target, scope)``.
+  ``(kind, target, scope)``, follows a renamed unit and names what it drops.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -122,21 +123,40 @@ def decisions_of(data: dict[str, Any]) -> dict[tuple[str, str, str], str]:
     return out
 
 
-def merge_decisions(plan: Plan, previous: dict[str, Any] | None) -> tuple[Plan, int]:
-    """Carry decisions over from the previous plan. Returns (plan, number of decisions kept)."""
+def merge_decisions(plan: Plan, previous: dict[str, Any] | None) -> tuple[Plan, int, list[str]]:
+    """Carry decisions over from the previous plan by ``Entry.key``. A decision whose entry is gone follows the
+    unit when only its name changed — one decided entry of that kind and scope left the plan and one new entry
+    of that kind and scope arrived (F55); anything else is dropped and named, like a vanished cover in
+    ``merge_covers`` (F42). Returns (plan, decisions kept — the followed ones included, lines to show)."""
     if not previous:
-        return plan, 0
+        return plan, 0, []
     keep = decisions_of(previous)
-    entries, n = [], 0
+    known = {(e["kind"], e["target"], e.get("scope", "")) for e in previous.get("entries", [])}
+    keys, named = {e.key for e in plan.entries}, {(e.kind, e.target) for e in plan.entries}
+    gone = {k: d for k, d in keep.items() if k not in keys}
+    left: dict[tuple[str, str], list[tuple[str, str, str]]] = {}  # decided entries whose target left, by kind+scope
+    for kind, target, scope in gone:
+        if (kind, target) not in named:  # a target still in the plan just moved scope — a different unit, no rename
+            left.setdefault((kind, scope), []).append((kind, target, scope))
+    arrived = Counter((e.kind, e.scope) for e in plan.entries if e.key not in known)
+    entries, n, lines, followed = [], 0, [], set()
     for e in plan.entries:
         d = keep.get(e.key)
+        at = (e.kind, e.scope)
+        if d is None and e.key not in known and arrived[at] == 1 and len(left.get(at, ())) == 1:
+            (old,) = left[at]  # one left, one arrived, same kind and path: the unit was renamed
+            d, followed = keep[old], followed | {old}
+            lines.append(f"{e.address} [{d}] — followed from {_address(old)} (same path, renamed)")
         if d is not None:
             n += 1
             e = replace(e, decision=d)
         entries.append(e)
-    return Plan(
-        plan.repo, plan.model, plan.thresholds, plan.ranking, entries, plan.sherpa, plan.schema_version, plan.notes
-    ), n
+    dropped = [f"{_address(k)} [{d}] is no longer in the plan — dropped" for k, d in gone.items() if k not in followed]
+    return replace(plan, entries=entries), n, dropped + lines
+
+
+def _address(key: tuple[str, str, str]) -> str:
+    return ":".join(key)
 
 
 def decide(plan: Plan, accept: list[str], reject: list[str]) -> tuple[Plan, int]:

@@ -1,6 +1,8 @@
 """The theses, in lifecycle order — one test per claim, the claim in the ``thesis`` marker, the proving line
 in ``ev``. T01–T22 are the catalogue of the ``e2e-test`` skill; E01–E05 are the follow-ups of its first runs
-(the deployed checker standalone, the write boundary, the configured home, line endings, a dangling symlink).
+(the deployed checker standalone, the write boundary, the configured home, line endings, a dangling symlink),
+E06–E09 the claims of M3j's second slice (a decision follows a renamed unit, a dropped one is named, the WARN
+count of ``apply`` is ``check``'s, the uninstall names the state once).
 
 Every assertion compares what a user sees — exit code, stdout, stderr, the files on disk, ``git status`` —
 never an internal. Numbers are relative (more than none, the same twice), so the same test holds on the
@@ -442,6 +444,29 @@ def test_t18_nested_repository(sherpa: Sherpa, corpus: Path, installed: Run, ev)
         rmtree(corpus / "nested-tmp")
 
 
+@thesis(
+    "E08",
+    "the WARN count apply prints after a write is the count check prints right after: drift is measured against the state this run wrote",
+    "plan §13 F52",
+)
+def test_e08_apply_warn_count_equals_check(sherpa: Sherpa, corpus: Path, installed: Run, ev):
+    require(installed, "T08")
+    target, scope = proposed_unit(corpus)
+    address = f"owner-doc:{target}:{scope}"
+    require(sherpa("plan", corpus, "--no-fetch", "--reject", address), "T05")
+    try:
+        r = sherpa("apply", "--yes", corpus)
+        assert r.code == 0, r
+        m = re.match(r"check: (\d+) FAIL, (\d+) WARN$", ev(r.line("check: ")))
+        assert m and "removed · harness_rev" in r.out, r
+        c = sherpa("check", corpus)
+        after = re.search(r": (\d+) FAIL, (\d+) WARN$", ev(c.first))
+        assert after and (m.group(1), m.group(2)) == (after.group(1), after.group(2)), f"{r}\n{c}"
+    finally:  # the harness the later theses expect: the entry back, its files written again
+        require(sherpa("plan", corpus, "--no-fetch", "--accept", address), "T05")
+        require(sherpa("apply", "--yes", corpus), "T08")
+
+
 # ---------------------------------------------------------------- uninstall
 
 
@@ -458,6 +483,18 @@ def test_t21_remove_leaves_the_corpus_clean(uninstalled: Run, corpus: Path, ev):
     assert not left, f"left behind: {left}"
     assert not home_dirs(corpus), f"empty home directories left: {home_dirs(corpus)}"
     ev("git status --short --ignored: empty; no .agents/ or .claude/")
+
+
+@thesis(
+    "E09",
+    "the uninstall names .sherpa/state.json once: in the uninstalled line, not in the summary line before it",
+    "plan §13 F53",
+)
+def test_e09_uninstall_names_the_state_once(uninstalled: Run, ev):
+    r = require(uninstalled, "T21")
+    summary = ev(r.line(" · harness_rev "))
+    assert "state.json" not in summary and re.search(r"harness_rev [0-9a-f]{12}$", summary), r
+    assert ev(r.line("uninstalled — ")).startswith("uninstalled — .sherpa/state.json, "), r
 
 
 # ---------------------------------------------------------------- from the clean corpus
@@ -603,6 +640,100 @@ def test_e05_dangling_symlink_is_a_finding(sherpa: Sherpa, clean_slate: Path, ev
     assert r.code == 0 and "Traceback" not in r.err, r
     assert "symlink in the path — never written through (skipped)" in ev(r.line(f"! {scope}/AGENTS.md")), r
     assert link.is_symlink() and not link.exists()
+
+
+def rename_unit(corpus: Path, target: str, scope: str) -> str | None:
+    """Rename the unit in its manifest: the first quoted ``target`` in a manifest file of ``scope`` becomes
+    ``<target>2``; None when no manifest there carries the name (an ecosystem that names units by directory)."""
+    unit = corpus / scope
+    for manifest in sorted(p for p in unit.iterdir() if p.is_file() and p.suffix in (".toml", ".json", ".mod", ".xml")):
+        text = manifest.read_text(encoding="utf-8", errors="replace")
+        new, n = re.subn(rf"([\"'])({re.escape(target)})\1", rf"\g<1>{target}2\g<1>", text, count=1)
+        if n:
+            manifest.write_text(new, encoding="utf-8")
+            return f"{target}2"
+    return None
+
+
+class TrunkMove:
+    """A commit on the local trunk and the remote-tracking ref moved onto it — the trunk moved as far as
+    ``scan`` is concerned (ADR-0003), without a push; ``restore`` puts both back, whatever the thesis did."""
+
+    def __init__(self, corpus: Path) -> None:
+        self.corpus = corpus
+        model = json.loads((corpus / ".sherpa" / "codebase-model.json").read_text(encoding="utf-8"))
+        self.ref = model["git"]["trunk"]["ref"]  # origin/main
+        self.head, self.trunk = git(corpus, "rev-parse", "HEAD"), git(corpus, "rev-parse", self.ref)
+
+    def commit(self, message: str) -> None:
+        git(self.corpus, "add", "-A")
+        git(self.corpus, "commit", "-q", "-m", message)
+        git(self.corpus, "update-ref", f"refs/remotes/{self.ref}", "HEAD")
+
+    def restore(self) -> None:
+        git(self.corpus, "update-ref", f"refs/remotes/{self.ref}", self.trunk)
+        git(self.corpus, "reset", "-q", "--hard", self.head)
+
+
+@thesis(
+    "E06",
+    "a rejection follows a unit whose manifest name changes and whose path stays; the re-plan says so once and keeps it by key from then on",
+    "plan §13 F55",
+)
+def test_e06_decision_follows_a_renamed_unit(sherpa: Sherpa, clean_slate: Path, ev):
+    corpus = clean_slate
+    require(sherpa("plan", corpus, "--no-fetch"), "T05")
+    agents = [e for e in plan_entries(corpus) if e["kind"] == "agent" and e["default"] == "propose" and e["scope"]]
+    if not agents:
+        pytest.skip("blocked: the plan proposes no agent for a nested unit")
+    target, scope = agents[0]["target"], agents[0]["scope"]
+    r0 = sherpa("plan", corpus, "--no-fetch", "--reject", f"agent:{target}:{scope}")
+    assert r0.code == 0 and r0.last.endswith("(1 decided now)"), r0
+    move = TrunkMove(corpus)
+    try:
+        renamed = rename_unit(corpus, target, scope)
+        if renamed is None:
+            pytest.skip(f"blocked: no manifest in {scope} carries the unit's name")
+        move.commit(f"rename {target} to {renamed}")
+        r = sherpa("plan", corpus, "--no-fetch")
+        assert r.code == 0 and "rescanning" in r.err, r
+        line = ev(r.line("followed from"))
+        assert (
+            line.strip()
+            == f"agent:{renamed}:{scope} [reject] — followed from agent:{target}:{scope} (same path, renamed)"
+        )
+        assert "(1 decisions kept)" in ev(r.last), r
+        entry = next(e for e in plan_entries(corpus) if e["kind"] == "agent" and e["scope"] == scope)
+        assert entry["target"] == renamed and entry["decision"] == "reject", entry
+        again = sherpa("plan", corpus, "--no-fetch")
+        assert again.code == 0 and "followed from" not in again.out and "(1 decisions kept)" in again.last, again
+    finally:
+        move.restore()
+
+
+@thesis(
+    "E07",
+    "a decision on an entry that left the plan is dropped with one line naming it, and the new plan carries no trace of it",
+    "plan §13 F42",
+)
+def test_e07_dropped_decision_is_named_once(sherpa: Sherpa, clean_slate: Path, ev):
+    corpus = clean_slate
+    require(sherpa("plan", corpus, "--no-fetch"), "T05")
+    target, scope = proposed_unit(corpus)
+    address = f"owner-doc:{target}:{scope}"
+    r0 = sherpa("plan", corpus, "--no-fetch", "--reject", address)
+    assert r0.code == 0 and r0.last.endswith("(1 decided now)"), r0
+    move = TrunkMove(corpus)
+    try:
+        git(corpus, "rm", "-rq", scope)
+        move.commit(f"remove {scope}")
+        r = sherpa("plan", corpus, "--no-fetch")
+        assert r.code == 0 and "rescanning" in r.err, r
+        assert ev(r.line("— dropped")).strip() == f"{address} [reject] is no longer in the plan — dropped", r
+        assert r.out.count("— dropped") == 1 and "decisions kept" not in r.last, r
+        assert not any(e["decision"] for e in plan_entries(corpus)), "the dropped decision is still in the YAML"
+    finally:
+        move.restore()
 
 
 # ---------------------------------------------------------------- the README

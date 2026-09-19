@@ -111,7 +111,11 @@ Every number is a model field, every check names the measurement and the criteri
 Edit `decision:` per entry — `accept`, `reject` or `null`. [`sherpa apply`](apply.md) applies every `propose`
 that is not rejected and every `skip` that is accepted. Decisions survive re-plans: the console tail says how many
 were kept (`(2 decisions kept)`). An entry that disappears from the plan (a module was deleted) takes its decision
-with it; an entry that changes kind or scope is a new entry.
+with it, and the console says so once, under the entries: `agent:pay:svc/pay [reject] is no longer in the plan —
+dropped`. A unit whose manifest name changes and whose path stays keeps its decision — the one decided entry of
+that kind and scope left, the one new entry of that kind and scope arrived — and the console says that once too:
+`agent:billing:svc/pay [reject] — followed from agent:pay:svc/pay (same path, renamed)`; two candidates on either
+side carry nothing and are named as dropped. An entry that changes kind or scope is a new entry.
 
 For scripts and CI the same decision is a flag: `sherpa plan --accept librarian:pay --reject agent:pay` writes
 exactly the `decision:` values a hand would, and the tail counts them (`(2 decided now)`); the next plan keeps
