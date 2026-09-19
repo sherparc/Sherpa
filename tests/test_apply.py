@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
@@ -790,15 +791,12 @@ def test_cli_apply_treats_eof_on_the_question_as_no_terminal(active_repo: Path, 
 
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0
     capsys.readouterr()
-    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-
-    def eof(_prompt):
-        raise EOFError("EOF when reading a line")
-
-    monkeypatch.setattr("builtins.input", eof)
+    stdin = io.StringIO()  # empty: the first read is EOF — the prompt has been printed by then
+    stdin.isatty = lambda: True  # type: ignore[method-assign]
+    monkeypatch.setattr(sys, "stdin", stdin)
     assert main(["apply", str(active_repo)]) == 0
     out, err = capsys.readouterr()
-    assert out.endswith("dry run only — pass --yes to write (no terminal to ask).\n") and err == ""
+    assert out.endswith("apply? [y/N] \ndry run only — pass --yes to write (no terminal to ask).\n") and err == ""
     assert not (active_repo / "CLAUDE.md").exists() and not (active_repo / ".agents").exists()
     assert _resolve_layout(active_repo, State(), ask=True)[0] == ".agents"  # no home yet: the default
     (active_repo / ".agents").mkdir()

@@ -209,6 +209,7 @@ def _ask(prompt: str) -> str | None:
     try:
         return input(prompt)
     except EOFError:
+        print()  # the prompt is already on the line; what follows starts a line of its own
         return None
 
 
