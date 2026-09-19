@@ -1,6 +1,6 @@
 # ADR-0032 — Every harness file is written whole or not at all, and a failed write rolls back
 
-**Status:** accepted · **Date:** 2026-09-17 · **Deciders:** Andrei
+**Status:** accepted · **Date:** 2026-09-17 · **Deciders:** Andrei · **Amended 2026-09-19:** a rollback takes the directories it created with it (§4 below)
 
 ## Context
 
@@ -35,3 +35,14 @@ the user had to notice first. An external review on v0.7.0 simulated it. The ind
   named), the temp-then-replace sequence observed.
 - A crash between two `os.replace` calls still leaves a partial harness — the state is not written, the next
   `apply` previews the difference, and `adopt` records it. That is the ADR-0017 contract, unchanged.
+
+## Amendment 2026-09-19 — a rollback leaves no directory behind
+
+The first real run on a monorepo with a root-level build file rolled back (a rendering fault, C4) and left
+empty `.agents/` and `.claude/` behind — git does not show them, so nothing looked wrong, and the next `apply`
+asked which home to use (ADR-0015 §1: both present → ask, refuse without a terminal). A dead end caused by the
+rollback itself, with no line naming the cause. Decision: `_roll_back` prunes, for every file it removed
+because the run had created it, the directories left empty up to the repository root — exactly what
+ADR-0048's removal does — and never a directory that still holds anything. The rule of this ADR is unchanged
+in spirit: "rolled back, nothing written" now includes directories. Test:
+`test_rollback_takes_the_directories_it_created_with_it`.

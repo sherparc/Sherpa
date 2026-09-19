@@ -4,8 +4,9 @@ Generic harness generator. CLI `sherpa` (`scan | plan | apply | adopt | status |
 Plan and architecture: `docs/plan.md`. Documentation: `docs/index.md` (landing), `docs/commands/` (reference per
 command), `docs/concepts/` (rules and formats), `docs/reference/` (configuration, files, exit codes). Decisions:
 `docs/adr/` (index in `docs/adr/README.md`). Field semantics: `src/sherpa/schemas/`. The repo carries its own
-harness: `.claude/agents/architect.md` (overview and reasoning), skills `architect-review`, `milestone-step` and
-`sync-kb`, and the files `sherpa apply .` generates (owner doc, hook, checker, the block at the end of this file).
+harness: `.claude/agents/architect.md` (overview and reasoning), `.claude/agents/e2e-tester.md` (the product
+measured on a corpus repository, skill `e2e-test`, command `/e2e-test`), skills `architect-review`, `milestone-step`
+and `sync-kb`, and the files `sherpa apply .` generates (owner doc, hook, checker, the block at the end of this file).
 
 ## Language
 - **English everywhere that gets pushed**: code comments, docstrings, docs, ADRs, README, CLI output, test names,

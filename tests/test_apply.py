@@ -22,7 +22,7 @@ from sherpa.check import content_hash
 from sherpa.cli import main
 from sherpa.plan import PROPOSE, Check, Entry, build_plan
 from sherpa.scan import scan
-from tests.conftest import commit
+from tests.conftest import commit, git
 from tests.test_plan import check_golden, mod, model
 
 
@@ -145,10 +145,79 @@ def test_home_claude_keeps_everything_under_claude_and_needs_no_stubs():
 
 
 def test_root_module_facts_land_in_the_root_agents_md():
+    """A root module's scope is ``""``: its facts land in the root AGENTS.md and the owner-doc link from there
+    has no ``../`` — the first real run on a Gradle monorepo rendered ``../.agents/docs/modules/root.md``, C4
+    failed and the apply rolled back; no fixture had a root-level manifest."""
     m = model([mod("app", "", c90=30, c30=30, authors=2, files=40)])
     by_path = {t.path: t for t in targets_for(build_plan(m), m, targets=("agents-md",))}
-    assert "## app (managed by sherpa" in by_path["AGENTS.md"].blocks["harness"]
+    block = by_path["AGENTS.md"].blocks["harness"]
+    assert "## app (managed by sherpa" in block
+    assert "](.agents/docs/modules/app.md)" in block and "../" not in block
     assert not any(p.endswith("/AGENTS.md") for p in by_path) and "CLAUDE.md" not in by_path
+
+
+def test_relpath_from_the_repository_root_and_below():
+    from sherpa.apply.render import _relpath
+
+    assert _relpath("", ".agents/docs/modules/app.md") == ".agents/docs/modules/app.md"
+    assert _relpath("svc/pay", ".agents/docs/modules/pay.md") == "../../.agents/docs/modules/pay.md"
+    assert _relpath(".claude/skills/x", ".agents/skills/x/SKILL.md") == "../../../.agents/skills/x/SKILL.md"
+
+
+def build_root_repo(tmp_path: Path) -> Path:
+    """A repository whose manifest sits at the root (``pyproject.toml``, module ``app``, scope ``""``) next to one
+    nested module — the shape of a Gradle or npm monorepo with a root build file."""
+    work = tmp_path / "seed"
+    work.mkdir()
+    git(work, "init", "-q", "-b", "main")
+    files = {"pyproject.toml": '[project]\nname = "app"\nversion = "0"\n', "app/__init__.py": ""}
+    for i in range(30):
+        files[f"app/mod{i:02d}.py"] = "x = 1\n"
+    files["svc/lib/pyproject.toml"] = '[project]\nname = "lib"\nversion = "0"\n'
+    for i in range(10):
+        files[f"svc/lib/lib/m{i}.py"] = "x = 1\n"
+    commit(work, "init", files, date="2025-06-01T00:00:00Z", author="A")
+    for i in range(8):
+        commit(work, f"app {i}", {f"app/mod{i:02d}.py": f"x = {i}  # app\n"}, date=f"2026-02-{i + 1:02d}T10:00:00Z")
+    for i in range(4):
+        commit(work, f"lib {i}", {f"svc/lib/lib/m{i}.py": f"x = {i}  # lib\n"}, date=f"2026-02-{i + 1:02d}T11:00:00Z")
+    origin = tmp_path / "origin.git"
+    git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
+    clone = tmp_path / "mono"
+    git(tmp_path, "clone", "-q", str(origin), str(clone))
+    return clone
+
+
+def test_apply_writes_a_repository_with_a_root_module(root_repo: Path, capsys):
+    """End to end on the root-manifest fixture: plan → apply writes, the root AGENTS.md links the root module's
+    owner doc without a ``../``, the check passes and the second run has nothing to do."""
+    applied(root_repo)
+    out = capsys.readouterr().out
+    assert "check: 0 FAIL" in out and "rolled back" not in out
+    root = (root_repo / "AGENTS.md").read_text(encoding="utf-8")
+    assert "## app (managed by sherpa" in root and "](.agents/docs/modules/app.md)" in root and "../" not in root
+    assert (root_repo / ".agents" / "docs" / "modules" / "app.md").exists()
+    assert main(["check", str(root_repo)]) == 0
+    assert main(["apply", str(root_repo), "--dry-run"]) == 0
+    assert capsys.readouterr().out.endswith("nothing to do.\n")
+
+
+def test_rollback_takes_the_directories_it_created_with_it(tmp_path: Path):
+    """ADR-0032 amended: a rolled-back first apply left empty ``.agents/`` and ``.claude/`` behind, so the next
+    run asked which home to use — a dead end caused by the rollback itself. A directory that held the user's
+    file before stays."""
+    repo = tmp_path
+    (repo / ".claude" / "refinements").mkdir(parents=True)
+    (repo / ".claude" / "refinements" / "note.md").write_text("mine\n", encoding="utf-8")
+    good = Target(".agents/docs/modules/ok.md", MANAGED, None, "# ok\n")
+    also = Target(".claude/docs/modules/ok.md", MANAGED, None, "# ok\n")
+    bad = Target(".claude/agents/bad.md", MANAGED, None, "<!-- sherpa:begin x -->\nnever closed\n")
+    plan = build_plan(model([mod("a", "a", c90=1)]))
+    r = write(plan_files([good, also, bad], repo, State()), repo, State(), plan)
+    assert r.rolled_back and r.written == 0
+    assert not (repo / ".agents").exists()
+    assert not (repo / ".claude" / "docs").exists() and not (repo / ".claude" / "agents").exists()
+    assert (repo / ".claude" / "refinements" / "note.md").read_text(encoding="utf-8") == "mine\n"
 
 
 def test_generator_skill_is_linked_from_owner_doc_and_agent():

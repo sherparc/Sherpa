@@ -688,8 +688,9 @@ def _inner(block: str) -> str:
 
 
 def _relpath(from_dir: str, to_path: str) -> str:
-    """Relative markdown link from a directory to a file, "/" separated (no os.path on Windows)."""
-    a, b = from_dir.split("/"), to_path.split("/")
+    """Relative markdown link from a directory to a file, "/" separated (no os.path on Windows). The repository
+    root is ``""`` (a root module's scope) and has no segments — ``"".split("/")`` would be one."""
+    a, b = [seg for seg in from_dir.split("/") if seg], to_path.split("/")
     i = 0
     while i < min(len(a), len(b) - 1) and a[i] == b[i]:
         i += 1

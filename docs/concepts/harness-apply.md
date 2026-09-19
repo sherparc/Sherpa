@@ -216,7 +216,8 @@ an installed `sherpa` is importable it delegates to that — installed rules are
 `SHERPA_CHECK_STANDALONE=1` forces the copy. `status` notes when the copy is older than the installed sherpa.
 
 `apply` runs the checker before and after writing and rolls back when the write introduced a **new** FAIL;
-pre-existing FAILs from hand-written files are reported but never block.
+pre-existing FAILs from hand-written files are reported but never block. A rollback leaves nothing behind —
+the directories the run created go with their files, so the next run starts from the same repository.
 
 ## `sherpa status`
 
