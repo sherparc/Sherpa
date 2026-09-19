@@ -41,7 +41,8 @@ and `sync-kb`, and the files `sherpa apply .` generates (owner doc, hook, checke
 - Never push to `main` directly: every step is branch `task/<topic>` → PR → squash merge (guard: `.githooks/pre-push`,
   enabled via `git config core.hooksPath .githooks`). Remote is `github.com/sherparc/Sherpa`.
 - Namespaces (ADR-0009): product and CLI are `sherpa`, the Python package `sherpa-harness`, the GitHub org `sherparc`.
-- Commit messages: one to three full sentences, never a `Co-Authored-By` trailer.
+- Commit messages: one to three full sentences; every commit signed off (`git commit -s`, DCO, ADR-0052 — once per
+  clone `git config format.signoff true`), `Signed-off-by` the only trailer, never `Co-Authored-By`.
 - Releases (ADR-0018): bump `pyproject.toml` and `src/sherpa/__init__.py` together on the branch, merge, then
   `git tag v<version> && git push origin v<version>` — `release.yml` builds the wheel and creates the GitHub
   release; it refuses a tag that does not match both versions. Only `src/sherpa/` ships.

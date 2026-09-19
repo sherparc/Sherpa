@@ -241,7 +241,7 @@ flowchart LR
 | M3f | write safety: `apply` compares every file with the preview's read before writing, never writes through a symlink, writes each file whole or not at all and rolls back on a write error; `adopt` treats a differing base file as yours, takes a stale plan and rebuilds a torn state without a dead end; a dry run never refuses (two homes → assumes `.agents` and says so) and names a target directory that is a repository of its own | ✅ |
 | M3i | the manager sees what exists and takes back what is sherpa's: refuses on a nested repository (`doctor` says it first), a hand-written `covered:` is kept like a decision, the checker fails only in sherpa's own files; `apply` removes a rejected entry's files when they are still sherpa's and `apply --remove` uninstalls — a clean repository is clean again | ✅ |
 | M3j | owner docs where the team already writes them: a nested `AGENTS.md` at a unit's own path covers its owner-doc entry — `plan` sets it from the file, `adopt` reports it, `apply` writes the facts block into the team's file and no skeleton next to it (first slice, ADR-0049) | ✅ |
-| M2c | public release: the licence flipped to PolyForm Small Business or Noncommercial (ADR-0051) ✅ · still to do: the wheel on PyPI and `self-update` reading the index, `CONTRIBUTING.md` with a DCO, a demo at the top of this README | ⏳ |
+| M2c | public release: the licence flipped to PolyForm Small Business or Noncommercial (ADR-0051) ✅ · the contribution path — DCO checked on every pull request, code of conduct, security policy, templates (ADR-0052) ✅ · still to do: the wheel on PyPI and `self-update` reading the index, a demo at the top of this README | ⏳ |
 | M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
 | M3k | host adapters `codex`, `opencode`, `copilot`, `cursor`, `gemini` — thin on top of `agents-md` like `hermes`: `doctor` names the host, its native rule file only where `AGENTS.md` cannot carry it, the outcome hook where the host has hooks | ⏳ |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev` with `n` and the share of `unknown`; a comparison between revisions from 30 labelled executions each | ⏳ |
@@ -276,8 +276,10 @@ Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an AD
 
 CI runs with Python 3.12 and 3.13: Linux on every pull request, Linux and Windows on `main`, macOS weekly; a manual run covers all three. Test repos are built programmatically (no corpus in the repo). The repository carries its own harness — `sherpa status .` must be clean before a commit — and an architect agent under [.claude/agents/](.claude/agents/architect.md). Working rules for humans and agents: [CLAUDE.md](CLAUDE.md).
 
-`main` changes only through pull requests with squash merge. Once per clone, enable the guard that refuses direct pushes to `main`:
+`main` changes only through pull requests with squash merge, every commit signed off (DCO). Once per clone, enable the guard that refuses direct pushes to `main` and the sign-off:
 
 ```bash
-git config core.hooksPath .githooks
+git config core.hooksPath .githooks && git config format.signoff true
 ```
+
+Contributions: [CONTRIBUTING.md](CONTRIBUTING.md) · security reports: [SECURITY.md](SECURITY.md) · conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
