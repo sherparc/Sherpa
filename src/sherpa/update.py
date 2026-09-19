@@ -1,7 +1,7 @@
 """Distribution: where releases live, how sherpa was installed, ``self-update`` and the daily update hint.
 
 Releases are GitHub Releases of ``sherparc/Sherpa`` (ADR-0018): ``release.yml`` attaches the wheel to the tag.
-The repository is private until the public release (ADR-0010), so the Releases API needs a token —
+The Releases API is read with a token (ADR-0018; PyPI follows with the launch slice, ADR-0051) —
 ``GITHUB_TOKEN``/``GH_TOKEN`` or ``gh auth token``. Without one the newest tag comes from ``git ls-remote`` over
 the user's git credentials, and the install source is the tag's git URL (ADR-0035).
 
@@ -98,7 +98,7 @@ def latest_release(tok: str | None, timeout: float = TIMEOUT) -> Release:
     except urllib.error.HTTPError as e:
         if e.code == 404:  # with a token GitHub answers 404 only for "no release yet"
             raise UpdateError(f"no release published yet (https://github.com/{REPO}/releases)") from e
-        hint = " — the token has no access to the private repository" if e.code in (401, 403) else ""
+        hint = " — the token has no access to the repository" if e.code in (401, 403) else ""
         raise UpdateError(f"GitHub API {e.code} for {API_LATEST}{hint}") from e
     except (urllib.error.URLError, OSError, ValueError) as e:
         raise UpdateError(f"GitHub unreachable ({getattr(e, 'reason', e)})") from e
