@@ -55,7 +55,7 @@ Errors go to stderr as `sherpa <command>: <message>`; the message names the fix 
 | `SHERPA_UPDATE_GOLDENS=1` | the test suite | rewrite `tests/goldens/` after an intended rule change |
 | `SHERPA_NO_UPDATE_CHECK=1` | every command | no release check, no daily hint (`doctor --offline` for one run) |
 | `SHERPA_CACHE_DIR` | the update check | cache directory instead of `$XDG_CACHE_HOME/sherpa`, `~/.cache/sherpa` or `%LOCALAPPDATA%\sherpa` |
-| `GITHUB_TOKEN`, `GH_TOKEN` | `self-update`, `doctor`, the update check | token for the private repository's Releases API; otherwise `gh auth token` is asked |
+| `GITHUB_TOKEN`, `GH_TOKEN` | `self-update`, `doctor`, the update check | token for the Releases API (a higher rate limit); otherwise `gh auth token` is asked, and without one the tag comes from `git ls-remote` |
 | `CI` | every command | no daily hint |
 
 Sherpa needs `git` on the `PATH` and Python ≥ 3.12. The outcome hook and the deployed checker need only a

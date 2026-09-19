@@ -12,7 +12,7 @@ sherpa self-update [--check]
 ## How it works
 
 1. **Find the release.** With a token from `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`:
-   `GET /repos/sherparc/Sherpa/releases/latest` (the repository is private until the public release, ADR-0010).
+   `GET /repos/sherparc/Sherpa/releases/latest`.
    Without a token: `git ls-remote --tags` over the user's git credentials — the https URL first (credential
    helper), then ssh — and the highest `v*` tag wins (ADR-0035); git never prompts (`GIT_TERMINAL_PROMPT=0`).
    The tag `v<version>` is compared numerically with the running version; a pre-release suffix sorts below the
@@ -82,7 +82,7 @@ sherpa 0.6.0 is current (latest release: v0.6.0).
 | Symptom | Cause | Fix |
 |---|---|---|
 | `no access without a token: git ls-remote failed for …` | no token and no git credentials for the repository (both URLs are named with git's last line) | `gh auth login`, `GITHUB_TOKEN=…`, or a credential helper / ssh key for GitHub |
-| `GitHub API 401/403 … the token has no access` | the token does not cover the private repository | a token of a collaborator, or unset it to use git credentials |
+| `GitHub API 401/403 … the token has no access` | the token is expired or scoped without repository read | renew it, or unset it to use git credentials |
 | `no release published yet` / `no release tag on …` | access works; nothing released | wait, or install from the repository (`git+https://…`) |
 | `… is not a valid wheel file name (PEP 427)` | the release asset has an unexpected name | check the release's assets; `release.yml` attaches the wheel under its build name |
 | `this sherpa runs from a clone` | editable install | `git pull` in the clone |

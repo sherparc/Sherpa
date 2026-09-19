@@ -241,6 +241,7 @@ flowchart LR
 | M3f | write safety: `apply` compares every file with the preview's read before writing, never writes through a symlink, writes each file whole or not at all and rolls back on a write error; `adopt` treats a differing base file as yours, takes a stale plan and rebuilds a torn state without a dead end; a dry run never refuses (two homes → assumes `.agents` and says so) and names a target directory that is a repository of its own | ✅ |
 | M3i | the manager sees what exists and takes back what is sherpa's: refuses on a nested repository (`doctor` says it first), a hand-written `covered:` is kept like a decision, the checker fails only in sherpa's own files; `apply` removes a rejected entry's files when they are still sherpa's and `apply --remove` uninstalls — a clean repository is clean again | ✅ |
 | M3j | owner docs where the team already writes them: a nested `AGENTS.md` at a unit's own path covers its owner-doc entry — `plan` sets it from the file, `adopt` reports it, `apply` writes the facts block into the team's file and no skeleton next to it (first slice, ADR-0049) | ✅ |
+| M2c | public release: the licence flipped to PolyForm Small Business or Noncommercial (ADR-0051) ✅ · still to do: the wheel on PyPI and `self-update` reading the index, `CONTRIBUTING.md` with a DCO, a demo at the top of this README | ⏳ |
 | M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
 | M3k | host adapters `codex`, `opencode`, `copilot`, `cursor`, `gemini` — thin on top of `agents-md` like `hermes`: `doctor` names the host, its native rule file only where `AGENTS.md` cannot carry it, the outcome hook where the host has hooks | ⏳ |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev` with `n` and the share of `unknown`; a comparison between revisions from 30 labelled executions each | ⏳ |
@@ -264,7 +265,7 @@ Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an AD
 
 ## License
 
-Proprietary, all rights reserved ([LICENSE](LICENSE)). Everything Sherpa generates in your repo is yours, no strings attached. A source-available licence is planned for the public release (free for individuals and small teams, a company licence above that) — reasoning in [ADR-0010](docs/adr/0010-two-stage-licensing.md).
+[PolyForm Small Business 1.0.0](LICENSE) or [PolyForm Noncommercial 1.0.0](LICENSE), at your option: free for personal use, for noncommercial organisations and for companies under 100 people and USD 1M revenue; larger companies need a commercial licence. Everything Sherpa generates in your repo is yours, no strings attached. Reasoning in [ADR-0051](docs/adr/0051-public-release-polyform-small-business-or-noncommercial.md).
 
 ## Development
 

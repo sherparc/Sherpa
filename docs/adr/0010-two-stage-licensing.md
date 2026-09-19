@@ -1,6 +1,7 @@
 # ADR-0010 — Licensing in two stages: proprietary now, source-available at the public release
 
-**Status:** accepted · **Date:** 2026-09-16 · **Code:** `LICENSE`, `pyproject.toml`, `README.md`
+**Status:** accepted · **Date:** 2026-09-16 · **Code:** `LICENSE`, `pyproject.toml`, `README.md` ·
+**Second stage taken by:** ADR-0051 (PolyForm Small Business or Noncommercial, 2026-09-19)
 
 ## Context
 Sherpa is to be sold to companies later while gaining reach among developers. Without a `LICENSE` file "all

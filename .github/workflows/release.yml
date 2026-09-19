@@ -1,7 +1,7 @@
 # Release: a tag v<version> → tests → wheel + sdist → GitHub release with the wheel attached (ADR-0018).
 # The tag must match the version in pyproject.toml and src/sherpa/__init__.py — the job refuses otherwise.
-# `sherpa self-update` reads the latest release through the API; the repository is private until the public
-# release (ADR-0010), so users need a token (`gh auth login`) or the git URL fallback.
+# `sherpa self-update` reads the latest release through the API with a token, else the newest tag by `git ls-remote`;
+# the PyPI publish step is the next item of the launch slice (ADR-0051, plan M2c).
 name: release
 
 on:

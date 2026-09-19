@@ -81,7 +81,7 @@ sherpa doctor — 0.5.0
 | Symptom | Cause | Fix |
 |---|---|---|
 | `update` says `no release published yet` | the token works, but the repository has no GitHub release | nothing to do; `git pull` on a clone |
-| `update` says `no access without a token: git ls-remote failed …` | no token and no git credentials for the private repository | `gh auth login`, `GITHUB_TOKEN`, or a credential helper / ssh key |
+| `update` says `no access without a token: git ls-remote failed …` | no token and no git credentials for GitHub | `gh auth login`, `GITHUB_TOKEN`, or a credential helper / ssh key |
 | `trunk` fails although the branch exists | it exists locally only; sherpa reads `origin/<branch>` | `git fetch origin`, then `git remote set-head origin -a` |
 | `install` hints that `uv` is not on the `PATH` | sherpa was installed with `uv tool` from a shell that had it | reinstall uv or add `~/.local/bin` to the `PATH` |
 

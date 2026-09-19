@@ -7,7 +7,7 @@ in any of the steps below.
 ## 1. Install
 
 Sherpa is a Python 3.12+ CLI with one runtime dependency (PyYAML), released as the wheel `sherpa-harness` on
-GitHub Releases. The repository is private until the public release, so install through your GitHub access:
+GitHub Releases (PyPI is the next step of the launch slice, plan M2c). Install from the repository:
 
 ```bash
 uv tool install git+https://github.com/sherparc/Sherpa.git      # or: pipx install git+https://github.com/sherparc/Sherpa.git
