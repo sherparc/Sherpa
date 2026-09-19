@@ -6,11 +6,11 @@ in any of the steps below.
 
 ## 1. Install
 
-Sherpa is a Python 3.12+ CLI with one runtime dependency (PyYAML), released as the wheel `sherpa-harness` on
-PyPI and on GitHub Releases:
+Sherpa is a Python 3.12+ CLI with one runtime dependency (PyYAML), released as the wheel `sherparc` on PyPI
+and on GitHub Releases:
 
 ```bash
-uv tool install sherpa-harness                                   # or: pipx install sherpa-harness
+uv tool install sherparc                                         # or: pipx install sherparc
 sherpa doctor                                                    # every prerequisite with a fix
 ```
 

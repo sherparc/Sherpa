@@ -60,7 +60,9 @@ def _fake_api(
             if pypi is None:
                 raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, None)
             urls = (
-                [{"filename": f"sherpa_harness-{pypi}-py3-none-any.whl", "url": "https://files/x.whl"}] if wheel else []
+                [{"filename": f"{update.PYPI_PROJECT}-{pypi}-py3-none-any.whl", "url": "https://files/x.whl"}]
+                if wheel
+                else []
             )
             return _Resp(json.dumps({"info": {"version": pypi}, "urls": urls}).encode())
         if status:
@@ -68,7 +70,9 @@ def _fake_api(
         if req.full_url.endswith("/assets/1"):
             return _Resp(b"WHEELBYTES")
         assets = (
-            [{"name": f"sherpa_harness-{tag[1:]}-py3-none-any.whl", "url": "https://api/assets/1"}] if wheel else []
+            [{"name": f"{update.PYPI_PROJECT}-{tag[1:]}-py3-none-any.whl", "url": "https://api/assets/1"}]
+            if wheel
+            else []
         )
         body = {"tag_name": tag, "html_url": f"https://github.com/{update.REPO}/releases/tag/{tag}", "assets": assets}
         return _Resp(json.dumps(body).encode())
@@ -130,7 +134,7 @@ def test_latest_release_parses_tag_and_wheel(monkeypatch):
         f"v{NEWER}",
         "https://api/assets/1",
         f"https://github.com/{update.REPO}/releases/tag/v{NEWER}",
-        f"sherpa_harness-{NEWER}-py3-none-any.whl",
+        f"{update.PYPI_PROJECT}-{NEWER}-py3-none-any.whl",
     )
     assert seen[0].full_url == update.PYPI_JSON and seen[0].get_header("Authorization") is None  # the index first
     assert seen[1].get_header("Authorization") == "Bearer tok"
@@ -159,7 +163,7 @@ def test_latest_release_prefers_pypi_without_a_token(monkeypatch):
         f"v{NEWER}",
         "https://files/x.whl",
         f"https://pypi.org/project/{update.PYPI_PROJECT}/{NEWER}/",
-        f"sherpa_harness-{NEWER}-py3-none-any.whl",
+        f"{update.PYPI_PROJECT}-{NEWER}-py3-none-any.whl",
         "pypi",
     )
     assert [getattr(r, "full_url", r) for r in seen] == [update.PYPI_JSON]
@@ -246,7 +250,7 @@ def _release(**kw) -> update.Release:
         tag=f"v{NEWER}",
         wheel_url="https://api/assets/1",
         html_url="",
-        wheel_name=f"sherpa_harness-{NEWER}-py3-none-any.whl",
+        wheel_name=f"{update.PYPI_PROJECT}-{NEWER}-py3-none-any.whl",
     )
     return update.Release(**(base | kw))
 
@@ -256,7 +260,7 @@ def test_download_writes_wheel_under_its_pep427_name(monkeypatch, tmp_path: Path
     seen = []
     _fake_api(monkeypatch, seen=seen)
     p = update.download(_release(), "tok", tmp_path)
-    assert p.read_bytes() == b"WHEELBYTES" and p.name == f"sherpa_harness-{NEWER}-py3-none-any.whl"
+    assert p.read_bytes() == b"WHEELBYTES" and p.name == f"{update.PYPI_PROJECT}-{NEWER}-py3-none-any.whl"
     assert seen[0].get_header("Accept") == "application/octet-stream"
     assert update.WHEEL_NAME.match(p.name)
     assert update.download(_release(wheel_name=None), "tok", tmp_path).name == p.name  # derived from the version
@@ -286,7 +290,7 @@ def test_wheel_name_pattern_is_pep427(name, ok):
 
 @pytest.mark.parametrize(
     "prefix,kind",
-    [("/home/u/.local/share/uv/tools/sherpa-harness", "uv"), (r"C:\Users\u\pipx\venvs\sherpa-harness", "pipx")],
+    [("/home/u/.local/share/uv/tools/sherparc", "uv"), (r"C:\Users\u\pipx\venvs\sherparc", "pipx")],
 )
 def test_installer_from_prefix(monkeypatch, prefix, kind):
     monkeypatch.setattr(update.sys, "prefix", prefix)
@@ -345,7 +349,7 @@ def test_self_update_installs_wheel_with_token(monkeypatch):
     out = io.StringIO()
     assert update.self_update(run=run, out=out) == 0
     assert calls[0][:5] == ["uv", "tool", "install", "--force", "--reinstall"]
-    assert Path(calls[0][-1]).name == f"sherpa_harness-{NEWER}-py3-none-any.whl"
+    assert Path(calls[0][-1]).name == f"{update.PYPI_PROJECT}-{NEWER}-py3-none-any.whl"
     assert f"sherpa {NEWER} installed via uv." in out.getvalue()
 
 

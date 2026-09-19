@@ -29,7 +29,7 @@ from pathlib import Path
 from sherpa import __version__, atomic
 
 REPO = "sherparc/Sherpa"
-PYPI_PROJECT = "sherpa-harness"  # the PyPI name; the CLI and the package stay `sherpa` (ADR-0009)
+PYPI_PROJECT = "sherparc"  # the PyPI name (ADR-0054); the CLI and the import package stay `sherpa` (ADR-0009)
 PYPI_JSON = f"https://pypi.org/pypi/{PYPI_PROJECT}/json"
 API_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 GIT_URL = f"https://github.com/{REPO}.git"
@@ -187,7 +187,7 @@ def download(rel: Release, tok: str | None, into: Path, timeout: float = 60.0) -
     the API asset URL ends in a number and would make an unusable file."""
     if not rel.wheel_url:
         raise UpdateError(f"release {rel.tag} has no wheel attached")
-    name = rel.wheel_name or f"sherpa_harness-{rel.version}-py3-none-any.whl"
+    name = rel.wheel_name or f"{PYPI_PROJECT}-{rel.version}-py3-none-any.whl"
     if not WHEEL_NAME.match(name):
         raise UpdateError(f"{name!r} is not a valid wheel file name (PEP 427)")
     target = into / name
