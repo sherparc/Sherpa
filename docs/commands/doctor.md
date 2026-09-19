@@ -43,7 +43,7 @@ commands ([self-update](self-update.md)).
 ```console
 $ sherpa doctor
 sherpa doctor — 0.5.0
-  ✓ python       3.12.3 at /home/dev/.local/share/uv/tools/sherpa-harness/bin/python3
+  ✓ python       3.12.3 at /home/dev/.local/share/uv/tools/sherparc/bin/python3
   ✓ git          git version 2.43.0 (/usr/bin/git)
   ✓ install      sherpa 0.5.0 via uv (/home/dev/.local/bin/uv)
   ✓ repository   /home/dev/shop

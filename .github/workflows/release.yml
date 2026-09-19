@@ -32,8 +32,8 @@ jobs:
           test "$tag" = "$py" -a "$tag" = "$toml" || { echo "tag v$tag vs __init__ $py vs pyproject $toml"; exit 1; }
       - name: the version is not on PyPI yet
         run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/sherpa-harness/${GITHUB_REF_NAME#v}/json")
-          test "$code" = "404" || { echo "sherpa-harness ${GITHUB_REF_NAME#v} answers $code on PyPI — a version is published once"; exit 1; }
+          code=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/sherparc/${GITHUB_REF_NAME#v}/json")
+          test "$code" = "404" || { echo "sherparc ${GITHUB_REF_NAME#v} answers $code on PyPI — a version is published once"; exit 1; }
       - run: git config --global init.defaultBranch main
       - run: python -m pip install -e ".[dev]" build
       - run: python -m pytest -q --cov=sherpa --cov-fail-under=90

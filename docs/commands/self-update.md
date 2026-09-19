@@ -12,7 +12,7 @@ sherpa self-update [--check]
 
 ## How it works
 
-1. **Find the release.** First PyPI, without a token: `GET https://pypi.org/pypi/sherpa-harness/json`, the
+1. **Find the release.** First PyPI, without a token: `GET https://pypi.org/pypi/sherparc/json`, the
    version under `info.version`. When the index has no project yet or cannot be reached, the GitHub release:
    with a token from `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token` `GET /repos/sherparc/Sherpa/releases/latest`;
    without a token: `git ls-remote --tags` over the user's git credentials — the https URL first (credential
@@ -20,9 +20,9 @@ sherpa self-update [--check]
    The tag `v<version>` is compared numerically with the running version; a pre-release suffix sorts below the
    plain version.
 2. **Fetch.** From PyPI the installer fetches the wheel itself — the source is the pinned requirement
-   `sherpa-harness==0.8.0`, no download by sherpa. From a GitHub release with a token the wheel attached by
+   `sherparc==0.8.1`, no download by sherpa. From a GitHub release with a token the wheel attached by
    `release.yml` is downloaded through the API into a temporary
-   directory under its own file name (`sherpa_harness-0.7.3-py3-none-any.whl` — pip reads the version and the
+   directory under its own file name (`sherparc-0.8.1-py3-none-any.whl` — pip reads the version and the
    tags from the name, PEP 427). Without a token, or when no wheel is attached, the source is the tag's git URL
    (`git+https://github.com/sherparc/Sherpa.git@v0.7.3`) through the user's git credentials.
 3. **Install.** The command of the detected installer:
@@ -66,17 +66,17 @@ sherpa 0.6.0 is available (you have 0.5.0) — `sherpa self-update`; SHERPA_NO_U
 
 ```console
 $ sherpa self-update
-sherpa 0.8.0 is available (you have 0.7.9): https://pypi.org/project/sherpa-harness/0.8.0/
-→ uv tool install --force --reinstall sherpa-harness==0.8.0
-sherpa 0.8.0 installed via uv.
+sherpa 0.8.1 is available (you have 0.7.9): https://pypi.org/project/sherparc/0.8.1/
+→ uv tool install --force --reinstall sherparc==0.8.1
+sherpa 0.8.1 installed via uv.
 
 $ sherpa self-update --check
-sherpa 0.8.0 is current (latest release: v0.8.0).
+sherpa 0.8.1 is current (latest release: v0.8.1).
 
 $ sherpa self-update            # the index silent, a token present: the GitHub release
-sherpa 0.6.0 is available (you have 0.5.0): https://github.com/sherparc/Sherpa/releases/tag/v0.6.0
-→ uv tool install --force --reinstall /tmp/sherpa-update-k3j/sherpa_harness-0.6.0-py3-none-any.whl
-sherpa 0.6.0 installed via uv.
+sherpa 0.8.1 is available (you have 0.7.9): https://github.com/sherparc/Sherpa/releases/tag/v0.8.1
+→ uv tool install --force --reinstall /tmp/sherpa-update-k3j/sherparc-0.8.1-py3-none-any.whl
+sherpa 0.8.1 installed via uv.
 ```
 
 ## Exit codes

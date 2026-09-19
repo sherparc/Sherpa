@@ -1,6 +1,6 @@
 # ADR-0009 — Namespaces (product, package, org) and branch protection without rulesets
 
-**Status:** accepted · **Date:** 2026-09-16 · **Code:** `pyproject.toml`, `.githooks/pre-push`, `README.md`
+**Status:** accepted · **Amended by:** ADR-0054 (the PyPI package is `sherparc`, 2026-09-19) · **Date:** 2026-09-16 · **Code:** `pyproject.toml`, `.githooks/pre-push`, `README.md`
 
 ## Context
 Creating the GitHub organisation showed that names live in separate namespaces: `github.com/sherpa` (org/user) is

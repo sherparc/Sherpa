@@ -40,7 +40,8 @@ and `sync-kb`, and the files `sherpa apply .` generates (owner doc, hook, checke
   examples (from goldens), troubleshooting.
 - Never push to `main` directly: every step is branch `task/<topic>` → PR → squash merge (guard: `.githooks/pre-push`,
   enabled via `git config core.hooksPath .githooks`). Remote is `github.com/sherparc/Sherpa`.
-- Namespaces (ADR-0009): product and CLI are `sherpa`, the Python package `sherpa-harness`, the GitHub org `sherparc`.
+- Namespaces (ADR-0009, ADR-0054): product, CLI and import package are `sherpa`; the PyPI package and the GitHub org are
+  `sherparc`.
 - Commit messages: one to three full sentences; every commit signed off (DCO, ADR-0052 — `git commit -s`, or once per
   clone `git config core.hooksPath .githooks`, whose `prepare-commit-msg` adds the line), `Signed-off-by` the only
   trailer, never `Co-Authored-By`.

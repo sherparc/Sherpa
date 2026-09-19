@@ -1,6 +1,7 @@
 # ADR-0053 — PyPI is the index: trusted publishing on every tag, `self-update` reads it first
 
 **Status:** accepted · **Date:** 2026-09-19 · **Decision:** Andrei (launch slice M2c) · **Takes:** ADR-0018 §5 ·
+**Amended by:** ADR-0054 (the project is `sherparc`, not `sherpa-harness`) ·
 **Code:** `.github/workflows/release.yml`, `src/sherpa/update.py`, `src/sherpa/doctor.py`
 
 ## Context
