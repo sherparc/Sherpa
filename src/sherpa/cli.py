@@ -200,6 +200,18 @@ def _load_state_or_empty(repo: Path, command: str):
         return state_mod.State(), str(e)
 
 
+def _ask(prompt: str) -> str | None:
+    """One question on the terminal; ``None`` when there is no terminal to answer it. ``isatty()`` is not
+    enough: on Windows a redirected ``NUL`` counts as a terminal and ``input()`` hits EOF — a traceback in every
+    CI job that forgot ``--yes`` (found by the e2e theses on Windows, plan §13 F57)."""
+    if not sys.stdin.isatty():
+        return None
+    try:
+        return input(prompt)
+    except EOFError:
+        return None
+
+
 ASSUMED_HOME = (
     "note: both .agents/ and .claude/ exist and nothing decides where the core lives — this preview assumes "
     '.agents; the real run asks, or set [apply] home = ".agents" or ".claude" in sherpa.toml.'
@@ -222,20 +234,22 @@ def _resolve_layout(repo: Path, state, *, ask: bool, preview: bool = False) -> t
         both = (repo / ".agents").is_dir() and (repo / ".claude").is_dir()
         neither = not (repo / ".agents").is_dir() and not (repo / ".claude").is_dir()
         footprint = [h for h in config.HOMES if (repo / check_script(h)).is_file()]
-        tty = ask and sys.stdin.isatty()
+        no_terminal = (
+            "both .agents/ and .claude/ exist — where should owner docs and skills live? "
+            'Set [apply] home = ".agents" or ".claude" in sherpa.toml'
+        )
         if both and len(footprint) == 1:
             home = footprint[0]  # sherpa's own checker copy says where the core lives (a lost state, ADR-0017)
         elif both and preview:
             home, notes = ".agents", [ASSUMED_HOME]
-        elif both and not tty:
-            raise ValueError(
-                "both .agents/ and .claude/ exist — where should owner docs and skills live? "
-                'Set [apply] home = ".agents" or ".claude" in sherpa.toml'
-            )
-        elif (both or neither) and tty:
+        elif (both or neither) and ask:
             what = "both .agents/ and .claude/ exist" if both else "no harness directory yet"
-            answer = input(f"{what} — owner docs and skills under [1] .agents (default, cross-tool)  [2] .claude ? ")
-            home = ".claude" if answer.strip() in ("2", ".claude") else ".agents"
+            answer = _ask(f"{what} — owner docs and skills under [1] .agents (default, cross-tool)  [2] .claude ? ")
+            if answer is None and both:
+                raise ValueError(no_terminal)
+            home = ".claude" if (answer or "").strip() in ("2", ".claude") else ".agents"
+        elif both:
+            raise ValueError(no_terminal)
         elif (repo / ".claude").is_dir():
             home = ".claude"
         else:
@@ -296,11 +310,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
     if args.dry_run:
         return EXIT_OK
     if not args.yes:
-        if not sys.stdin.isatty():
+        answer = _ask("apply? [y/N] ")
+        if answer is None:
             print("dry run only — pass --yes to write (no terminal to ask).", file=sys.stdout)
             return EXIT_OK
-        answer = input("apply? [y/N] ").strip().lower()
-        if answer not in ("y", "yes"):
+        if answer.strip().lower() not in ("y", "yes"):
             print("aborted, nothing written.", file=sys.stdout)
             return EXIT_OK
     result = apply.write(actions, repo, state, plan, check=not args.no_check, home=home, targets=targets)

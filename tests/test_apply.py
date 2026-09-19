@@ -781,6 +781,32 @@ def test_cli_apply_dry_run_asks_and_aborts(active_repo: Path, capsys, monkeypatc
     assert "18 files written" in capsys.readouterr().out and (active_repo / "CLAUDE.md").exists()
 
 
+def test_cli_apply_treats_eof_on_the_question_as_no_terminal(active_repo: Path, capsys, monkeypatch):
+    """Plan §13 F57, found by the e2e theses on Windows CI: a redirected ``NUL`` passes ``isatty()`` there, so
+    ``apply`` without ``--yes`` asked and died with ``EOFError`` — exit 1 and a traceback in a CI job. EOF on
+    a question is no terminal: the dry run's closing line, exit 0, nothing written; the home question refuses
+    with the fix named when both homes exist and takes the default when none does."""
+    from sherpa.cli import _resolve_layout
+
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    capsys.readouterr()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+
+    def eof(_prompt):
+        raise EOFError("EOF when reading a line")
+
+    monkeypatch.setattr("builtins.input", eof)
+    assert main(["apply", str(active_repo)]) == 0
+    out, err = capsys.readouterr()
+    assert out.endswith("dry run only — pass --yes to write (no terminal to ask).\n") and err == ""
+    assert not (active_repo / "CLAUDE.md").exists() and not (active_repo / ".agents").exists()
+    assert _resolve_layout(active_repo, State(), ask=True)[0] == ".agents"  # no home yet: the default
+    (active_repo / ".agents").mkdir()
+    (active_repo / ".claude").mkdir()
+    with pytest.raises(ValueError, match="both .agents/ and .claude/ exist — .*sherpa.toml"):
+        _resolve_layout(active_repo, State(), ask=True)
+
+
 def test_cli_check(active_repo: Path, capsys):
     applied(active_repo)
     capsys.readouterr()
