@@ -8,6 +8,8 @@
 
 Sherpa analyses your codebase deterministically (like CodeScene) and plans the knowledge architecture for AI assistants from it (like Terraform): owner docs, specialised agents, skills, librarians, evals. You review the plan — Sherpa sets it up after your approval.
 
+Sherpa reads your git history and gives a reason for every proposal — and for every no. It writes into the repository you already have, for the runtimes you already use: Claude Code natively, every `AGENTS.md` reader (Codex, Cursor, Copilot, Gemini CLI, OpenCode, Hermes) through one neutral core, one thin adapter per host on the roadmap.
+
 [![CI](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml/badge.svg)](https://github.com/sherparc/Sherpa/actions/workflows/ci.yml)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 ![Status: scan, plan, apply, adopt, doctor live](https://img.shields.io/badge/status-scan%20%2B%20plan%20%2B%20apply%20%2B%20adopt%20%2B%20doctor%20live-brightgreen)
@@ -240,6 +242,7 @@ flowchart LR
 | M3i | the manager sees what exists and takes back what is sherpa's: refuses on a nested repository (`doctor` says it first), a hand-written `covered:` is kept like a decision, the checker fails only in sherpa's own files; `apply` removes a rejected entry's files when they are still sherpa's and `apply --remove` uninstalls — a clean repository is clean again | ✅ |
 | M3j | owner docs where the team already writes them: a nested `AGENTS.md` at a unit's own path covers its owner-doc entry — `plan` sets it from the file, `adopt` reports it, `apply` writes the facts block into the team's file and no skeleton next to it (first slice, ADR-0049) | ✅ |
 | M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
+| M3k | host adapters `codex`, `opencode`, `copilot`, `cursor`, `gemini` — thin on top of `agents-md` like `hermes`: `doctor` names the host, its native rule file only where `AGENTS.md` cannot carry it, the outcome hook where the host has hooks | ⏳ |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev` with `n` and the share of `unknown`; a comparison between revisions from 30 labelled executions each | ⏳ |
 | M7a | runtime plugins: Sherpa installable inside Claude Code (plugin) and Hermes (bundle) — `/sherpa-plan` with per-entry approval, `/sherpa-apply`, `/sherpa-status`; thin, the CLI does the work | ⏳ |
 | M6-lite | provider layer: thin, framework-free — bring your own key, local models via the OpenAI API, Anthropic natively | ⏳ |
@@ -248,9 +251,16 @@ flowchart LR
 | M3b | language adapters `dotnet` + `python` (T2: anchors, patterns) | ⏳ |
 | M7 | librarians, multi-repo | ⏳ |
 
-Order from here: M3j's second slice → M3h → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §10, §13).
+Order from here: M3j's second slice → M3h → M3k → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §9.1, §10, §13).
 
 Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an ADR: [docs/adr/](docs/adr/README.md)
+
+## Related
+
+| Project | What it is | Where Sherpa differs |
+|---|---|---|
+| [metaharness](https://github.com/ruvnet/metaharness) | a factory: scaffolds a new, branded agent-harness package (own `npx` CLI, MCP server, signed releases) from a static read of manifests, for ten hosts | Sherpa writes into the repository you have, from its git history, with a reason for every entry and every no, and keeps it current — `adopt`, `status`, outcome labels per harness version |
+| Claude Code `/init`, auto-memory · Hermes Agent's self-written skills | the runtimes' own way to grow a harness: LLM prose, per person, unreviewed | facts from `git log`, deterministic, reviewed in the PR like code, per team and repository; runtime-neutral (plan §9) |
 
 ## License
 
