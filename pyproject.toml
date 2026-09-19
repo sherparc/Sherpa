@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sherparc"  # the PyPI name: "sherpa" is taken, the org name is one word (ADR-0054); import package and CLI stay "sherpa"
-version = "0.8.1"
+dynamic = ["version"]  # one source: src/sherpa/__init__.py (ADR-0018 §2)
 description = "Generic AI-harness generator: scan the codebase, plan owner docs, agents and skills, create them after approval."
 license = "PolyForm-Small-Business-1.0.0 OR PolyForm-Noncommercial-1.0.0"  # ADR-0051: free for individuals, noncommercial organisations and small companies
 license-files = ["LICENSE"]
@@ -16,6 +16,9 @@ sherpa = "sherpa.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-cov>=5", "jsonschema>=4", "ruff>=0.6"]  # jsonschema: the reference the stdlib validator is tested against (ADR-0042), never a runtime dependency
+
+[tool.setuptools.dynamic]
+version = {attr = "sherpa.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]

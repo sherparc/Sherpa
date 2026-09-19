@@ -1,6 +1,6 @@
 # Release: a tag v<version> → tests → wheel + sdist → GitHub release with the wheel attached (ADR-0018) → the
 # same files on PyPI through trusted publishing (ADR-0053: no token in the repository, the `pypi` environment is
-# the publisher registered on pypi.org). The tag must match the version in pyproject.toml and
+# the publisher registered on pypi.org). The tag must match the version in
 # src/sherpa/__init__.py and must not be on the index yet — the job refuses otherwise. `sherpa self-update`
 # reads PyPI first, the GitHub release with a token or the newest tag by `git ls-remote` when the index is silent.
 name: release
@@ -28,8 +28,7 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME#v}"
           py=$(python -c "import re,pathlib;print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('src/sherpa/__init__.py').read_text()).group(1))")
-          toml=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          test "$tag" = "$py" -a "$tag" = "$toml" || { echo "tag v$tag vs __init__ $py vs pyproject $toml"; exit 1; }
+          test "$tag" = "$py" || { echo "tag v$tag vs __init__ $py — src/sherpa/__init__.py is the one place the version lives"; exit 1; }
       - name: the version is not on PyPI yet
         run: |
           code=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/sherparc/${GITHUB_REF_NAME#v}/json")

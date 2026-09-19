@@ -47,9 +47,9 @@ and `sync-kb`, and the files `sherpa apply .` generates (owner doc, hook, checke
 - Commit messages: one to three full sentences; every commit signed off (DCO, ADR-0052 — `git commit -s`, or once per
   clone `git config core.hooksPath .githooks`, whose `prepare-commit-msg` adds the line), `Signed-off-by` the only
   trailer, never `Co-Authored-By`.
-- Releases (ADR-0018): bump `pyproject.toml` and `src/sherpa/__init__.py` together on the branch, merge, then
+- Releases (ADR-0018): bump `__version__` in `src/sherpa/__init__.py` (the one place — `pyproject.toml` reads it) on the branch, merge, then
   `git tag v<version> && git push origin v<version>` — `release.yml` builds the wheel and creates the GitHub
-  release; it refuses a tag that does not match both versions. Only `src/sherpa/` ships.
+  release; it refuses a tag that does not match that version. Only `src/sherpa/` ships.
 - README is marketing and truth at once: it moves with every step (status, roadmap, numbers) and never claims what
   does not run — examples are real outputs, badges only for things that exist. The README roadmap and plan §3 are
   the same table: same rows, same order; the README says it in one or two sentences, the plan explains and
