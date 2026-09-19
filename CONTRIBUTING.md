@@ -10,7 +10,8 @@ same ones the maintainer works by ([CLAUDE.md](CLAUDE.md) has the long form).
   not decided, and a pull request that needs one carries it.
 - **Licence and DCO.** Sherpa is licensed under PolyForm Small Business or Noncommercial ([LICENSE](LICENSE)).
   Every commit must carry a [Developer Certificate of Origin](https://developercertificate.org/) sign-off —
-  `git commit -s`, or once per clone `git config format.signoff true`. The `dco` check on the pull request
+  `git commit -s`, or once per clone `git config core.hooksPath .githooks` (its `prepare-commit-msg` adds the
+  line, its `pre-push` refuses a push to `main`). The `dco` check on the pull request
   refuses a commit without `Signed-off-by:`. The sign-off is your statement that you may contribute the change
   under the repository's licence; there is no CLA.
 

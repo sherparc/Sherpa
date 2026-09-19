@@ -23,7 +23,7 @@ sherpa doctor [REPO] [--offline]
 | `runtime` | ok / hint | an agent runtime is visible: `claude`, `codex`, `cursor` or `gemini` on the `PATH`, or `.claude/`, `CLAUDE.md`, `.agents/`, `AGENTS.md` in the repo | sherpa writes the harness anyway; install a runtime to use it |
 | `layout` | ok / hint | where the core will live — `sherpa.toml [apply] home`, then the state, then the directories; a hint when both `.agents/` and `.claude/` exist and nothing decides (the case `apply --yes` and `adopt` refuse, ADR-0036) | `[apply] home = ".agents"` or `".claude"` in `sherpa.toml` |
 | `repositories` | ok / fail | one repository: no directory in the tree with a `.git` of its own — a harness clone under `.claude/`, a submodule, a vendored clone stop `apply` and `adopt` (ADR-0045); names up to five | move the clone out of the tree, or run sherpa in that repository |
-| `update` | ok / hint | the latest release (API with a token, `git ls-remote` without one, ADR-0035) is not newer than this sherpa; unreachable or no access is a hint, never a failure | `sherpa self-update`, or `gh auth login` |
+| `update` | ok / hint | the latest release (PyPI first, ADR-0053; the GitHub API with a token or `git ls-remote` without one when the index is silent, ADR-0035) is not newer than this sherpa; unreachable or no access is a hint, never a failure | `sherpa self-update`, or `gh auth login` |
 
 Levels: `✓` ok, `!` hint (sherpa works, you should know), `✗` fail (blocks a command: `scan`, or `apply` and `adopt` for a nested repository). Exit 1 only on a fail.
 
@@ -52,7 +52,7 @@ sherpa doctor — 0.5.0
   ! trunk        origin/main @ 896aa9bb1f (guessed from candidates)
     hint: `git remote set-head origin -a` or `trunk` in sherpa.toml [scan] makes it explicit
   ✓ runtime      claude (Claude Code CLI), .claude/ or CLAUDE.md in the repo
-  ✓ update       0.5.0 is current (via the API)
+  ✓ update       0.5.0 is current (via PyPI)
 0 problems, 1 hints.
 ```
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sherpa-harness"  # the PyPI name "sherpa" is taken; import package and CLI stay "sherpa" (ADR-0009)
-version = "0.7.9"
+version = "0.8.0"
 description = "Generic AI-harness generator: scan the codebase, plan owner docs, agents and skills, create them after approval."
 license = "PolyForm-Small-Business-1.0.0 OR PolyForm-Noncommercial-1.0.0"  # ADR-0051: free for individuals, noncommercial organisations and small companies
 license-files = ["LICENSE"]

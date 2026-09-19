@@ -181,7 +181,8 @@ def check_update() -> Check:
         return Check("update", "warn", str(e), "`gh auth login`, GITHUB_TOKEN or git credentials for the repository")
     if update.is_newer(rel.version):
         return Check("update", "warn", f"{rel.version} available, you have {__version__}", "`sherpa self-update`")
-    return Check("update", "ok", f"{__version__} is current (via {'the API' if tok else 'git ls-remote'})")
+    via = "PyPI" if rel.index == "pypi" else ("the GitHub API" if tok else "git ls-remote")
+    return Check("update", "ok", f"{__version__} is current (via {via})")
 
 
 def run(repo: Path, *, network: bool = True) -> list[Check]:

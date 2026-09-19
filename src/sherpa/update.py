@@ -1,9 +1,10 @@
 """Distribution: where releases live, how sherpa was installed, ``self-update`` and the daily update hint.
 
-Releases are GitHub Releases of ``sherparc/Sherpa`` (ADR-0018): ``release.yml`` attaches the wheel to the tag.
-The Releases API is read with a token (ADR-0018; PyPI follows with the launch slice, ADR-0051) —
-``GITHUB_TOKEN``/``GH_TOKEN`` or ``gh auth token``. Without one the newest tag comes from ``git ls-remote`` over
-the user's git credentials, and the install source is the tag's git URL (ADR-0035).
+The index is PyPI (ADR-0053): ``release.yml`` publishes the wheel of every tag, the JSON API needs no token, and the
+installer fetches the wheel itself. GitHub Releases stay the fallback (ADR-0018) for a version the index does not
+have yet or a machine that cannot reach it: the Releases API with a token — ``GITHUB_TOKEN``/``GH_TOKEN`` or
+``gh auth token`` — else the newest tag by ``git ls-remote`` over the user's git credentials, and the install
+source is the tag's git URL (ADR-0035).
 
 The hint never blocks: the check runs in a daemon thread at most once a day, writes its result to a cache file,
 and the command prints only what an earlier check has already cached. ``SHERPA_NO_UPDATE_CHECK=1`` switches it off.
@@ -28,6 +29,8 @@ from pathlib import Path
 from sherpa import __version__, atomic
 
 REPO = "sherparc/Sherpa"
+PYPI_PROJECT = "sherpa-harness"  # the PyPI name; the CLI and the package stay `sherpa` (ADR-0009)
+PYPI_JSON = f"https://pypi.org/pypi/{PYPI_PROJECT}/json"
 API_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 GIT_URL = f"https://github.com/{REPO}.git"
 GIT_URLS = (GIT_URL, f"git@github.com:{REPO}.git")  # ls-remote tries https (credential helper), then ssh
@@ -46,6 +49,7 @@ class Release:
     wheel_url: str | None  # API asset URL (needs Accept: application/octet-stream), None when no wheel attached
     html_url: str
     wheel_name: str | None = None  # the asset's file name — pip reads the tags from it (PEP 427), so it must stay
+    index: str = "github"  # "pypi" when the index answered — the installer then fetches the wheel itself
 
 
 def parse_version(v: str) -> tuple[int, ...]:
@@ -87,9 +91,35 @@ def _request(url: str, tok: str | None, accept: str = "application/vnd.github+js
     return urllib.request.Request(url, headers=headers)
 
 
+def latest_on_index(timeout: float = TIMEOUT) -> Release | None:
+    """The newest version on PyPI, or None when the index has no project yet or cannot be reached (ADR-0053) —
+    the GitHub release is the fallback, never the other way round. Never raises."""
+    try:
+        with urllib.request.urlopen(_request(PYPI_JSON, None, "application/json"), timeout=timeout) as r:
+            data = json.load(r)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    version = str((data.get("info") or {}).get("version", "")) if isinstance(data, dict) else ""
+    if not version:
+        return None
+    wheel = next((u for u in data.get("urls", []) if str(u.get("filename", "")).endswith(".whl")), None)
+    return Release(
+        version=version,
+        tag=f"v{version}",
+        wheel_url=str(wheel["url"]) if wheel else None,
+        html_url=f"https://pypi.org/project/{PYPI_PROJECT}/{version}/",
+        wheel_name=str(wheel["filename"]) if wheel else None,
+        index="pypi",
+    )
+
+
 def latest_release(tok: str | None, timeout: float = TIMEOUT) -> Release:
-    """The newest release: the GitHub API with a token, else the newest tag by ``git ls-remote`` through the user's
-    git credentials (ADR-0035). Raises ``UpdateError`` with the reason (no network, no access, no release)."""
+    """The newest release: PyPI first, without a token (ADR-0053); else the GitHub API with a token, else the newest
+    tag by ``git ls-remote`` through the user's git credentials (ADR-0035). Raises ``UpdateError`` with the reason
+    of the last attempt (no network, no access, no release)."""
+    rel = latest_on_index(timeout=timeout)
+    if rel is not None:
+        return rel
     if not tok:
         return latest_tag(timeout=timeout)
     try:
@@ -210,7 +240,9 @@ def self_update(*, check_only: bool = False, run=subprocess.run, out=None) -> in
     if check_only:
         return 0
     with tempfile.TemporaryDirectory(prefix="sherpa-update-") as tmp:
-        if rel.wheel_url and tok:
+        if rel.index == "pypi":
+            source = f"{PYPI_PROJECT}=={rel.version}"  # the installer fetches the wheel from the index itself
+        elif rel.wheel_url and tok:
             source = str(download(rel, tok, Path(tmp)))
         else:
             source = f"git+{GIT_URL}@{rel.tag}"  # no token or no wheel: the tag through the user's git credentials

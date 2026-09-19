@@ -1,0 +1,5 @@
+#!/bin/sh
+# Adds the DCO sign-off (ADR-0052) to every commit that lacks it — the line `git commit -s` writes, once per
+# clone instead of once per commit. Enabled together with pre-push by: git config core.hooksPath .githooks
+ident=$(git var GIT_COMMITTER_IDENT | sed 's/ [0-9][0-9]* [-+][0-9][0-9]*$//')
+git interpret-trailers --in-place --if-exists addIfDifferent --trailer "Signed-off-by: $ident" "$1"
