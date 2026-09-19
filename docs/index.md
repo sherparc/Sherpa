@@ -11,7 +11,7 @@ sherpa plan   ──►  .sherpa/harness-plan.yaml     what the harness should c
 sherpa apply  ──►  .agents/** · .claude/** · AGENTS.md · CLAUDE.md + .sherpa/state.json   the approved harness
 sherpa adopt  ──►  .sherpa/state.json                an existing harness taken over unchanged; a lost state rebuilt from the files
 sherpa status ──►  drift, checker findings, outcome labels per harness version
-sherpa check  ──►  structural rules for .claude/** (also runs without sherpa installed)
+sherpa check  ──►  structural rules C1–C8 for the harness files (also runs without sherpa installed)
 sherpa doctor ──►  every prerequisite with a fix; sherpa self-update installs the next release
 ```
 

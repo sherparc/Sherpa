@@ -208,7 +208,7 @@ flowchart LR
     P --> Y[harness-plan.yaml<br/>proposals + reasoned no's<br/>--accept / --reject]
     Y -->|approval| A[sherpa apply]
     A --> H["{home}/** owner docs · skills · checker<br/>(home = .agents or .claude)"]
-    A --> T["adapters per target<br/>claude: .claude/agents · hooks · CLAUDE.md<br/>agents-md: AGENTS.md root + nested"]
+    A --> T["adapters per target<br/>claude: .claude/agents · hooks · CLAUDE.md<br/>agents-md: AGENTS.md root + nested<br/>planned, thin on agents-md: hermes · codex · opencode · copilot · cursor · gemini"]
     A --> ST[.sherpa/state.json · harness_rev]
     T -->|outcome hook| O[.sherpa/telemetry/outcomes.ndjson]
     ST --> Q[sherpa status]

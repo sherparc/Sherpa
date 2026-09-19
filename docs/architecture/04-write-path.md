@@ -1,7 +1,8 @@
 # 04 · The write path: preview, confirm, compare-and-swap, atomic, rollback
 
-Owner: ADR-0030 (compare before the swap), ADR-0031 (symlinks), ADR-0032 (atomic writes and rollback),
-ADR-0017 (index files through `sherpa.atomic`). Between the preview and the write sits a human — and possibly
+Owner: ADR-0030 (compare before the swap), ADR-0031 (symlinks), ADR-0032 (atomic writes and rollback, amended:
+a rollback takes its directories with it), ADR-0047 (which FAILs count), ADR-0017 (index files through
+`sherpa.atomic`). Between the preview and the write sits a human — and possibly
 an editor, a second agent, a `git pull`.
 
 ```mermaid
@@ -17,7 +18,7 @@ sequenceDiagram
     A->>A: plan_files → actions (+ ~ = !) from old + record
     A-->>U: preview
     U->>A: apply? [y/N]  (or --yes / --dry-run)
-    A->>C: FAILs before (baseline)
+    A->>C: FAILs before (baseline) — a target that is a symlink pointing nowhere is a C4 here, not a traceback
     loop every action with new bytes
         A->>D: re-read — a symlink in the path?
         alt file still reads as old
@@ -27,12 +28,12 @@ sequenceDiagram
         end
     end
     alt OSError half-way
-        A->>D: roll back every written file to old (or remove it)
+        A->>D: roll back every written file to old (or remove it), prune the directories this run created
         A-->>U: error + the paths a failed rollback left
     else all written
         A->>C: run all rules
         alt new FAIL that was not in the baseline
-            A->>D: roll back
+            A->>D: roll back — files and directories
             A-->>U: the new findings, nothing kept
         else
             A->>S: harness_rev over all hashes, applied_at, home, targets — atomic
@@ -45,5 +46,9 @@ What to remember:
 
 - **`new` was computed from `old`**; if the file is not `old` any more, writing `new` would destroy a stranger's
   bytes. The check is a byte comparison, not a lock — two concurrent `apply` runs skip each other's files.
-- **A rollback restores only what this run wrote**; a file skipped since the preview is never touched.
-- **The checker is the last gate**: a harness that fails C1–C6 is not written, even after a confirmation.
+- **A rollback restores only what this run wrote** and takes the directories it created with it — an empty
+  `.agents/` left behind would make the next run see two homes (ADR-0032, amendment); a file skipped since the
+  preview is never touched.
+- **The checker is the last gate**: a harness that fails C1–C6 is not written, even after a confirmation — FAIL
+  only in files sherpa generated, WARN `(yours)` elsewhere (ADR-0047). Both checks run on what is on disk, so a
+  harness file that is a dangling symlink is a C4 finding, never a crash.
