@@ -1045,7 +1045,10 @@ def test_cli_dry_run_assumes_a_home_and_the_write_refuses_without_a_terminal(act
     assert ".agents/scripts/sherpa-check.py" in out and "to add" in out
     assert main(["adopt", str(active_repo), "--dry-run"]) == 0
     assert ASSUMED_HOME in capsys.readouterr().out
-    assert main(["status", str(active_repo)]) == 0  # read-only: never refuses either
+    assert main(["status", str(active_repo)]) == 0  # read-only: never refuses either — and says what it assumed (F56)
+    assert "  " + ASSUMED_HOME in capsys.readouterr().out
+    assert main(["status", str(active_repo), "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["notes"][0] == ASSUMED_HOME.removeprefix("note: ")
     assert main(["apply", str(active_repo), "--yes"]) == 1
     assert 'Set [apply] home = ".agents" or ".claude" in sherpa.toml' in capsys.readouterr().err
     assert not (active_repo / ".agents" / "scripts").exists()
@@ -1385,3 +1388,40 @@ def test_status_names_plan_for_a_model_from_another_schema(active_repo: Path, ca
     assert main(["status", str(active_repo)]) == 1
     assert "model has schema_version 4, expected 5 — run `sherpa plan` (it rescans)" in capsys.readouterr().err
     assert main(["plan", str(active_repo), "--no-fetch"]) == 0 and main(["status", str(active_repo)]) == 0
+
+
+def test_cli_rollback_names_itself_on_stderr_too(active_repo: Path, monkeypatch, capsys):
+    """files-and-exit-codes.md: errors reach stderr as `sherpa <command>: …` — a rollback included, so a CI job that
+    watches stderr sees it; the details stay on stdout (e2e 0.8.1, open item 1)."""
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    real = apply.atomic.write_text
+
+    def failing(path: Path, text: str) -> None:
+        if path.name == "pay.md":
+            raise OSError(28, "No space left on device")
+        real(path, text)
+
+    monkeypatch.setattr(apply.atomic, "write_text", failing)
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--yes"]) == 1
+    out, err = capsys.readouterr()
+    assert out.rstrip().endswith("[Errno 28] No space left on device — rolled back, nothing written")
+    assert (
+        err
+        == "sherpa apply: write failed: .agents/docs/modules/pay.md: [Errno 28] No space left on device — rolled back, nothing written\n"
+    )
+    assert not (active_repo / ".agents").exists() and not (active_repo / ".claude").exists()
+
+
+def test_apply_header_counts_the_selected_entries(active_repo: Path, capsys):
+    """`N selected` is the number of entries apply renders for, the outcome entry included although its files
+    (hook, settings) carry no entry tag — the plan's rejects come off the count (e2e 0.8.1, open item 5)."""
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    head = capsys.readouterr().out.splitlines()[1]
+    assert re.search(r": 10 entries, 6 selected → \d+ files$", head), head  # 6 proposals, none rejected
+    assert main(["plan", str(active_repo), "--no-fetch", "--reject", "agent:pay"]) == 0
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    assert ": 10 entries, 5 selected → " in capsys.readouterr().out.splitlines()[1]

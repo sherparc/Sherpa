@@ -31,7 +31,7 @@ Real output on the five-module test repo (`active_repo` in `tests/test_plan.py`,
 ```console
 $ sherpa apply . --dry-run
 targets: claude, agents-md · home: .agents
-sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 5 selected → 18 files
+sherpa apply — plan origin/main@5db69c4ddd: 10 entries, 6 selected → 18 files
   + .agents/docs/modules/core.md                          owner-doc core                new
   + .agents/docs/modules/pay.md                           owner-doc pay                 new
   + .agents/docs/modules/suite.md                         test-infra suite              new

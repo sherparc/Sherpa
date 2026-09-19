@@ -89,7 +89,7 @@ $S status "$R" | sed -n 1,4p                                       # drift: none
 P=$(.venv/bin/python -c "import yaml;p=yaml.safe_load(open('$R/.sherpa/harness-plan.yaml'));print(next(e['scope'] for e in p['entries'] if e['kind']=='owner-doc' and e['default']=='propose' and e['scope']))")
 F="$R/$P/AGENTS.md"; cp "$F" /tmp/e2e-f.bak                       # the most active nested unit's proximity file
 printf '\nTeam note — keep me.\n' >> "$F"; $S apply --dry-run "$R" | tail -1   # nothing to do.
-sed -i 's/^| dependents |/| dependents (edited) |/' "$F"; $S status "$R" | grep -E "C8|~|yours" | head -3
+sed -i 's/^| dependents |/| dependents (edited) |/' "$F"; $S status "$R" | grep -E "hand-edited" | head -3   # ! … block facts hand-edited (skipped)
 cp /tmp/e2e-f.bak "$F"                                             # sherpa's bytes again, so T15 compares like with like
 # T12
 grep -rho "as of [0-9-]*" "$R/.agents/docs/modules" | sort -u; date -I   # the stamp = as_of, not today

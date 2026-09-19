@@ -42,8 +42,9 @@ Suggested `.gitignore` in a target repository:
 |---|---|---|
 | 0 | success — including a dry run, an aborted question and "nothing to do" | all |
 | 1 | error: git (no repository, no origin, no trunk), configuration, plan or state file invalid or missing, stale plan, rollback after a new checker FAIL, checker FAIL, a `doctor` fail, `self-update` without a reachable release or with a failed installer | all |
+| 2 | usage error — an unknown flag or a missing argument; argparse prints the usage and the message on stderr | all |
 
-Errors go to stderr as `sherpa <command>: <message>`; the message names the fix where there is one
+Errors go to stderr as `sherpa <command>: <message>`, a rollback included (`sherpa apply: write failed … — rolled back, nothing written`, the details stay on stdout); the message names the fix where there is one
 (`— run `sherpa plan` first`, `Fix: 'git remote set-head origin -a' or 'trunk' in sherpa.toml`).
 
 ## Environment

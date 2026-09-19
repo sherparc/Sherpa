@@ -96,7 +96,12 @@ def check_config(repo: Path) -> tuple[Check, str | None]:
 
 
 def check_runtime(repo: Path) -> Check:
-    """Which agent runtime the harness will be projected into — informational, sherpa works without one."""
+    """Which agent runtime is visible and which targets ``apply`` will render for it (``sherpa.toml``, then the
+    state, then the repository's files, ADR-0015). Claude Code on the ``PATH`` without ``claude`` among the targets
+    is a hint: the outcome hook would not be installed (ADR-0008) — a root ``AGENTS.md`` alone selects
+    ``agents-md`` only. Informational otherwise; sherpa works without a runtime."""
+    from sherpa.apply import state as state_mod
+
     found = []
     if shutil.which("claude"):
         found.append("claude (Claude Code CLI)")
@@ -115,7 +120,24 @@ def check_runtime(repo: Path) -> Check:
             "sherpa still writes the harness (AGENTS.md family + .claude); "
             "install Claude Code, Codex or Cursor to use it",
         )
-    return Check("runtime", "ok", ", ".join(found))
+    cfg = config.load(repo).apply
+    try:
+        state_targets = (
+            state_mod.load(repo / state_mod.STATE_PATH).targets if (repo / state_mod.STATE_PATH).is_file() else ()
+        )
+    except ValueError:
+        state_targets = ()
+    targets = tuple(cfg.targets or state_targets or config.detect_targets(repo))
+    detail = f"{', '.join(found)} → targets: {', '.join(targets)}"
+    if shutil.which("claude") and "claude" not in targets:
+        return Check(
+            "runtime",
+            "warn",
+            detail,
+            'Claude Code is here but not a target — `[apply] targets = ["claude", "agents-md"]` in sherpa.toml, '
+            "or `.claude/` in the repo; without it no outcome hook is installed (ADR-0008)",
+        )
+    return Check("runtime", "ok", detail)
 
 
 def check_layout(repo: Path) -> Check:

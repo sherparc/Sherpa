@@ -105,6 +105,17 @@ def test_runtime_detection(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(doctor.shutil, "which", lambda name: "/bin/" + name if name in ("claude", "codex") else None)
     c = doctor.check_runtime(tmp_path)
     assert "claude (Claude Code CLI)" in c.detail and "codex on PATH" in c.detail
+    # the targets apply will render (ADR-0015): a root AGENTS.md alone selects agents-md — with Claude Code on the
+    # PATH that is a hint, the outcome hook would be missing (e2e 0.8.1, open item 2)
+    assert c.level == "warn" and c.detail.endswith("→ targets: agents-md") and "not a target" in c.fix
+    (tmp_path / ".claude").mkdir()
+    c = doctor.check_runtime(tmp_path)
+    assert c.level == "ok" and c.detail.endswith("→ targets: claude, agents-md")
+    (tmp_path / "sherpa.toml").write_text('[apply]\ntargets = ["agents-md"]\n', encoding="utf-8")
+    assert doctor.check_runtime(tmp_path).level == "warn"  # sherpa.toml beats the files, and says so
+    monkeypatch.setattr(doctor.shutil, "which", lambda _: None)
+    c = doctor.check_runtime(tmp_path)
+    assert c.level == "ok" and c.detail.endswith("→ targets: agents-md")  # no Claude Code here: nothing to warn about
 
 
 def test_layout_names_the_undecided_home(tmp_path: Path):

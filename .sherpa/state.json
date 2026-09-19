@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
   "sherpa": "0.8.1",
-  "harness_rev": "0c2b0785f724",
+  "harness_rev": "f4bc381c15b3",
   "home": ".claude",
   "targets": [
     "claude"
   ],
   "plan": {
     "trunk": "origin/main",
-    "rev": "b95cf413bc069ef6c86246bfb58498b78c2bc2a7",
-    "as_of": "2026-09-19T08:06:46Z"
+    "rev": "a3d68bfe1edeb83a5742f23aadb955c04c23cd13",
+    "as_of": "2026-09-19T08:19:20Z"
   },
-  "applied_at": "2026-09-19T08:16:49Z",
+  "applied_at": "2026-09-19T08:37:47Z",
   "files": {
     ".claude/agents/architect.md": {
       "mode": "managed",
@@ -32,18 +32,18 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:sherparc:",
-      "hash": "421509049e91916f",
+      "hash": "c996c3cd65c8d42b",
       "blocks": {
-        "facts": "431dbdb5570a76d0"
+        "facts": "2b062abf7fd85870"
       }
     },
     ".claude/docs/modules/src-sherpa-apply.md": {
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
-      "hash": "2947fc9e6547e3a0",
+      "hash": "955d1aff5f01132b",
       "blocks": {
-        "facts": "975d2366d98471c9"
+        "facts": "624ea5510d303fee"
       }
     },
     ".claude/hooks/sherpa-outcome.py": {
@@ -75,9 +75,9 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "librarian:sherparc:",
-      "hash": "9b1ab358ffa02cf7",
+      "hash": "c9f3aa7160956b74",
       "blocks": {
-        "scope": "1f84bb67e0f12722"
+        "scope": "0d124ed01bcb22cf"
       }
     },
     ".claude/skills/sync-kb/SKILL.md": {
@@ -101,9 +101,9 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
-      "hash": "52e226dbb084e899",
+      "hash": "eb002e79f90259bc",
       "blocks": {
-        "harness": "3630ded3091ce19f"
+        "harness": "af901b65a9159963"
       }
     }
   }

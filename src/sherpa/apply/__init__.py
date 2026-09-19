@@ -37,7 +37,7 @@ from pathlib import Path
 
 from sherpa import __version__, atomic
 from sherpa.apply import state as state_mod
-from sherpa.apply.render import HOOK_COMMAND, Renderer, Target
+from sherpa.apply.render import HOOK_COMMAND, Renderer, Target, selected
 from sherpa.apply.state import ADOPTED, BLOCKS, GENERATED, JSON_HOOKS, MANAGED, FileRecord, State
 from sherpa.check import Finding, block_contents, content_hash
 from sherpa.config import TARGETS
@@ -558,7 +558,7 @@ def write(
 
 def render_actions(actions: list[Action], plan: Plan) -> str:
     n = len(plan.entries)
-    sel = len({a.target.entry for a in actions if a.target.entry})
+    sel = len(selected(plan))  # the outcome entry counts too: its files carry no entry tag (F-e2e 0.8.1 §5)
     head = f"plan {plan.model.get('trunk', '?')}@{plan.model.get('rev', '?')[:10]}"
     lines = [f"sherpa apply — {head}: {n} entries, {sel} selected → {len(actions)} files"]
     w_path = min(max((len(a.path) for a in actions), default=10), 56)
