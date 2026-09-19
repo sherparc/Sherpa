@@ -370,11 +370,55 @@ def test_merge_decisions_keeps_by_key_and_counts():
         1,
     )
     prev = yamlio.loads(text)
-    merged, n = yamlio.merge_decisions(p, prev)
+    merged, n, lines = yamlio.merge_decisions(p, prev)
     assert n == 1 and merged.entries[1].decision == "accept" and merged.entries[2].decision is None
-    assert yamlio.merge_decisions(p, None) == (p, 0)
+    assert lines == [] and yamlio.merge_decisions(p, None) == (p, 0, [])
     stale = {"entries": [{"kind": "agent", "target": "Gone", "scope": "x", "decision": "reject"}]}
     assert yamlio.merge_decisions(p, stale)[1] == 0
+
+
+def test_merge_decisions_names_a_dropped_decision_once_and_writes_it_to_no_entry():
+    """§13 F42: a decision on an entry that left the plan (unit removed or renamed) is dropped with one line,
+    in the address form ``merge_covers`` uses; the new YAML carries no trace of it."""
+    p = build_plan(big_model(3, 3))
+    prev = yamlio.loads(yamlio.dumps(p))
+    prev["entries"].append({"kind": "agent", "target": "Gone", "scope": "src/Gone", "decision": "reject"})
+    prev["entries"].append({"kind": "owner-doc", "target": "Gone", "scope": "src/Gone", "decision": "accept"})
+    merged, n, lines = yamlio.merge_decisions(p, prev)
+    assert n == 0 and lines == [
+        "agent:Gone:src/Gone [reject] is no longer in the plan — dropped",
+        "owner-doc:Gone:src/Gone [accept] is no longer in the plan — dropped",
+    ]
+    assert all(e.decision is None for e in merged.entries) and "Gone" not in yamlio.dumps(merged)
+
+
+def test_merge_decisions_follows_a_renamed_unit_and_stops_at_an_ambiguity():
+    """§13 F55: the decision key carries the target name, so a unit whose manifest name changes and whose path
+    stays would lose its decision — it follows when exactly one decided entry of that kind and scope left and
+    exactly one new entry of that kind and scope arrived; two candidates on either side carry nothing."""
+    p = build_plan(model(modules=[mod("beta", "", c90=30, c30=20, authors=2, files=40)]))
+    assert [e.address for e in p.entries if e.kind == "agent"] == ["agent:beta:"]
+    prev = yamlio.loads(yamlio.dumps(p).replace("target: beta", "target: alpha"))
+    for e in prev["entries"]:
+        if e["kind"] == "agent":
+            e["decision"] = "reject"
+    merged, n, lines = yamlio.merge_decisions(p, prev)
+    assert n == 1 and lines == ["agent:beta: [reject] — followed from agent:alpha: (same path, renamed)"]
+    assert next(e for e in merged.entries if e.kind == "agent").decision == "reject"
+    assert "decision: reject" in yamlio.dumps(merged)
+    # two decided entries of that kind and scope left: which one is the rename? — nothing follows, both are named
+    prev["entries"].append({"kind": "agent", "target": "gamma", "scope": "", "decision": "accept"})
+    merged, n, lines = yamlio.merge_decisions(p, prev)
+    assert n == 0 and next(e for e in merged.entries if e.kind == "agent").decision is None
+    assert lines == [
+        "agent:alpha: [reject] is no longer in the plan — dropped",
+        "agent:gamma: [accept] is no longer in the plan — dropped",
+    ]
+    # a decided target that is still in the plan under another scope is a move, not a rename: dropped, named
+    prev["entries"].pop()
+    prev["entries"].append({"kind": "owner-doc", "target": "beta", "scope": "old", "decision": "accept"})
+    _, n, lines = yamlio.merge_decisions(p, prev)
+    assert n == 1 and lines[0] == "owner-doc:beta:old [accept] is no longer in the plan — dropped"
 
 
 def test_decide_by_address_short_and_full_ambiguous_unknown_and_conflict():
@@ -702,3 +746,44 @@ def test_cli_plan_invalid_decision_is_an_error(poly_repo: Path, capsys):
 def test_cli_plan_outside_git_repo_is_an_error(tmp_path: Path, capsys):
     assert main(["plan", str(tmp_path), "--no-fetch"]) == 1
     assert capsys.readouterr().err.startswith("sherpa plan: ")
+
+
+def build_single_manifest_repo(tmp_path: Path) -> Path:
+    """One Python module at the root (``pyproject.toml`` ``name = "alpha"``), active enough for an agent:
+    24 commits by two authors on 30 files — the shape of a repository that renames its package."""
+    work = tmp_path / "seed"
+    work.mkdir()
+    git(work, "init", "-q", "-b", "main")
+    files = {"pyproject.toml": '[project]\nname = "alpha"\nversion = "0"\n', "alpha/__init__.py": ""}
+    files |= {f"alpha/mod{i:02d}.py": "x = 1\n" for i in range(30)}
+    commit(work, "init", files, date="2025-06-01T00:00:00Z", author="A")
+    for i in range(24):
+        files = {f"alpha/mod{i % 30:02d}.py": f"x = {i}  # changed\n"}
+        commit(work, f"alpha {i}", files, date=f"2026-02-{(i % 27) + 1:02d}T10:00:00Z", author="AB"[i % 2])
+    origin = tmp_path / "origin.git"
+    git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
+    clone = tmp_path / "alpha"
+    git(tmp_path, "clone", "-q", str(origin), str(clone))
+    return clone
+
+
+def test_cli_plan_keeps_a_rejection_across_a_renamed_manifest(tmp_path: Path, capsys):
+    """§13 F55 end to end: ``--reject agent:alpha``, the manifest says ``beta`` on the next trunk, the re-plan
+    rescans and the rejection stands on ``agent beta`` — said once, kept from then on."""
+    repo = build_single_manifest_repo(tmp_path)
+    assert main(["plan", str(repo), "--no-fetch", "--reject", "agent:alpha"]) == 0
+    assert "(1 decided now)" in capsys.readouterr().out
+    (repo / "pyproject.toml").write_text('[project]\nname = "beta"\nversion = "0"\n', encoding="utf-8")
+    git(repo, "commit", "-qam", "rename the package", date="2026-03-01T00:00:00Z", author="A")
+    git(repo, "push", "-q", "origin", "main")
+    assert main(["plan", str(repo), "--no-fetch"]) == 0
+    out, err = capsys.readouterr()
+    assert "rescanning" in err
+    assert "  agent:beta: [reject] — followed from agent:alpha: (same path, renamed)" in out
+    assert re.search(r"  \+ agent\s+beta\s.*\[reject\]$", out, re.M) and "(1 decisions kept)" in out
+    text = (repo / ".sherpa" / "harness-plan.yaml").read_text(encoding="utf-8")
+    assert "kind: agent\n  target: beta\n  scope: ''\n  default: propose\n  decision: reject\n" in text
+    assert text.count("decision: reject") == 1 and "followed from" in text  # the notes carry the line once
+    assert main(["plan", str(repo), "--no-fetch"]) == 0  # the third plan keeps it by key, without the line
+    out = capsys.readouterr().out
+    assert "followed from" not in out and "(1 decisions kept)" in out

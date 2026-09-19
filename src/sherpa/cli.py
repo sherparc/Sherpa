@@ -144,9 +144,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
     plan = build_plan(model, config.load(repo).plan)
     out = None if args.out == "-" else (Path(args.out) if args.out else repo / PLAN_OUT)
     previous = yamlio.load(out) if out and out.exists() else None
-    plan, kept = yamlio.merge_decisions(plan, previous)
+    plan, kept, decision_lines = yamlio.merge_decisions(plan, previous)
     plan, _, dropped_covers = yamlio.merge_covers(plan, previous, repo)
-    plan.notes.extend(dropped_covers)
+    plan.notes.extend(decision_lines + dropped_covers)  # a dropped or followed decision is said once (F42, F55)
     plan, decided = yamlio.decide(plan, args.accept, args.reject)
     # The unit's own AGENTS.md covers its entry (ADR-0049) — decided here, so that `apply` straight after `plan`
     # renders no skeleton next to it; `adopt` finds the same cover from the same files and reports it.
@@ -284,7 +284,6 @@ def _nested_repositories(repo: Path) -> list[str]:
 def cmd_apply(args: argparse.Namespace) -> int:
     """Dry run always; then ask (or ``--yes``), write, check, roll back on new FAILs, write the state."""
     from sherpa import apply
-    from sherpa.apply.state import ADOPTED
 
     repo = Path(args.repo).resolve()
     plan, model = _load_plan_and_model(repo)
@@ -318,24 +317,12 @@ def cmd_apply(args: argparse.Namespace) -> int:
         if answer.strip().lower() not in ("y", "yes"):
             print("aborted, nothing written.", file=sys.stdout)
             return EXIT_OK
-    result = apply.write(actions, repo, state, plan, check=not args.no_check, home=home, targets=targets)
+    result = apply.write(
+        actions, repo, state, plan, check=not args.no_check, home=home, targets=targets, remove=args.remove
+    )
     sys.stdout.write(apply.render_result(result))
     if result.rolled_back:  # the one line a CI job watching stderr needs (files-and-exit-codes.md)
         print(f"sherpa apply: {apply.render_result(result).splitlines()[0]}", file=sys.stderr)
-    if args.remove and not result.rolled_back:
-        yours = sorted(a.path for a in result.actions if a.forget and not a.delete and a.new is None and a.old)
-        if yours:
-            print("kept, yours: " + ", ".join(yours), file=sys.stdout)
-        generated = sorted(p for p, r in result.state.files.items() if r.origin != ADOPTED)
-        if not generated:  # nothing of sherpa's left: the index and the telemetry go too
-            removed, left = apply.uninstall_index(repo)
-            adopted = len(result.state.files)
-            tail = f"; {adopted} adopted files stay yours" if adopted else ""
-            print("uninstalled — " + ", ".join(removed) + " removed too" + tail, file=sys.stdout)
-            if left:
-                print("left in .sherpa/, not sherpa's: " + ", ".join(left), file=sys.stdout)
-        else:
-            print("records kept for: " + ", ".join(generated) + " — skipped this run; `apply --remove` again")
     return EXIT_ERROR if result.rolled_back else EXIT_OK
 
 

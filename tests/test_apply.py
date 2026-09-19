@@ -1449,3 +1449,23 @@ def test_apply_header_counts_the_selected_entries(active_repo: Path, capsys):
     capsys.readouterr()
     assert main(["apply", str(active_repo), "--dry-run"]) == 0
     assert ": 10 entries, 5 selected → " in capsys.readouterr().out.splitlines()[1]
+
+
+def test_apply_warn_count_equals_check_right_after(active_repo: Path, capsys):
+    """§13 F52: the post-write check runs against the state this run wrote, so the WARN count `apply` prints
+    (C8 drift included) is the one `sherpa check` prints right after — not one measured against the old state."""
+    applied(active_repo)
+    assert main(["plan", str(active_repo), "--no-fetch", "--reject", "owner-doc:core"]) == 0
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    out = capsys.readouterr().out
+    m = re.search(r"^check: (\d+) FAIL, (\d+) WARN$", out, re.M)
+    assert m and "removed · harness_rev" in out, out
+    from sherpa.check import FAIL, check
+
+    after = check(active_repo)
+    assert (int(m.group(1)), int(m.group(2))) == (
+        sum(f.level == FAIL for f in after),
+        sum(f.level != FAIL for f in after),
+    ), (out, after)
+    assert int(m.group(2)) == 0, "a removal that the state records is no drift"

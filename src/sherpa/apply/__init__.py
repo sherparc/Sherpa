@@ -74,6 +74,11 @@ class Result:
     removed: int = 0  # files deleted (ADR-0048)
     error: str | None = None  # the OSError that stopped the write (ADR-0032)
     left: list[str] = field(default_factory=list)  # files the rollback could not restore
+    # the uninstall (ADR-0048, ``write(remove=True)``): what stayed as yours, what the index shed, what is not ours
+    yours: list[str] = field(default_factory=list)  # hand-edited files handed back instead of removed
+    uninstalled: list[str] = field(default_factory=list)  # index files removed once nothing of sherpa's was left
+    stray: list[str] = field(default_factory=list)  # files under .sherpa/ that are not sherpa's — they stay
+    records_kept: list[str] = field(default_factory=list)  # generated files still recorded after a partial remove
 
     def counts(self) -> dict[str, int]:
         return {op: sum(a.op == op for a in self.actions) for op in (NEW, UPDATED, UNCHANGED, SKIPPED, REMOVED)}
@@ -442,6 +447,15 @@ def _roll_back(written: list[Action], repo: Path) -> list[str]:
     return left
 
 
+def _restore_state(path: Path, before: str | None) -> None:
+    """The state file as it was before this run wrote it: the previous text, or gone (an index file goes through
+    ``atomic`` like every write of it, ADR-0017)."""
+    if before is None:
+        path.unlink(missing_ok=True)
+    else:
+        atomic.write_text(path, before)
+
+
 def _prune_empty_dirs(repo: Path, deleted: list[str]) -> None:
     """A directory that held nothing but a removed file goes with it, up to the repo root — git tracks no empty
     directory, so nothing of the user's is lost."""
@@ -488,7 +502,11 @@ def write(
     check: bool = True,
     home: str = "",
     targets: tuple[str, ...] = (),
+    remove: bool = False,
 ) -> Result:
+    """Write the actions, check, roll back on a new FAIL, write the state. ``remove`` is the uninstall
+    (ADR-0048): afterwards the result says what stayed yours, and when no generated record is left the index
+    and the telemetry go too (``uninstall_index``) — reported by ``render_result``, not composed by a caller."""
     from sherpa.check import FAIL
     from sherpa.check import check as run_check
 
@@ -518,14 +536,6 @@ def write(
     result.written = sum(not a.delete for a in written)
     result.removed = sum(a.delete for a in written)
     _prune_empty_dirs(repo, [a.path for a in written if a.delete])
-    if check:
-        result.findings = run_check(repo, **scope)
-        new_fails = {f for f in result.findings if f.level == FAIL} - before
-        if new_fails:
-            result.rolled_back, result.left = True, _roll_back(written, repo)
-            result.written = 0
-            result.findings = sorted(new_fails, key=str)
-            return result
     files = dict(previous.files)
     for a in actions:
         if a.record is not None:
@@ -540,7 +550,7 @@ def write(
         or files != previous.files
         or (home, targets) != (previous.home, previous.targets)
     )
-    result.state = State(
+    state = State(
         harness_rev=rev,
         plan={k: str(v) for k, v in plan.model.items() if k in ("trunk", "rev", "as_of")},
         applied_at=state_mod.now_iso() if changed else previous.applied_at,
@@ -548,8 +558,28 @@ def write(
         home=home,
         targets=tuple(targets),
     )
-    if changed:
-        result.state.write(repo / state_mod.STATE_PATH)
+    state_path = repo / state_mod.STATE_PATH
+    state_before = state_path.read_text(encoding="utf-8") if changed and state_path.is_file() else None
+    if changed:  # the state first, so the check that follows measures drift against it (§13 F52)
+        state.write(state_path)
+    if check:
+        result.findings = run_check(repo, **scope)
+        new_fails = {f for f in result.findings if f.level == FAIL} - before
+        if new_fails:  # a rollback takes the state it wrote with it (ADR-0032)
+            result.rolled_back, result.left = True, _roll_back(written, repo)
+            result.written = 0
+            result.findings = sorted(new_fails, key=str)
+            if changed:
+                _restore_state(state_path, state_before)
+            return result
+    result.state = state
+    if remove:
+        result.yours = sorted(a.path for a in actions if a.forget and not a.delete and a.new is None and a.old)
+        generated = sorted(p for p, r in files.items() if r.origin != ADOPTED)
+        if generated:  # something of sherpa's stayed: the index keeps its records, the next --remove tries again
+            result.records_kept = generated
+        else:  # nothing of sherpa's left: the index and the telemetry go too
+            result.uninstalled, result.stray = uninstall_index(repo)
     return result
 
 
@@ -592,7 +622,18 @@ def render_result(r: Result) -> str:
     lines.extend(f"  {f}" for f in r.findings if f.level == FAIL)
     lines.extend(f"  ! {a.path}  {a.detail}" for a in r.actions if a.detail == CHANGED_SINCE_PREVIEW)
     what = f"{r.written} files written" + (f", {r.removed} removed" if r.removed else "")
-    lines.append(f"{what} · harness_rev {r.state.harness_rev} → .sherpa/state.json")
+    where = "" if r.uninstalled else " → .sherpa/state.json"  # an uninstalled state is named once, below (F53)
+    lines.append(f"{what} · harness_rev {r.state.harness_rev}{where}")
+    if r.yours:
+        lines.append("kept, yours: " + ", ".join(r.yours))
+    if r.uninstalled:
+        adopted = len(r.state.files)
+        tail = f"; {adopted} adopted files stay yours" if adopted else ""
+        lines.append("uninstalled — " + ", ".join(r.uninstalled) + " removed too" + tail)
+    if r.stray:
+        lines.append("left in .sherpa/, not sherpa's: " + ", ".join(r.stray))
+    if r.records_kept:
+        lines.append("records kept for: " + ", ".join(r.records_kept) + " — skipped this run; `apply --remove` again")
     return "\n".join(lines) + "\n"
 
 

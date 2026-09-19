@@ -144,7 +144,13 @@ the always-part), detail. The detail lines and what each means:
 After the write: the checker summary (C1–C5 count as FAIL only in files sherpa generated — the files of this
 run included; findings in adopted or unrecorded files are WARN `(yours)`, ADR-0047), files skipped since the preview
 (`! CLAUDE.md  changed since the preview (skipped)`), then `N files written · harness_rev <12 hex> →
-.sherpa/state.json`. On a rollback:
+.sherpa/state.json`. After `--remove` the same lines, then what the uninstall says: `kept, yours: <paths>` for
+hand-edited files and blocks handed back instead of removed; when nothing of sherpa's is left, the summary
+line ends at the `harness_rev` and the next line names the index once — `uninstalled — .sherpa/state.json,
+.sherpa/harness-plan.yaml, .sherpa/codebase-model.json, .sherpa/telemetry/outcomes.ndjson removed too` (with
+`; N adopted files stay yours` when [`adopt`](adopt.md) had recorded any), plus `left in .sherpa/, not
+sherpa's: <paths>` for files there that sherpa never wrote; when generated files stay recorded (a removal
+skipped since the preview), `records kept for: <paths> — skipped this run; \`apply --remove\` again`. On a rollback:
 `check: 1 new FAIL — rolled back, nothing written` followed by the findings; on a write error:
 `write failed: .claude/docs/modules/two.md: [Errno 28] No space left on device — rolled back, nothing written`.
 Should the rollback fail too, the line `rollback failed for: <paths> — restore with \`git checkout -- <path>\`
@@ -195,7 +201,7 @@ The hook command is `sh -c '… python3 "$0" || python "$0"' "$CLAUDE_PROJECT_DI
 | 1 | outcome rejected | `sherpa apply: the outcome entry is rejected — a harness without a signal is not created (ADR-0008)` |
 | 1 | rolled back | `check: N new FAIL — rolled back, nothing written` + findings |
 | 1 | plan file invalid | `sherpa apply: harness-plan.yaml invalid at …` |
-| 0 | `--remove` done | `N files written, M removed · harness_rev …` then `uninstalled — .sherpa/state.json, … removed too` (and `kept, yours: …` for hand-edited files) |
+| 0 | `--remove` done | `N files written, M removed · harness_rev <rev>` then `uninstalled — .sherpa/state.json, … removed too` (and `kept, yours: …` for hand-edited files, `left in .sherpa/, not sherpa's: …` for foreign files there); `records kept for: … — skipped this run` when something of sherpa's stayed recorded |
 | 1 | a nested repository in the tree | `sherpa apply: .claude/ is a repository of its own (.claude/.git) — sherpa works with one repository: move the clone out of the tree, or run sherpa in that repository` (ADR-0045) |
 
 ## Determinism
@@ -220,6 +226,7 @@ Proven by `test_apply_is_idempotent_and_deterministic`: the second run is all `=
 | The hook writes nothing | `settings.json` entries missing (someone removed them) or no `python3`/`python` on the PATH | `sherpa apply` merges the entries back; `sherpa check` C6 verifies the wiring |
 | I want sherpa to take a hand-edited block back | delete your changes inside the block, or remove the file's record from `.sherpa/state.json` | the next apply regenerates it |
 | Rollback although my files are fine | the write introduced a FAIL — usually a link into a file the plan no longer creates | read the findings; `--no-check` writes anyway |
+| `apply --remove` took the blocks out of a file but kept the file as `kept, yours` | the harness was written by a sherpa before 0.7.6: its state has no whole-file hash for a blocks file, so the skeleton cannot be proven sherpa's and is not deleted (ADR-0048, ADR-0033) | run `sherpa apply` (or `sherpa adopt`) once — it records the hash where the file equals its rendering — then `apply --remove` takes the file with it |
 
 ## See also
 
