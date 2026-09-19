@@ -111,8 +111,12 @@ def render(command: str, output: str, *, title: str) -> str:
 
 
 def normalise(output: str, repo: Path) -> str:
-    """The repository's absolute path becomes relative: ``<repo>/.sherpa/…`` → ``.sherpa/…``, a bare one → ``.``."""
-    return output.replace(str(repo) + "/", "").replace(str(repo), ".")
+    """The repository's absolute path becomes relative: ``<repo>/.sherpa/…`` → ``.sherpa/…``, a bare one → ``.``.
+    Both spellings of the path are dropped, ``C:\\…`` and ``C:/…``, so the card reads the same from Windows."""
+    posix = repo.as_posix()
+    for spelling in (str(repo), posix, posix.replace("/", "\\")):
+        output = output.replace(spelling + "/", "").replace(spelling + "\\", "").replace(spelling, ".")
+    return output
 
 
 def main(argv: list[str] | None = None) -> int:

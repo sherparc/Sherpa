@@ -40,8 +40,11 @@ def test_colours_follow_the_console():
     assert demo.spans("a ✓ b ✗", "#fff").count("<tspan") == 4 and f'fill="{c["bad"]}">✗' in demo.spans("✗", "#fff")
 
 
-def test_normalise_drops_the_repository_path():
+def test_normalise_drops_the_repository_path_in_both_spellings():
     assert demo.normalise("→ /repo/.sherpa/x (1)\n/repo\n", Path("/repo")) == "→ .sherpa/x (1)\n.\n"
+    win = Path("C:/Users/dev/Sherpa")  # Windows spells it with backslashes in the output, as_posix() with slashes
+    out = "→ C:\\Users\\dev\\Sherpa\\.sherpa\\x (1)\n→ C:/Users/dev/Sherpa/.sherpa/x\nC:\\Users\\dev\\Sherpa\n"
+    assert demo.normalise(out, win) == "→ .sherpa\\x (1)\n→ .sherpa/x\n.\n"
 
 
 def test_render_is_deterministic_valid_xml_and_carries_every_line():
