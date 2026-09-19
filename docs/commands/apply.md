@@ -32,7 +32,8 @@ sherpa apply [REPO] [--yes | -y] [--dry-run] [--no-check]
    file the state records but the plan no longer renders — a rejected entry, a unit gone from the trunk — when
    its bytes are still sherpa's (ADR-0048; a hand-edited one stays, `yours now`).
 4. Prints the list. Stops here with `--dry-run`, or when there is nothing to write, or when there is no terminal
-   to ask; otherwise asks `apply? [y/N]` (skipped with `--yes`).
+   to ask — a redirected or closed stdin counts as none, also where `isatty()` says otherwise (Windows `NUL`);
+   otherwise asks `apply? [y/N]` (skipped with `--yes`).
 5. Re-reads every file it is about to write and skips one that changed since the preview — an editor, a second
    agent (ADR-0030); a path with a symlink in it is never written through (ADR-0031). Each file is written
    whole or not at all, and a write error half-way rolls back what was written, directories the run created

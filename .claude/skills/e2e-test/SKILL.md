@@ -12,17 +12,12 @@ the run every release is measured by.
 
 ## Run
 
-```bash
-export SHERPA_NO_UPDATE_CHECK=1
-R="${1:-$SHERPA_E2E_REPO}"                       # the corpus repository: an argument, else the ignored local setting
-git -C "$R" status --short --ignored | grep -q . && { echo "corpus not clean — stop, ask"; exit 1; }
-SHERPA_E2E_REPO="$R" .venv/bin/pytest tests/e2e -q 2>&1 | tee /tmp/e2e-run.txt | tail -60
-```
-
-The suite does the rest: verifies the corpus clean including ignored files, fetches once (every `scan` and
-`plan` runs with `--no-fetch`), runs the theses in lifecycle order, takes the harness back, scrubs what a
-thesis left and verifies the corpus clean again — also after a failure. A focus (`-k T11`) runs the phases a
-thesis needs and nothing else; a full run is the release check.
+Run the suite with the corpus repository in `SHERPA_E2E_REPO` — the argument if one was given, else the ignored
+local setting — and `SHERPA_NO_UPDATE_CHECK=1`: `pytest tests/e2e -q` from the Sherpa clone, the output kept
+for the report. The suite does the rest: refuses a corpus that is not clean including ignored files, fetches
+once (every `scan` and `plan` runs with `--no-fetch`), runs the theses in lifecycle order, takes the harness
+back, scrubs what a thesis left and verifies the corpus clean again — also after a failure. A focus (`-k T11`)
+runs the phases a thesis needs and nothing else; a full run is the release check.
 
 Read the table under `e2e theses — corpus: external`: `PASS` with its evidence, `FAIL` with the assertion
 above it, `BLOCKED` where an earlier phase failed (the failing line is the reason), `SKIP` for a platform
@@ -37,7 +32,7 @@ the chat.
    "a nested unit three levels deep"), which ADR it touches (or contradicts), the programmatic fixture that
    would catch it in `tests/` (shape, not code). A thesis whose source sentence is ambiguous goes to `open`,
    not into FAIL.
-4. **cleanup** — the empty `git -C "$R" status --short --ignored` line and `ls -a "$R" | grep -E '^\.(sherpa|agents|claude)$'` printing nothing.
+4. **cleanup** — the suite's own verification as printed: `git status --short --ignored` in the corpus empty, no `.sherpa/`, `.agents/` or `.claude/` directory left.
 5. **open** — questions for Andrei with a recommendation each.
 
 Every FAIL and every side-finding names the programmatic fixture that will catch it in `tests/` from then on;

@@ -274,7 +274,7 @@ Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an AD
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 442 tests, ~97 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 443 tests, ~97 % coverage, gate in CI: 90 %
 .venv/bin/pytest tests/e2e -q          # 31 end-to-end theses: the sherpa command on a built-in monorepo, one test per claim of this README, CLAUDE.md and the ADRs
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
