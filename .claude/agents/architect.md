@@ -7,7 +7,7 @@ knowledge:
     - ../docs/adr/README.md
     - ../docs/concepts/README.md
   on_demand:
-    - docs/modules/sherpa-harness.md
+    - docs/modules/sherparc.md
     - ../docs/concepts/scan.md
     - ../docs/concepts/harness-plan.md
     - ../docs/concepts/harness-apply.md
