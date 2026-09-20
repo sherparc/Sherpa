@@ -160,8 +160,10 @@ or \`git clean\`, then \`sherpa adopt\` rebuilds the state` names the way out.
 
 `.sherpa/state.json` records, per file, the ownership mode (`managed`, `blocks`, `json-hooks`), the origin
 (`generated`, or `adopted` by [`sherpa adopt`](adopt.md)), the plan entry and the hashes sherpa wrote — one per managed
-file, one per block. `harness_rev` is a hash over all of them plus the sherpa version: it changes exactly when
-sherpa's share of the harness changes. Facts blocks are stamped `as of <date>` — the scan window end — and
+file, one per block. `harness_rev` is a hash over the content records — the markdown files and blocks an agent
+reads — and changes exactly when that content changes; `tooling` is the hash over the rest (checker copy, hook,
+hook wiring, ignore file) plus the sherpa version, so an upgrade moves `tooling` and not the revision the
+outcome labels are grouped by (ADR-0056). Facts blocks are stamped `as of <date>` — the scan window end — and
 nothing else (ADR-0019): a trunk move without activity in a unit, or a new sherpa version, rewrites no block;
 the trunk revision lives here in the state and in the plan header, once each. The outcome hook stamps it on every label, so `sherpa status` can compare
 harness versions. `applied_at` is the only timestamp Sherpa ever writes and lives only here. Commit the state
@@ -223,6 +225,7 @@ Proven by `test_apply_is_idempotent_and_deterministic`: the second run is all `=
 | No `CLAUDE.md`, no hook after apply | the repo had `AGENTS.md` and no `.claude/`, so only `agents-md` was detected | add `targets = ["claude", "agents-md"]` to `[apply]` |
 | `status` shows `~ block facts updated` right after `apply` | `apply` was run with an older model than the plan | run `sherpa plan` then `sherpa apply` |
 | CLAUDE.md got a block at the very end, below my own sections | intended — sherpa appends, never reorders | move the block; its markers are what matters, not its position |
+| `! .claude/settings.json  hooks is not an object of event lists — yours (skipped)` | the file's `hooks` key is not the shape Claude Code reads (a list, or an event whose value is not a list) — sherpa merges nothing into somebody's shape | make `hooks` an object of event → list of groups, or delete the key; `apply` then adds the outcome hook |
 | The hook writes nothing | `settings.json` entries missing (someone removed them) or no `python3`/`python` on the PATH | `sherpa apply` merges the entries back; `sherpa check` C6 verifies the wiring |
 | I want sherpa to take a hand-edited block back | delete your changes inside the block, or remove the file's record from `.sherpa/state.json` | the next apply regenerates it |
 | Rollback although my files are fine | the write introduced a FAIL — usually a link into a file the plan no longer creates | read the findings; `--no-check` writes anyway |

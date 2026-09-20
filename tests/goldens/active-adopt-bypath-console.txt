@@ -2,4 +2,4 @@ sherpa adopt — home .agents · targets claude, agents-md: 1 harness files
   · svc/pay/AGENTS.md  nested  covers owner-doc pay (the unit's own path) — `apply` appends its facts block
 gaps:
   - 2 proposed owner docs without an existing doc — `apply` creates them
-state: 0 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev 257a369b3bda → .sherpa/state.json · 1 plan entries covered → .sherpa/harness-plan.yaml
+state: 0 adopted, 0 rebuilt, 0 kept, 0 dropped · harness_rev e3b0c44298fc → .sherpa/state.json · 1 plan entries covered → .sherpa/harness-plan.yaml

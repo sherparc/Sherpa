@@ -89,7 +89,7 @@ and says so in a note first (ADR-0036); the drift below it is what `apply` would
 
 ### Outcomes
 
-One line per `harness_rev` seen in the labels, the current one first and marked. `success` = the last test run
+One line per `harness_rev` seen in the labels: the current one first and marked, then the five most recent revisions by their first label, newest first, and `and N older revisions — sherpa status --json lists them all` for the rest (`--json` carries every revision). `success` = the last test run
 in the execution was green or a pull request was created; `failed` = the last test run was red; `unknown` = no
 signal, typically a question/answer turn. `corrections` counts follow-up prompts that corrected the previous
 answer. Trend, regression between two harness versions and the share of `unknown` over time are milestone M5.

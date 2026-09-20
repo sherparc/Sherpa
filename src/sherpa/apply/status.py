@@ -32,6 +32,7 @@ class Report:
     drift: list[tuple[str, str, str]] = field(default_factory=list)  # (op, path, detail)
     findings: list[Finding] = field(default_factory=list)
     outcomes: dict[str, Counter] = field(default_factory=dict)  # harness_rev → label counts
+    first_seen: dict[str, int] = field(default_factory=dict)  # harness_rev → first label's ts (ms); 0 when unknown
     corrections: int = 0
     notes: list[str] = field(default_factory=list)
     stale: tuple[str, str, str] | None = None  # (trunk, plan rev, current rev) when the trunk moved since the plan
@@ -89,7 +90,7 @@ def report(
         r.notes.append(f"{len(adopted)} adopted files are yours and never touched (ADR-0007)")
     r.drift.sort(key=lambda d: d[1])
     r.findings = [f for f in run_check(repo) if f.rule != "C8"]  # drift above is the same information, sharper
-    r.outcomes, r.corrections = _outcomes(repo / OUTCOMES)
+    r.outcomes, r.first_seen, r.corrections = _outcomes(repo / OUTCOMES)
     script = check_script(state.home or ".claude")
     deployed = _deployed_version(repo / script)
     if deployed and deployed != __version__:
@@ -104,11 +105,12 @@ def _deployed_version(path: Path) -> str | None:
     return m.group(1) if m else None
 
 
-def _outcomes(path: Path) -> tuple[dict[str, Counter], int]:
+def _outcomes(path: Path) -> tuple[dict[str, Counter], dict[str, int], int]:
     per_rev: dict[str, Counter] = {}
+    first_seen: dict[str, int] = {}
     corrections = 0
     if not path.is_file():
-        return per_rev, corrections
+        return per_rev, first_seen, corrections
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             rec = json.loads(line)
@@ -117,8 +119,14 @@ def _outcomes(path: Path) -> tuple[dict[str, Counter], int]:
         if rec.get("kind") == "correction":
             corrections += 1
         elif rec.get("kind") == "outcome":
-            per_rev.setdefault(str(rec.get("harness_rev", "none")), Counter())[str(rec.get("label", "unknown"))] += 1
-    return per_rev, corrections
+            rev = str(rec.get("harness_rev", "none"))
+            per_rev.setdefault(rev, Counter())[str(rec.get("label", "unknown"))] += 1
+            ts = rec.get("ts") if isinstance(rec.get("ts"), int) else 0
+            first_seen[rev] = min(first_seen.get(rev, ts), ts)
+    return per_rev, first_seen, corrections
+
+
+SHOWN_REVISIONS = 5  # besides the current one; the rest is in --json (plan §14 F65)
 
 
 def render(r: Report) -> str:
@@ -145,10 +153,19 @@ def render(r: Report) -> str:
         lines.append(
             f"outcomes: {total} executions labelled" + (f", {r.corrections} corrections" if r.corrections else "")
         )
-        for rev, c in sorted(r.outcomes.items(), key=lambda kv: (kv[0] != r.harness_rev, kv[0])):
-            mark = " (current)" if rev == r.harness_rev else ""
+        # the current revision first, then the most recent ones by their first label — newest first, capped
+        others = sorted(
+            (rev for rev in r.outcomes if rev != r.harness_rev), key=lambda rev: (-r.first_seen.get(rev, 0), rev)
+        )
+        shown = ([r.harness_rev] if r.harness_rev in r.outcomes else []) + others[:SHOWN_REVISIONS]
+        for rev in shown:
+            c, mark = r.outcomes[rev], " (current)" if rev == r.harness_rev else ""
             counts = ", ".join(f"{c.get(label, 0)} {label}" for label in ("success", "failed", "unknown"))
             lines.append(f"  {rev}{mark}: {counts}")
+        if len(others) > SHOWN_REVISIONS:
+            lines.append(
+                f"  and {len(others) - SHOWN_REVISIONS} older revisions — `sherpa status --json` lists them all"
+            )
     else:
         lines.append("outcomes: none yet — labels appear once Claude Code runs with the hook installed")
     lines.extend(f"  note: {n}" for n in r.notes)

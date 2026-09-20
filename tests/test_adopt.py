@@ -341,8 +341,14 @@ def test_state_load_names_the_way_out(tmp_path: Path):
     p.write_text("[]", encoding="utf-8")
     with pytest.raises(ValueError, match="sherpa adopt"):
         state_mod.load(p)
-    p.write_text(json.dumps({"schema_version": 1, "sherpa": "x", "files": {"a": {"mode": "managed"}}}), "utf-8")
-    assert state_mod.load(p).files["a"].origin == GENERATED
+    # A record no writer of sherpa's produced — a hand-merged state after a conflict — is refused with the location
+    # and the way out, not handed to ``apply`` (ADR-0042, plan §14 F66).
+    full = {"schema_version": 1, "sherpa": "x", "harness_rev": "0" * 12, "plan": {}, "applied_at": ""}
+    p.write_text(json.dumps(full | {"files": {"a": {"mode": "wizard", "origin": "generated"}}}), "utf-8")
+    with pytest.raises(ValueError, match=r"state invalid at files/a/mode.*sherpa adopt"):
+        state_mod.load(p)
+    p.write_text(json.dumps(full | {"files": {"a": {"mode": "managed", "origin": "generated"}}, "later": 1}), "utf-8")
+    assert state_mod.load(p).files["a"].origin == GENERATED  # an unknown top-level key is a newer sherpa's, tolerated
 
 
 def test_existing_harness_goldens(active_repo: Path, capsys):

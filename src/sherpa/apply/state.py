@@ -4,8 +4,10 @@ One record per file. ``mode`` says how much of the file is sherpa's: ``managed``
 ``blocks`` = only the marked blocks (one hash per block), ``json-hooks`` = the hook entries sherpa merged into
 ``.claude/settings.json``. ``origin`` is ``generated`` or, after ``sherpa adopt``, ``adopted``.
 
-``harness_rev`` is the hash over everything sherpa owns (paths and content hashes) plus the sherpa version — the
-outcome hook stamps it on every label, so harness versions can be compared later (M5). Timestamps live only here,
+``harness_rev`` is the hash over what an agent reads — every markdown file or block sherpa owns (paths and content
+hashes); the outcome hook stamps it on every label, so harness revisions can be compared (M5). ``tooling`` is the
+second hash, over the rest: the checker copy, the hook, the hook wiring, the ignore file and the sherpa version —
+a ``self-update`` moves ``tooling`` and leaves ``harness_rev`` where it was (ADR-0056). Timestamps live only here,
 never in generated files (determinism, docs/plan.md §2.3).
 """
 
@@ -45,12 +47,14 @@ class State:
     schema_version: int = STATE_SCHEMA_VERSION
     home: str = ""  # ".agents" or ".claude" — where the neutral core lives (ADR-0015); "" = not decided yet
     targets: tuple[str, ...] = ()  # runtimes projected into; () = not decided yet
+    tooling: str = ""  # hash over the non-content records plus the version (ADR-0056); "" in a state older than it
 
     def to_dict(self) -> dict:
         return {
             "schema_version": self.schema_version,
             "sherpa": self.sherpa,
             "harness_rev": self.harness_rev,
+            **({"tooling": self.tooling} if self.tooling else {}),
             "home": self.home,
             "targets": list(self.targets),
             "plan": dict(self.plan),
@@ -68,6 +72,7 @@ class State:
     def from_dict(cls, d: dict) -> State:
         if d.get("schema_version") != STATE_SCHEMA_VERSION:
             raise ValueError(f"state has schema_version {d.get('schema_version')}, expected {STATE_SCHEMA_VERSION}")
+        validate(d)  # a foreign or hand-merged record never reaches ``apply`` (ADR-0042, plan §14 F66)
         files = {k: FileRecord(**v) for k, v in d.get("files", {}).items()}
         return cls(
             d.get("harness_rev", ""),
@@ -78,6 +83,7 @@ class State:
             1,
             d.get("home", ""),
             tuple(d.get("targets", ())),
+            d.get("tooling", ""),
         )
 
 
@@ -104,14 +110,35 @@ def load(path: Path) -> State:
         raise ValueError(f"{path} is unreadable ({e}) — `sherpa adopt` rebuilds it from the harness files") from e
 
 
-def harness_rev(files: dict[str, FileRecord], version: str = __version__) -> str:
-    """12 hex chars over everything sherpa owns — changes exactly when a managed file or block changes."""
+CONTENT_SUFFIX = ".md"  # what an agent reads: owner docs, agents, skills, root and nested proximity files
+
+
+def is_content(path: str) -> bool:
+    """A record an agent reads (markdown) — as opposed to tooling: the checker copy, the hook, ``settings.json``
+    hook entries, the ignore file (ADR-0056)."""
+    return path.endswith(CONTENT_SUFFIX)
+
+
+def harness_rev(files: dict[str, FileRecord]) -> str:
+    """12 hex chars over the content records (paths and hashes) — changes exactly when a markdown file or block
+    sherpa owns changes, never with the sherpa version (ADR-0056)."""
+    return _digest((p, r) for p, r in sorted(files.items()) if is_content(p))
+
+
+def tooling_rev(files: dict[str, FileRecord], version: str = __version__) -> str:
+    """12 hex chars over the non-content records plus the sherpa version: moves with every ``self-update`` and
+    ``apply`` that refreshes the checker copy or the hook, while ``harness_rev`` stays."""
+    return _digest(((p, r) for p, r in sorted(files.items()) if not is_content(p)), f"sherpa {version}")
+
+
+def _digest(records, *extra: str) -> str:
     h = hashlib.sha256()
-    for path, rec in sorted(files.items()):
+    for path, rec in records:
         h.update(f"{path} {rec.hash or ''}\n".encode())
         for name, bh in sorted(rec.blocks.items()):
             h.update(f"{path}#{name} {bh}\n".encode())
-    h.update(f"sherpa {version}\n".encode())
+    for line in extra:
+        h.update(f"{line}\n".encode())
     return h.hexdigest()[:12]
 
 

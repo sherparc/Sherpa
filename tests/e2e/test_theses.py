@@ -2,7 +2,8 @@
 in ``ev``. T01–T22 are the catalogue of the ``e2e-test`` skill; E01–E05 are the follow-ups of its first runs
 (the deployed checker standalone, the write boundary, the configured home, line endings, a dangling symlink),
 E06–E09 the claims of M3j's second slice (a decision follows a renamed unit, a dropped one is named, the WARN
-count of ``apply`` is ``check``'s, the uninstall names the state once).
+count of ``apply`` is ``check``'s, the uninstall names the state once), E10–E12 the claims of M3l (a revision
+that survives a tool upgrade, the C7 ceiling for the team's files, git-ignored files are not the harness).
 
 Every assertion compares what a user sees — exit code, stdout, stderr, the files on disk, ``git status`` —
 never an internal. Numbers are relative (more than none, the same twice), so the same test holds on the
@@ -44,7 +45,8 @@ def proposed_unit(corpus: Path) -> tuple[str, str]:
     theses on hand edits, covers and rollbacks use; BLOCKED when the plan proposes none."""
     for e in plan_entries(corpus):
         if e["kind"] == "owner-doc" and e["default"] == "propose" and e["scope"] and not e.get("decision"):
-            return e["target"], e["scope"]
+            if not e.get("covered"):  # a covered entry renders nothing — nothing to edit, reject or roll back
+                return e["target"], e["scope"]
     pytest.skip("blocked: the plan proposes no owner doc for a nested unit")
 
 
@@ -154,9 +156,9 @@ def test_t06b_reject_survives_a_replan(sherpa: Sherpa, corpus: Path, planned: Ru
     entry = min(proposed, key=lambda e: e["kind"] != "agent")  # an agent first: the owner docs stay for T11
     address = f"{entry['kind']}:{entry['target']}:{entry['scope']}"
     r1 = sherpa("plan", corpus, "--no-fetch", "--reject", address)
-    assert r1.code == 0 and r1.last.endswith("(1 decided now)"), r1
+    assert r1.code == 0 and "(1 decided now" in r1.last, r1
     r2 = sherpa("plan", corpus, "--no-fetch")
-    assert r2.code == 0 and "(1 decisions kept)" in r2.last, r2
+    assert r2.code == 0 and "(1 decisions kept" in r2.last, r2
     row = next(ln for ln in r2.lines if re.match(rf"  \+ {entry['kind']}\s+{re.escape(entry['target'])}\s", ln))
     assert row.endswith(" [reject]"), row
     store.data["rejected"] = address
@@ -183,8 +185,8 @@ def test_t07b_dry_run_lists_and_writes_nothing(sherpa: Sherpa, corpus: Path, pla
     r = sherpa("apply", "--dry-run", corpus)
     assert r.code == 0 and r.first.startswith("targets: ") and " · home: " in r.first, r
     listed = actions(r.out)
-    assert listed and all(op == "+" for op in listed.values()), listed
-    assert re.match(r"\d+ to add, 0 to change, 0 unchanged, 0 skipped\.", r.last), r
+    assert listed and all(op in "+~" for op in listed.values()), listed  # ~ = a block appended into the team's file
+    assert re.match(r"\d+ to add, \d+ to change, 0 unchanged, 0 skipped\.", r.last), r  # to change: appended
     assert git_status(corpus) == before and not home_dirs(corpus)
     ev(r.first)
     ev(r.last)
@@ -214,7 +216,7 @@ def test_e02_write_boundary(installed: Run, corpus: Path, store: Store, ev):
     require(installed, "T08")
     listed = actions(store.need("dry_run", "T08"))
     announced = {p for p, op in listed.items() if op in "+~"}
-    on_disk = {ln[3:] for ln in git_status(corpus)}
+    on_disk = {ln[2:].strip().strip('"') for ln in git_status(corpus)}  # `?? x`, ` M x`, `!! x`
     strays = sorted(p for p in on_disk if p not in announced and not p.startswith(".sherpa/"))
     assert not strays, f"written but never listed: {strays}"
     missing = sorted(p for p in announced if not (corpus / p).is_file())
@@ -288,16 +290,25 @@ def test_t12_stamp_is_the_window_end(corpus: Path, installed: Run, ev):
     "proximity budgets: every nested AGENTS.md/CLAUDE.md sherpa wrote ≤ 8 KiB, the root ones ≤ 32 KiB",
     "ADR-0029",
 )
-def test_t13_budgets(corpus: Path, installed: Run, store: Store, ev):
+def test_t13_budgets(sherpa: Sherpa, corpus: Path, installed: Run, store: Store, ev):
     require(installed, "T08")
-    written = [p for p, op in actions(store.need("dry_run", "T08")).items() if op in "+~"]
-    proximity = [p for p in written if Path(p).name in ("AGENTS.md", "CLAUDE.md")]
-    assert proximity
-    largest = max(proximity, key=lambda p: (corpus / p).stat().st_size)
-    for p in proximity:
+    listed = actions(store.need("dry_run", "T08"))
+    seeded = [p for p, op in listed.items() if op == "+" and Path(p).name in ("AGENTS.md", "CLAUDE.md")]
+    appended = [p for p, op in listed.items() if op == "~" and Path(p).name in ("AGENTS.md", "CLAUDE.md")]
+    assert seeded or appended
+    for p in seeded:  # sherpa's whole: its budget (ADR-0029)
         size, budget = (corpus / p).stat().st_size, 32 * 1024 if "/" not in p else 8 * 1024
         assert size <= budget, f"{p}: {size} bytes over {budget}"
-    ev(f"{len(proximity)} proximity files, largest {largest} at {(corpus / largest).stat().st_size} bytes")
+    over = [p for p in appended if (corpus / p).stat().st_size > 32 * 1024]  # the team's: the ceiling, as a C7 line
+    if over:
+        r = sherpa("check", corpus)
+        for p in over:
+            assert "ceiling 32 KiB" in r.line(p), r
+    if seeded:
+        largest = max(seeded, key=lambda p: (corpus / p).stat().st_size)
+        ev(f"{len(seeded)} proximity files seeded, largest {largest} at {(corpus / largest).stat().st_size} bytes")
+    if appended:
+        ev(f"{len(appended)} team files appended to, {len(over)} over the runtime's ceiling — named by C7")
 
 
 @thesis(
@@ -406,7 +417,8 @@ def test_t15_adopt_rebuilds_a_lost_state(sherpa: Sherpa, corpus: Path, installed
 def test_t16_adopt_keeps_foreign_files(sherpa: Sherpa, corpus: Path, installed: Run, ev):
     require(installed, "T08")
     foreign = corpus / ".claude" / "agents" / "ops.md"
-    made = foreign.parent if not foreign.parent.is_dir() else None  # the directory is the test's, if it makes it
+    # the deepest directory the test makes is the test's — `.claude/` itself on a repository without that target
+    made = next((d for d in (corpus / ".claude", foreign.parent) if not d.is_dir()), None)
     foreign.parent.mkdir(parents=True, exist_ok=True)
     foreign.write_bytes(b"---\nname: ops\ndescription: mine\n---\n# ops\n")
     before = sha256(foreign)
@@ -465,6 +477,88 @@ def test_e08_apply_warn_count_equals_check(sherpa: Sherpa, corpus: Path, install
     finally:  # the harness the later theses expect: the entry back, its files written again
         require(sherpa("plan", corpus, "--no-fetch", "--accept", address), "T05")
         require(sherpa("apply", "--yes", corpus), "T08")
+
+
+# ---------------------------------------------------------------- M3l: a revision that means something
+
+
+@thesis(
+    "E10",
+    "harness_rev is over what an agent reads and the state carries tooling apart: the checker copy hand-edited moves tooling, not harness_rev",
+    "ADR-0056",
+)
+def test_e10_harness_rev_is_content_only(sherpa: Sherpa, corpus: Path, installed: Run, ev):
+    require(installed, "T08")
+    state = json.loads((corpus / ".sherpa" / "state.json").read_text(encoding="utf-8"))
+    rev, tooling = state["harness_rev"], state.get("tooling")
+    assert re.fullmatch(r"[0-9a-f]{12}", rev) and re.fullmatch(r"[0-9a-f]{12}", tooling or "") and rev != tooling, state
+    ev(f"state.json: harness_rev {rev} · tooling {tooling}")
+    # ``adopt`` rebuilds both from the files; a changed checker copy (an older sherpa's) moves tooling only
+    home = state["home"]
+    checker = corpus / home / "scripts" / "sherpa-check.py"
+    original = checker.read_bytes()
+    try:
+        checker.write_bytes(original.replace(b'SHERPA_VERSION = "', b'SHERPA_VERSION = "0.0.1-', 1))
+        r = sherpa("adopt", "--dry-run", corpus)
+        assert r.code == 0 and f"harness_rev {rev} " in r.last, r
+        ev(f"checker copy changed → adopt --dry-run: {r.last}")
+    finally:
+        checker.write_bytes(original)
+
+
+@thesis(
+    "E11",
+    "C7 on a proximity file the team wrote fires at the runtime's ceiling (32 KiB), not at sherpa's 8 KiB budget",
+    "ADR-0029 amended, plan §14 F59",
+)
+def test_e11_c7_ceiling_for_the_teams_files(sherpa: Sherpa, corpus: Path, installed: Run, ev):
+    require(installed, "T08")
+    d = corpus / "tmp-team"
+    f = d / "AGENTS.md"
+    d.mkdir()
+    try:
+        f.write_text("# Team\n\n" + "The team's own guidance, line after line.\n" * 250, encoding="utf-8")  # ~11 KiB
+        r = sherpa("check", corpus)
+        assert r.code == 0 and "tmp-team/AGENTS.md" not in r.out, r
+        ev(f"{f.stat().st_size} bytes, the team's: no C7 line in `sherpa check`")
+        f.write_text("# Team\n\n" + "The team's own guidance, line after line.\n" * 800, encoding="utf-8")  # ~34 KiB
+        r = sherpa("check", corpus)
+        line = r.line("tmp-team/AGENTS.md")
+        assert r.code == 0 and line.strip().startswith("WARN C7") and "ceiling 32 KiB" in line and "yours" in line, r
+        ev(line)
+    finally:
+        rmtree(d)
+
+
+@thesis(
+    "E12",
+    "a file git ignores is not the harness: check reports nothing in it, like adopt; tracked or unignored, it is checked",
+    "plan §14 F62, ADR-0047",
+)
+def test_e12_git_ignored_files_are_not_checked(sherpa: Sherpa, corpus: Path, installed: Run, ev):
+    require(installed, "T08")
+    d = corpus / "tmp-vault"
+    exclude = corpus / ".git" / "info" / "exclude"
+    before = exclude.read_bytes() if exclude.is_file() else None
+    d.mkdir()
+    try:
+        (d / "CLAUDE.md").write_text("# vault\n\n[dead](../nowhere.md)\n", encoding="utf-8")
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        exclude.write_bytes((before or b"") + b"\ntmp-vault/\n")
+        r = sherpa("check", corpus)
+        assert r.code == 0 and "tmp-vault/CLAUDE.md" not in r.out, r
+        ev("tmp-vault/ ignored via .git/info/exclude: no finding in `sherpa check`")
+        exclude.write_bytes(before or b"")
+        r = sherpa("check", corpus)
+        line = r.line("tmp-vault/CLAUDE.md")
+        assert "C4 tmp-vault/CLAUDE.md: link target ../nowhere.md does not exist (yours)" in line, r
+        ev(line)
+    finally:
+        rmtree(d)
+        if before is None:
+            exclude.unlink(missing_ok=True)
+        else:
+            exclude.write_bytes(before)
 
 
 # ---------------------------------------------------------------- uninstall
@@ -688,7 +782,7 @@ def test_e06_decision_follows_a_renamed_unit(sherpa: Sherpa, clean_slate: Path, 
         pytest.skip("blocked: the plan proposes no agent for a nested unit")
     target, scope = agents[0]["target"], agents[0]["scope"]
     r0 = sherpa("plan", corpus, "--no-fetch", "--reject", f"agent:{target}:{scope}")
-    assert r0.code == 0 and r0.last.endswith("(1 decided now)"), r0
+    assert r0.code == 0 and "(1 decided now" in r0.last, r0
     move = TrunkMove(corpus)
     try:
         renamed = rename_unit(corpus, target, scope)
@@ -702,11 +796,11 @@ def test_e06_decision_follows_a_renamed_unit(sherpa: Sherpa, clean_slate: Path, 
             line.strip()
             == f"agent:{renamed}:{scope} [reject] — followed from agent:{target}:{scope} (same path, renamed)"
         )
-        assert "(1 decisions kept)" in ev(r.last), r
+        assert "(1 decisions kept" in ev(r.last), r
         entry = next(e for e in plan_entries(corpus) if e["kind"] == "agent" and e["scope"] == scope)
         assert entry["target"] == renamed and entry["decision"] == "reject", entry
         again = sherpa("plan", corpus, "--no-fetch")
-        assert again.code == 0 and "followed from" not in again.out and "(1 decisions kept)" in again.last, again
+        assert again.code == 0 and "followed from" not in again.out and "(1 decisions kept" in again.last, again
     finally:
         move.restore()
 
@@ -722,7 +816,7 @@ def test_e07_dropped_decision_is_named_once(sherpa: Sherpa, clean_slate: Path, e
     target, scope = proposed_unit(corpus)
     address = f"owner-doc:{target}:{scope}"
     r0 = sherpa("plan", corpus, "--no-fetch", "--reject", address)
-    assert r0.code == 0 and r0.last.endswith("(1 decided now)"), r0
+    assert r0.code == 0 and "(1 decided now" in r0.last, r0
     move = TrunkMove(corpus)
     try:
         git(corpus, "rm", "-rq", scope)

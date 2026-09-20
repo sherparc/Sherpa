@@ -8,7 +8,7 @@
 | `sherpa.toml` | all | optional; [configuration](configuration.md) |
 | `.sherpa/codebase-model.json` | `plan`, `apply`, `status` | rescanned by `plan` when missing, stale or of an old schema |
 | `.sherpa/harness-plan.yaml` | `plan` (decisions), `apply`, `status` | the previous plan's `decision:` values are carried over |
-| `.sherpa/state.json` | `apply`, `status`, `adopt`, `check` (C8), the outcome hook (`harness_rev`) | empty state when missing; a torn one is an error that names `sherpa adopt` as the fix |
+| `.sherpa/state.json` | `apply`, `status`, `adopt`, `check` (C8), the outcome hook (`harness_rev`) | empty state when missing; a torn one, or one with a record no sherpa wrote (validated against the shipped schema on every read, ADR-0042), is an error that names `sherpa adopt` as the fix; `harness_rev` is over the content records, `tooling` over the rest plus the version (ADR-0056) |
 | `.claude/**`, `.agents/**`, every `CLAUDE.md` and `AGENTS.md` | `apply` (current content), `check`, `status` | nested proximity files included |
 | `.sherpa/telemetry/outcomes.ndjson` | `status` | written by the outcome hook |
 

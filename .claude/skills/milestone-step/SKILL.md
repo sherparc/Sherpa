@@ -30,7 +30,9 @@ description: "The ritual for every step of work on Sherpa: branch, build with te
    row in `docs/adr/README.md`.
 7. **Docs in step**: the concept doc (rules), the command reference (`docs/commands/`), `docs/index.md` links,
    `CLAUDE.md` if a rule changed. English everywhere.
-8. **README**: status badge, command list, roadmap, test count, examples only from goldens.
+8. **README**: status badge, command list, roadmap, test count, examples only from goldens. The test count is
+   read from the collector — `.venv/bin/pytest --collect-only -q tests | tail -1` and `… tests/e2e` for the theses —
+   after the last test was written, never from memory (thesis T22 fails the pull request otherwise, plan §14 F61).
 9. **Scrub**: `grep -rniE "referenz|reference repo|<customer names>"` on the diff must be empty; no German in
    anything pushed.
 10. **Dogfood**: `sherpa status .` in this repo — drift and checker clean (`sherpa apply .` when the facts moved).

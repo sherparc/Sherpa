@@ -474,6 +474,13 @@ def test_hooks_merge_keeps_foreign_entries(tmp_path: Path):
     assert a.op == SKIPPED and "not valid JSON" in a.detail
     a = run(t, tmp_path, "[]", None)
     assert a.op == SKIPPED and "not an object" in a.detail
+    # somebody's shape — a template with ``"hooks": []``, an event that is a string, a group that is a string —
+    # is skipped with a line, never a traceback in the preview (plan §14 F60)
+    for theirs in ('{"hooks": []}', '{"hooks": {"Stop": "nope"}}', '{"hooks": {"Stop": "x", "PreToolUse": []}}'):
+        a = run(t, tmp_path, theirs, None)
+        assert (a.op, a.detail) == (SKIPPED, "hooks is not an object of event lists — yours (skipped)"), theirs
+    a = run(t, tmp_path, '{"hooks": {"Stop": ["str", {"hooks": "x"}, {"hooks": [1]}]}}', None)
+    assert (a.op, a.detail) == (UPDATED, "hooks added: Stop") and len(json.loads(a.new)["hooks"]["Stop"]) == 4
 
 
 # ---------------------------------------------------------------- write, state, rollback
@@ -538,12 +545,22 @@ def test_apply_is_idempotent_and_deterministic(active_repo: Path, capsys):
     assert r.returncode == 0  # telemetry never enters the repo
 
 
-def test_harness_rev_changes_only_with_managed_content():
-    files = {"a": FileRecord(MANAGED, hash="a" * 16), "b": FileRecord(BLOCKS, blocks={"x": "b" * 16})}
-    rev = state_mod.harness_rev(files)
+def test_harness_rev_changes_only_with_content_and_tooling_with_the_version():
+    """ADR-0056: ``harness_rev`` is over what an agent reads; the checker copy, the hook and the version move
+    ``tooling`` only — a ``self-update`` plus ``apply`` keeps the revision the outcome labels are grouped by."""
+    files = {
+        "a.md": FileRecord(MANAGED, hash="a" * 16),
+        "AGENTS.md": FileRecord(BLOCKS, blocks={"x": "b" * 16}),
+        ".agents/scripts/sherpa-check.py": FileRecord(MANAGED, hash="c" * 16),
+        ".claude/settings.json": FileRecord(JSON_HOOKS, hash="d" * 16),
+    }
+    rev, tooling = state_mod.harness_rev(files), state_mod.tooling_rev(files)
     assert rev == state_mod.harness_rev(dict(reversed(list(files.items()))))
-    assert rev != state_mod.harness_rev({**files, "b": FileRecord(BLOCKS, blocks={"x": "c" * 16})})
-    assert rev != state_mod.harness_rev(files, version="9.9.9")
+    assert rev != state_mod.harness_rev({**files, "AGENTS.md": FileRecord(BLOCKS, blocks={"x": "c" * 16})})
+    new_checker = {**files, ".agents/scripts/sherpa-check.py": FileRecord(MANAGED, hash="e" * 16)}
+    assert state_mod.harness_rev(new_checker) == rev and state_mod.tooling_rev(new_checker) != tooling
+    assert state_mod.tooling_rev(files, version="9.9.9") != tooling
+    assert state_mod.harness_rev({}) == state_mod.harness_rev({".claude/hooks/sherpa-outcome.py": FileRecord(MANAGED)})
 
 
 def test_trunk_move_without_activity_changes_no_block(active_repo: Path, capsys):
@@ -718,9 +735,14 @@ def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, ca
             [
                 json.dumps({"kind": "outcome", "harness_rev": st.harness_rev, "label": "success"}),
                 json.dumps({"kind": "outcome", "harness_rev": st.harness_rev, "label": "unknown"}),
-                json.dumps({"kind": "outcome", "harness_rev": "000000000000", "label": "failed"}),
+                json.dumps({"kind": "outcome", "harness_rev": "000000000000", "label": "failed", "ts": 5}),
                 json.dumps({"kind": "correction", "harness_rev": st.harness_rev}),
                 "not json",
+                # seven older revisions, first seen at ts 10 … 70: newest first, five shown, the rest counted (F65)
+                *(
+                    json.dumps({"kind": "outcome", "harness_rev": f"{i:012d}", "label": "success", "ts": i * 10})
+                    for i in range(1, 8)
+                ),
             ]
         )
         + "\n",
@@ -743,11 +765,12 @@ def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, ca
     assert "  - .agents/docs/modules/core.md     in the state, not on disk — apply recreates it" in out
     assert "  ! .claude/hooks/sherpa-outcome.py  hand-edited (skipped)" in out
     assert "  ! .agents/scripts/sherpa-check.py  hand-edited (skipped)" in out
-    assert "outcomes: 3 executions labelled, 1 corrections\n" in out
+    assert "outcomes: 10 executions labelled, 1 corrections\n" in out
+    older = "".join(f"  {i:012d}: 1 success, 0 failed, 0 unknown\n" for i in (7, 6, 5, 4, 3))
     assert (
-        f"  {st.harness_rev} (current): 1 success, 0 failed, 1 unknown\n  000000000000: 0 success, 1 failed, 0 unknown\n"
-        in out
-    )
+        f"  {st.harness_rev} (current): 1 success, 0 failed, 1 unknown\n{older}"
+        "  and 3 older revisions — `sherpa status --json` lists them all\n"
+    ) in out
     assert f"note: .agents/scripts/sherpa-check.py is sherpa 0.0.1, installed is {__version__}" in out
     (active_repo / "CLAUDE.md").write_text("<!-- sherpa:begin harness -->\n", encoding="utf-8")
     assert main(["status", str(active_repo)]) == 1  # a FAIL is the only non-zero exit of status
