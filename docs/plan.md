@@ -315,7 +315,7 @@ Many tests, small units, everything reproducible:
 | Corpus | two repositories of record cloned next to this one (never named): a 122-module Java monorepo and a 16-module Python repository with hand-written nested `AGENTS.md` (decided 2026-09-20) | the e2e suite on `SHERPA_E2E_REPO` and the round trip `apply --yes → status → apply --remove --yes` on both after every slice and before every tag release (`/e2e-test`); never in CI. Sherpa's own harness under `.claude/` is not a test subject — `sherpa status .` is the pre-commit smoke gate and nothing more; no number from it is evidence |
 | Schema | `codebase-model`, `harness-plan`, `harness-state` | JSON Schema under `src/sherpa/schemas/`; the plan and the state are validated on every read and write by the stdlib validator `sherpa/schema.py` (ADR-0042, ADR-0056), the model on write — it trusts its own writer (ADR-0042 §consequences); `jsonschema` (dev extra) is the reference the tests compare it with on one input matrix |
 
-Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` and `pytest tests/e2e -q` green before every milestone. Status: 453 tests, 98 %, 40 end-to-end theses. The test count in the README is read from the collector (`pytest --collect-only -q`) before it is written — thesis T22 checks it (§14 F61).
+Gate: coverage ≥ 90 % for `src/sherpa/`, `pytest -q` and `pytest tests/e2e -q` green before every milestone. Status: 455 tests, 98 %, 40 end-to-end theses. The test count in the README is read from the collector (`pytest --collect-only -q`) before it is written — thesis T22 checks it (§14 F61).
 The conftest sets `SHERPA_NO_UPDATE_CHECK` and a temporary cache directory for every test, in-process and in
 subprocesses: no test reaches the network.
 

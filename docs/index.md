@@ -55,8 +55,8 @@ One page per command: synopsis, every option, inputs and outputs, exit codes, re
 ## Architecture diagrams
 
 - [Diagrams](architecture/README.md) — the mechanics as Mermaid: the pipeline, scan and model, plan entries,
-  ownership per file, the write path, state and recovery, the outcome hook, runtimes. A second view; each one
-  links to the page that owns the rule.
+  ownership per file, the write path, state and recovery, the outcome hook, runtimes, the module map of the
+  source tree. A second view; each one links to the page that owns the rule.
 
 ## Project
 
