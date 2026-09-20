@@ -381,6 +381,9 @@ def _plan_hooks(t: Target, current: str | None, rec: FileRecord | None) -> Actio
     except ValueError as e:
         return Action(t, SKIPPED, f"not valid JSON: {e} (skipped)", None, current, None)
     hooks = data.setdefault("hooks", {})
+    if not isinstance(hooks, dict) or any(not isinstance(v, list) for v in hooks.values()):
+        # Somebody's shape, not Claude Code's — never a traceback in the preview (plan §14 F60), never rewritten
+        return Action(t, SKIPPED, "hooks is not an object of event lists — yours (skipped)", None, current, None)
     added = []
     for event, groups in t.hooks.items():
         existing = hooks.setdefault(event, [])
@@ -408,8 +411,10 @@ def _plan_hooks(t: Target, current: str | None, rec: FileRecord | None) -> Actio
     )
 
 
-def _has_sherpa_hook(group: dict) -> bool:
-    return any("sherpa-outcome.py" in str(h.get("command", "")) for h in group.get("hooks", []) if isinstance(h, dict))
+def _has_sherpa_hook(group: object) -> bool:
+    if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+        return False
+    return any("sherpa-outcome.py" in str(h.get("command", "")) for h in group["hooks"] if isinstance(h, dict))
 
 
 # ---------------------------------------------------------------- phase 2: write, check, roll back
@@ -542,16 +547,17 @@ def write(
             files[a.path] = a.record
         elif a.forget:
             files.pop(a.path, None)
-    rev = state_mod.harness_rev(files)
+    rev, tooling = state_mod.harness_rev(files), state_mod.tooling_rev(files)
     home, targets = home or previous.home, targets or previous.targets
     changed = (
         written
-        or rev != previous.harness_rev
+        or (rev, tooling) != (previous.harness_rev, previous.tooling)
         or files != previous.files
         or (home, targets) != (previous.home, previous.targets)
     )
     state = State(
         harness_rev=rev,
+        tooling=tooling,
         plan={k: str(v) for k, v in plan.model.items() if k in ("trunk", "rev", "as_of")},
         applied_at=state_mod.now_iso() if changed else previous.applied_at,
         files=files,

@@ -17,13 +17,16 @@ Rules (FAIL = exit 1, WARN informational):
   C5 blocks              sherpa:begin/end markers are balanced, named and unique per file
   C6 hooks               .claude/settings.json is valid JSON and every hook command under $CLAUDE_PROJECT_DIR exists
   C7 budgets (WARN)      agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate;
-                         a nested CLAUDE.md/AGENTS.md > 8 KiB, the root one > 32 KiB — runtimes inject them whole
+                         a CLAUDE.md/AGENTS.md sherpa seeded: nested > 8 KiB, root > 32 KiB; one the team wrote
+                         (sherpa appended at most a block): > 32 KiB, where the runtime truncates it (ADR-0029)
   C8 drift (WARN)        with .sherpa/state.json: managed files/blocks whose hash differs, or that are missing
 
 Scope (ADR-0047): with a state, C1 to C5 FAIL only in files sherpa generated (``origin: generated`` in the
 state); in every other file under the homes — adopted or unrecorded, yours either way — they are WARN
 ``(yours)``, so the exit code says whether *sherpa's* harness is consistent, not whether a note somebody
 vendored has a dead link. ``--strict`` makes them FAIL everywhere; without a state everything is strict.
+A file git ignores is not the harness (a vault, a vendored package, a build output) and is never checked —
+the same rule ``sherpa adopt`` applies; outside a repository, or without git, the directory list below decides.
 
 Usage: ``python3 sherpa-check.py [repo] [--json] [--strict]``; from sherpa: ``sherpa check [repo] [--strict]``.
 """
@@ -44,7 +47,9 @@ FAIL, WARN = "FAIL", "WARN"
 BUDGETS = {"agent": 150, "owner-doc": 600, "skill": 250}  # lines; from harness practice, generic numbers
 # Proximity files in bytes (ADR-0029): a nested CLAUDE.md/AGENTS.md lands whole in the context (Hermes: in a tool
 # result on the first touch of the directory, ceiling 32 KiB, ~8 KiB recommended); the root file on every turn.
+# The recommendation is sherpa's budget for files it seeded; a file the team wrote gets the ceiling only.
 PROXIMITY_BUDGETS = {"nested": 8 * 1024, "root": 32 * 1024}
+PROXIMITY_CEILING = 32 * 1024
 
 # A managed block: everything between two marker lines. Markdown uses HTML comments, YAML front matter uses "#".
 MARKER = re.compile(r"^[ \t]*(?:<!--|#)[ \t]*sherpa:(begin|end)[ \t]+([A-Za-z0-9_-]+)[ \t]*(?:-->)?[ \t]*$")
@@ -182,7 +187,31 @@ def _md_files(root: Path) -> list[Path]:
                     stack.append(p)
             elif p.name in ("CLAUDE.md", "AGENTS.md"):
                 files.add(p)
-    return sorted(files)
+    return sorted(files - _git_ignored(root, files))
+
+
+def _git_ignored(root: Path, files: set[Path]) -> set[Path]:
+    """The subset git ignores — not the harness, whoever wrote it (plan §14 F62). Tracked files are never
+    reported; outside a repository, without git, or on any error nothing is dropped."""
+    import shutil
+    import subprocess
+
+    if not files or not (root / ".git").exists() or shutil.which("git") is None:
+        return set()
+    rel = {p.relative_to(root).as_posix(): p for p in files}
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(root), "check-ignore", "--stdin", "-z"],
+            input="\0".join(rel) + "\0",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    except (OSError, ValueError):
+        return set()
+    if r.returncode not in (0, 1):
+        return set()
+    return {rel[x] for x in r.stdout.split("\0") if x in rel}
 
 
 def _dangling(p: Path) -> str | None:
@@ -207,9 +236,9 @@ def _kind_of(rel: str) -> str | None:
     return None
 
 
-def _managed_paths(root: Path) -> set[str] | None:
-    """The files sherpa generated (``origin: generated`` in the state); None without a readable state — then
-    nothing is managed yet and every rule is strict. Adopted files are yours (ADR-0007): their findings are hints."""
+def _state_records(root: Path) -> dict[str, dict] | None:
+    """The state's file records; None without a readable state — then nothing is managed yet and every rule is
+    strict."""
     state_path = root / ".sherpa" / "state.json"
     if not state_path.is_file():
         return None
@@ -219,7 +248,23 @@ def _managed_paths(root: Path) -> set[str] | None:
         return None
     if not isinstance(files, dict):
         return None
-    return {p for p, rec in files.items() if isinstance(rec, dict) and rec.get("origin") == "generated"}
+    return {p: rec for p, rec in files.items() if isinstance(rec, dict)}
+
+
+def _managed_paths(records: dict[str, dict] | None) -> set[str] | None:
+    """The files sherpa generated (``origin: generated``). Adopted files are yours (ADR-0007): their findings
+    are hints."""
+    if records is None:
+        return None
+    return {p for p, rec in records.items() if rec.get("origin") == "generated"}
+
+
+def _seeded_paths(records: dict[str, dict] | None) -> set[str] | None:
+    """The files that are sherpa's whole — a managed file, or a blocks file still carrying its whole-file hash
+    (ADR-0048); a proximity file the team wrote and sherpa appended a block to is not among them."""
+    if records is None:
+        return None
+    return {p for p, rec in records.items() if rec.get("origin") == "generated" and rec.get("hash")}
 
 
 def check(
@@ -233,7 +278,8 @@ def check(
     what it writes before it writes the state; on a first ``apply`` they are the only managed files.
     ``yours_now``: paths the state still records but ``apply`` is handing back (ADR-0048) — theirs already."""
     root = root.resolve()
-    managed = None if strict else _managed_paths(root)
+    records = None if strict else _state_records(root)
+    managed, seeded = _managed_paths(records), _seeded_paths(records)
     if managed_too and not strict:
         managed = (managed or set()) | set(managed_too)
     if managed is not None:
@@ -245,7 +291,7 @@ def check(
         if (target := _dangling(p)) is not None:
             own = [Finding(FAIL, "C4", rel, f"symlink target {target} does not exist")]
         else:
-            own = _check_file(rel, p, read_text(p), claude)
+            own = _check_file(rel, p, read_text(p), claude, seeded is None or rel in seeded)
         findings.extend(_scope(own, managed is None or rel in managed))
     findings.extend(_check_hooks(root))
     findings.extend(_check_drift(root))
@@ -260,8 +306,8 @@ def _scope(found: list[Finding], managed: bool) -> list[Finding]:
     return [Finding(WARN, f.rule, f.path, f.message + " (yours)") if f.level == FAIL else f for f in found]
 
 
-def _check_file(rel: str, p: Path, text: str, claude: Path) -> list[Finding]:
-    """C1 to C5 and C7 for one file."""
+def _check_file(rel: str, p: Path, text: str, claude: Path, seeded: bool = True) -> list[Finding]:
+    """C1 to C5 and C7 for one file; ``seeded`` — the file is sherpa's whole, so the soft budget applies."""
     findings: list[Finding] = []
     kind = _kind_of(rel)
     fm = front_matter(text)
@@ -292,8 +338,13 @@ def _check_file(rel: str, p: Path, text: str, claude: Path) -> list[Finding]:
         findings.append(Finding(WARN, "C7", rel, f"{n} lines > budget {BUDGETS[kind]} ({kind})"))
     if p.name in ("CLAUDE.md", "AGENTS.md"):
         where = "root" if "/" not in rel else "nested"
-        if (size := len(text.encode("utf-8"))) > PROXIMITY_BUDGETS[where]:
+        size = len(text.encode("utf-8"))
+        if seeded and size > PROXIMITY_BUDGETS[where]:
             msg = f"{size} bytes > budget {PROXIMITY_BUDGETS[where] // 1024} KiB ({where} proximity file)"
+            findings.append(Finding(WARN, "C7", rel, msg))
+        elif not seeded and size > PROXIMITY_CEILING:
+            kib = PROXIMITY_CEILING // 1024
+            msg = f"{size} bytes > ceiling {kib} KiB ({where} proximity file, yours — the runtime truncates it there)"
             findings.append(Finding(WARN, "C7", rel, msg))
     return findings
 

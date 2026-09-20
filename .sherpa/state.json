@@ -1,17 +1,18 @@
 {
   "schema_version": 1,
   "sherpa": "0.8.2",
-  "harness_rev": "ba25e4d1a927",
+  "harness_rev": "5bb51cae94a1",
+  "tooling": "7f22c732b6eb",
   "home": ".claude",
   "targets": [
     "claude"
   ],
   "plan": {
     "trunk": "origin/main",
-    "rev": "42e78b95f179d403d1dea86f36023cd5691cd598",
-    "as_of": "2026-09-19T09:30:30Z"
+    "rev": "bfa21e531161fc506773e977198f9814c81f9ed6",
+    "as_of": "2026-09-19T13:24:29Z"
   },
-  "applied_at": "2026-09-19T09:45:00Z",
+  "applied_at": "2026-09-20T16:28:41Z",
   "files": {
     ".claude/agents/architect.md": {
       "mode": "managed",
@@ -32,18 +33,18 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:sherparc:",
-      "hash": "00df51d41b620b82",
+      "hash": "c5b92c2b7664e1b2",
       "blocks": {
-        "facts": "605f92267c9ceac3"
+        "facts": "014d3ae2285ff0b9"
       }
     },
     ".claude/docs/modules/src-sherpa-apply.md": {
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
-      "hash": "9908784db0d5378f",
+      "hash": "e06d58b538892469",
       "blocks": {
-        "facts": "b6e8a1779cb660c5"
+        "facts": "891fd75e974f3662"
       }
     },
     ".claude/hooks/sherpa-outcome.py": {
@@ -54,7 +55,7 @@
     ".claude/scripts/sherpa-check.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "792956c9c7e89606"
+      "hash": "fb6e221a36dd7ea2"
     },
     ".claude/settings.json": {
       "mode": "json-hooks",
@@ -75,9 +76,9 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "librarian:sherparc:",
-      "hash": "bccd561f56f03af0",
+      "hash": "49e258acd95e653e",
       "blocks": {
-        "scope": "5e696fd7dc526f9a"
+        "scope": "9229fdc5ea282649"
       }
     },
     ".claude/skills/sync-kb/SKILL.md": {
@@ -101,9 +102,9 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
-      "hash": "bc6f6c9d6f1ae654",
+      "hash": "2c45fdaa2e71f21b",
       "blocks": {
-        "harness": "8ce7a4d8c38a0ba8"
+        "harness": "3b0b2f9b5294ffdf"
       }
     }
   }

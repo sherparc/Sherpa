@@ -18,8 +18,15 @@ In every other file under the homes — adopted or unrecorded, yours either way 
 `(yours)`: a vendored
 skill with a dead link or a refinement note that points at a moved file is worth a line, not a red exit
 (ADR-0047). `--strict` makes them FAIL everywhere; without a state nothing is managed yet and every rule is
-strict. C6 (hook wiring), C7 (budgets) and C8 (drift) do not change. `apply` checks with the files it is about
+strict. C6 (hook wiring) and C8 (drift) do not change; C7's proximity budget follows the same line — the 8 KiB
+budget is for a `CLAUDE.md`/`AGENTS.md` sherpa seeded, a file the team wrote gets a line only above the 32 KiB
+ceiling where the runtime truncates it (ADR-0029). `apply` checks with the files it is about
 to write counted as managed and rolls back only on a **new** FAIL (ADR-0032); `status` shows the same counts.
+
+A file git ignores is not the harness — a documentation vault, a vendored package that ships its own
+`AGENTS.md`, a build output — and is never checked, the rule [`adopt`](adopt.md) applies too. Outside a
+repository, or without `git` on the `PATH`, the checker skips the usual dependency and build directories
+(`node_modules`, `vendor`, `target`, `dist`, `build`, `.venv`, …) by name instead.
 
 ## Rules
 
@@ -31,7 +38,7 @@ to write counted as managed and rolls back only on a **new** FAIL (ADR-0032); `s
 | C4 | FAIL | relative **file** links (`[x](../docs/modules/pay.md)`) in `.claude/**`, `.agents/**` and every `CLAUDE.md`/`AGENTS.md` (root and nested) resolve. Skipped: URLs, `mailto:`, anchors, absolute paths, targets without a file extension (wiki pages), and anything under `archive/` (history may tell the old state). A harness file that is a symlink pointing nowhere is a C4 too (sherpa writes no symlinks, so with a state it is always yours — a WARN) | `link target ../nope.md does not exist` · `symlink target nowhere.md does not exist` |
 | C5 | FAIL | `sherpa:begin <name>` / `sherpa:end <name>` markers are balanced, correctly nested (none) and unique per file | `managed block markers: line 12: end facts without matching begin` |
 | C6 | FAIL | `.claude/settings.json` parses as JSON; every hook command that references `$CLAUDE_PROJECT_DIR/<path>` points to an existing file | `Stop hook references missing file .claude/hooks/sherpa-outcome.py` |
-| C7 | WARN | size budgets: agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate (facts belong in the owner doc); a nested `CLAUDE.md`/`AGENTS.md` > 8 KiB, the root one > 32 KiB — runtimes inject them whole (ADR-0029) | `162 lines > budget 150 (agent)`, `9886 bytes > budget 8 KiB (nested proximity file)` |
+| C7 | WARN | size budgets: agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate (facts belong in the owner doc); a `CLAUDE.md`/`AGENTS.md` sherpa seeded: nested > 8 KiB, root > 32 KiB — runtimes inject them whole; one the team wrote (sherpa appended a block at most, or nothing): > 32 KiB, the ceiling where the runtime truncates it (ADR-0029) | `162 lines > budget 150 (agent)`, `9886 bytes > budget 8 KiB (nested proximity file)`, `33012 bytes > ceiling 32 KiB (nested proximity file, yours — the runtime truncates it there)` |
 | C8 | WARN | with `.sherpa/state.json`: managed files or blocks whose hash differs from the state, blocks removed, files missing | `block facts hand-edited` |
 
 Findings are sorted FAIL first, then by rule and path. Exit 1 when at least one FAIL.
@@ -87,6 +94,7 @@ or, with sherpa installed, `sherpa check`. Pair it with `sherpa status` when you
 |---|---|---|
 | Dozens of C4 FAILs on an existing harness before the first `apply` | genuinely broken relative links (moved files); without a state every file is strict | run `apply` or `adopt` once — the state scopes them to WARN `(yours)`; fix the ones you care about; `--strict` lists them all as FAIL again |
 | `WARN C4 … (yours)` | a dead link in a file sherpa did not generate — adopted or not | fix it or leave it; the exit code is not affected |
+| a finding in a file you expected to be skipped | the file is tracked, or the directory is not in `.gitignore` — the checker asks git, and a tracked file is never ignored | ignore the directory in `.gitignore` or `.git/info/exclude`; the deployed copy needs `git` on the `PATH` for this |
 | C4 on a link that exists | the link is relative to the *file's directory*, as markdown resolves it — not to the repo root | rewrite the link |
 | C1 on an agent that works | the front matter has `name:` but no `description:` — Claude Code still lists it, but routing needs the description | add one |
 | C6 after moving the repo | absolute paths in hook commands | use `$CLAUDE_PROJECT_DIR`, as sherpa does |

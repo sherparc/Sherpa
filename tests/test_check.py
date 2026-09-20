@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -156,6 +157,65 @@ def test_c7_proximity_file_budgets_in_bytes(tmp_path: Path):
     assert [(f.level, f.rule, f.path) for f in fs] == [(WARN, "C7", "AGENTS.md"), (WARN, "C7", "svc/pay/AGENTS.md")]
     assert fs[0].message == "32770 bytes > budget 32 KiB (root proximity file)"
     assert fs[1].message == "8194 bytes > budget 8 KiB (nested proximity file)"
+
+
+def test_c7_soft_budget_only_for_files_sherpa_seeded(tmp_path: Path):
+    """ADR-0029 amended (plan §14 F59): with a state, the 8 KiB budget is for the files sherpa seeded; a file the
+    team wrote — sherpa appended a block at most, the record has no whole-file hash — gets the 32 KiB ceiling
+    only, where the runtime truncates it. Without a state (strict) everything gets the budget, as before."""
+    big = "n\n" * (4 * 1024 + 1)  # 8 KiB + 2 bytes
+    huge = "n\n" * (16 * 1024 + 1)  # 32 KiB + 2 bytes
+    files = {
+        "svc/theirs/AGENTS.md": big,  # the team's, sherpa appended a block: no whole-file hash
+        "svc/seeded/AGENTS.md": big,  # sherpa's whole: budget applies
+        "svc/nobody/AGENTS.md": big,  # unrecorded, the team's
+        "svc/huge/AGENTS.md": huge,  # the team's, over the ceiling
+    }
+    harness(tmp_path, files)
+    assert {f.path for f in check.check(tmp_path) if f.rule == "C7"} == set(files)  # no state: strict
+    state = {
+        "files": {
+            "svc/theirs/AGENTS.md": {"mode": "blocks", "origin": "generated", "blocks": {"facts": "0" * 16}},
+            "svc/seeded/AGENTS.md": {"mode": "blocks", "origin": "generated", "hash": "0" * 16, "blocks": {}},
+            "svc/huge/AGENTS.md": {"mode": "blocks", "origin": "generated", "blocks": {"facts": "0" * 16}},
+        }
+    }
+    (tmp_path / ".sherpa").mkdir()
+    (tmp_path / ".sherpa" / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    got = {f.path: f.message for f in check.check(tmp_path) if f.rule == "C7"}
+    assert got == {
+        "svc/seeded/AGENTS.md": "8194 bytes > budget 8 KiB (nested proximity file)",
+        "svc/huge/AGENTS.md": (
+            "32770 bytes > ceiling 32 KiB (nested proximity file, yours — the runtime truncates it there)"
+        ),
+    }
+    assert {f.path for f in check.check(tmp_path, strict=True) if f.rule == "C7"} == set(files)
+
+
+def test_git_ignored_files_are_not_the_harness(tmp_path: Path):
+    """Plan §14 F62: what git ignores is not checked — a vault, a vendored package with an AGENTS.md — the rule
+    ``adopt`` already applies; tracked files are never ignored, and without a repository nothing is dropped."""
+    harness(
+        tmp_path,
+        {
+            "vault/CLAUDE.md": "[dead](../nowhere.md)\n",
+            "svc/pay/AGENTS.md": "[dead](../nowhere.md)\n",
+            ".claude/notes/private.md": "[dead](../../nowhere.md)\n",
+            ".gitignore": "vault/\n.claude/notes/\n",
+        },
+    )
+    paths = lambda: sorted(f.path for f in check.check(tmp_path) if f.rule == "C4")  # noqa: E731
+    assert paths() == [".claude/notes/private.md", "svc/pay/AGENTS.md", "vault/CLAUDE.md"]  # no repository
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    assert paths() == ["svc/pay/AGENTS.md"]
+    subprocess.run(["git", "add", "-f", "vault/CLAUDE.md"], cwd=tmp_path, check=True)  # tracked beats ignored
+    assert paths() == ["svc/pay/AGENTS.md", "vault/CLAUDE.md"]
+    # git failing (a broken repository) or absent drops nothing — the rules still run
+    (tmp_path / ".git" / "HEAD").write_text("broken\n", encoding="utf-8")
+    assert paths() == [".claude/notes/private.md", "svc/pay/AGENTS.md", "vault/CLAUDE.md"]
+    (tmp_path / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    with mock.patch.object(subprocess, "run", side_effect=OSError("no git")):
+        assert paths() == [".claude/notes/private.md", "svc/pay/AGENTS.md", "vault/CLAUDE.md"]
 
 
 def test_c8_drift_against_state(tmp_path: Path):

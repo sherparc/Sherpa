@@ -187,7 +187,7 @@ Why not just write a few `.md` files for Claude or Copilot?
 - **No more guessing.** Sherpa builds on hard data — commits, authors, LOC, churn — not on gut feeling. Every proposal carries its evidence, every no its reason.
 - **Infrastructure as code for knowledge.** `plan` → approval → `apply`, like Terraform. You see every file before it exists; Sherpa owns only marked blocks inside the files, the rest is yours and stays yours.
 - **Does not wreck your repo.** Sherpa never overwrites what exists — it creates, appends and merges, and rewrites only its own unchanged bytes. Deterministic against `origin/trunk`, local branches invisible, idempotent with a state file, a checker that rolls back a bad write.
-- **Measures itself.** Every `apply` installs the outcome hook first: each Claude Code execution gets a label (`success`, `failed`, `unknown`) stamped with the harness version. A harness change has a number to answer to.
+- **Measures itself.** Every `apply` installs the outcome hook first: each Claude Code execution gets a label (`success`, `failed`, `unknown`) stamped with the harness revision — a hash over what the agent reads, which a Sherpa upgrade does not move. A harness change has a number to answer to.
 - **Grows with you.** Librarians keep owner docs current, evals come from the dependency graph, and the outcome shows which harness parts really help — nothing on the market does that.
 
 Where the patterns come from:
@@ -245,6 +245,7 @@ flowchart LR
 | M3f | write safety: `apply` compares every file with the preview's read before writing, never writes through a symlink, writes each file whole or not at all and rolls back on a write error; `adopt` treats a differing base file as yours, takes a stale plan and rebuilds a torn state without a dead end; a dry run never refuses (two homes → assumes `.agents` and says so) and names a target directory that is a repository of its own | ✅ |
 | M3i | the manager sees what exists and takes back what is sherpa's: refuses on a nested repository (`doctor` says it first), a hand-written `covered:` is kept like a decision, the checker fails only in sherpa's own files; `apply` removes a rejected entry's files when they are still sherpa's and `apply --remove` uninstalls — a clean repository is clean again | ✅ |
 | M3j | owner docs where the team already writes them: a nested `AGENTS.md` at a unit's own path covers its owner-doc entry — `plan` sets it from the file, `adopt` reports it, `apply` writes the facts block into the team's file and no skeleton next to it (first slice, ADR-0049). Second slice: a decision follows a renamed unit and a dropped one is named, the uninstall reports from one place and names the state once, `apply` and `check` agree on the WARN count | ✅ |
+| M3l | a revision that means something: `harness_rev` is the hash over what an agent reads and `tooling` the hash over the checker, hook and sherpa version — an upgrade no longer starts a new revision for the outcome labels; the checker's size budget is for files Sherpa seeded, the runtime's ceiling for yours; git-ignored files are not the harness (ADR-0056) | ✅ |
 | M2c | public release: the licence flipped to PolyForm Small Business or Noncommercial (ADR-0051) ✅ · the contribution path — DCO checked on every pull request, code of conduct, security policy, templates (ADR-0052) ✅ · the wheel on PyPI as `sherparc` through trusted publishing, `self-update` and `doctor` read the index first (ADR-0053, ADR-0054) ✅ · the demo card at the top of this README, Sherpa on itself ✅ · still to do: a changelog, then the announcement | ⏳ |
 | M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
 | M3k | host adapters `codex`, `opencode`, `copilot`, `cursor`, `gemini` — thin on top of `agents-md` like `hermes`: `doctor` names the host, its native rule file only where `AGENTS.md` cannot carry it, the outcome hook where the host has hooks | ⏳ |
@@ -256,7 +257,7 @@ flowchart LR
 | M3b | language adapters `dotnet` + `python` (T2: anchors, patterns) | ⏳ |
 | M7 | librarians, multi-repo | ⏳ |
 
-Order from here: M3j's open decisions (Q35, Q36) → M3h → M3k → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §9.1, §10, §13).
+Order from here: M3m (the CI contract: `status --exit-code`, `apply --dry-run --json`) → M2c's changelog and announcement → M3h → M3k → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §9.1, §10, §13, §14).
 
 Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an ADR: [docs/adr/](docs/adr/README.md)
 
@@ -274,8 +275,8 @@ Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an AD
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 449 tests, ~98 % coverage, gate in CI: 90 %
-.venv/bin/pytest tests/e2e -q          # 31 end-to-end theses: the sherpa command on a built-in monorepo, one test per claim of this README, CLAUDE.md and the ADRs
+.venv/bin/pytest -q --cov=sherpa       # 451 tests, ~98 % coverage, gate in CI: 90 %
+.venv/bin/pytest tests/e2e -q          # 38 end-to-end theses: the sherpa command on a built-in monorepo, one test per claim of this README, CLAUDE.md and the ADRs
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 

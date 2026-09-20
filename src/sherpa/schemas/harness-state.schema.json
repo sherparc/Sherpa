@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "sherpa harness state",
-  "description": "What sherpa owns in the repo and the hash it wrote (.sherpa/state.json). Written by `sherpa apply`, read by `apply`, `status` and the outcome hook (harness_rev).",
+  "description": "What sherpa owns in the repo and the hash it wrote (.sherpa/state.json). Written by `sherpa apply`, read by `apply`, `status` and the outcome hook (harness_rev). Unknown top-level keys are tolerated so an older sherpa can read a newer state.",
   "type": "object",
   "required": ["schema_version", "sherpa", "harness_rev", "plan", "applied_at", "files"],
-  "additionalProperties": false,
   "properties": {
     "schema_version": {"const": 1},
     "sherpa": {"type": "string", "description": "sherpa version that wrote the state"},
-    "harness_rev": {"type": "string", "pattern": "^[0-9a-f]{12}$", "description": "hash over every managed file/block hash plus the sherpa version; stamped on outcome labels"},
+    "harness_rev": {"type": "string", "pattern": "^[0-9a-f]{12}$", "description": "hash over the content records — every markdown file or block sherpa owns; never over the sherpa version (ADR-0056); stamped on outcome labels"},
+    "tooling": {"type": "string", "pattern": "^[0-9a-f]{12}$", "description": "hash over the non-content records (checker copy, hook, hook wiring, ignore file) plus the sherpa version; absent in a state written before ADR-0056"},
     "home": {"enum": [".agents", ".claude", ""], "description": "where owner docs, skills and the checker copy live (ADR-0015); empty before the first apply"},
     "targets": {"type": "array", "items": {"enum": ["claude", "agents-md"]}, "description": "runtimes projected into: Claude Code files, AGENTS.md hierarchy"},
     "plan": {

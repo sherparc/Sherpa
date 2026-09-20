@@ -128,6 +128,7 @@ Hashes ignore line endings (`\r\n` = `\n`): a CRLF checkout is not a hand edit.
   "schema_version": 1,
   "sherpa": "0.4.0",
   "harness_rev": "c38498363846",
+  "tooling": "7d1a0c5e92b4",
   "home": ".agents",
   "targets": ["claude", "agents-md"],
   "plan": {"trunk": "origin/main", "rev": "5db69c4d…", "as_of": "2026-03-01T00:00:00Z"},
@@ -142,8 +143,11 @@ Hashes ignore line endings (`\r\n` = `\n`): a CRLF checkout is not a hand edit.
 }
 ```
 
-`harness_rev` = hash over all managed file and block hashes plus the sherpa version — the number a harness change
-has to be measured against. `applied_at` is the only clock in the whole apply; the state is rewritten only when
+`harness_rev` = hash over the **content** records — every markdown file or block sherpa owns, the part an agent
+reads — the number a harness change has to be measured against. `tooling` = hash over the rest (the checker copy,
+the hook, the hook wiring, the ignore file) plus the sherpa version: a `self-update` followed by `apply` moves
+`tooling` and leaves `harness_rev` where it was, so the outcome labels of one harness stay one sample across
+releases (ADR-0056). `applied_at` is the only clock in the whole apply; the state is rewritten only when
 something changed. Plan and state are checked in (ADR-0005), the model is not.
 
 ## Adopt — existing harnesses and a rebuildable state
@@ -207,7 +211,7 @@ the counts per `harness_rev`.
 | C4 | FAIL | relative file links in `.claude/**`, `.agents/**` and every `CLAUDE.md`/`AGENTS.md` resolve (links without an extension are wiki pages, `archive/` is history — both skipped) |
 | C5 | FAIL | `sherpa:begin/end` markers are balanced, named and unique per file |
 | C6 | FAIL | `.claude/settings.json` is valid JSON; every hook command under `$CLAUDE_PROJECT_DIR` points to an existing file |
-| C7 | WARN | agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate; a nested `CLAUDE.md`/`AGENTS.md` > 8 KiB and a root one > 32 KiB — a proximity file lands whole in the context (Hermes: a tool result on the first touch of the directory, ceiling 32 KiB; ADR-0029) |
+| C7 | WARN | agent > 150 lines, owner doc > 600, skill > 250 — a fat agent is a rotation candidate; a `CLAUDE.md`/`AGENTS.md` sherpa seeded: nested > 8 KiB, root > 32 KiB — a proximity file lands whole in the context (Hermes: a tool result on the first touch of the directory, ceiling 32 KiB); one the team wrote: above the 32 KiB ceiling only (ADR-0029) |
 | C8 | WARN | with a state: managed files or blocks whose hash differs, or that are missing |
 
 `src/sherpa/check.py` is one stdlib-only file. `apply` deploys it as `<home>/scripts/sherpa-check.py` with the

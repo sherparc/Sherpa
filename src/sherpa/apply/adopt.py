@@ -541,6 +541,7 @@ def _n(n: int, noun: str) -> str:
 def new_state(a: Adoption, plan: Plan, previous: State, *, home: str, targets: tuple[str, ...]) -> State:
     return State(
         harness_rev=state_mod.harness_rev(a.files),
+        tooling=state_mod.tooling_rev(a.files),
         plan={k: str(v) for k, v in plan.model.items() if k in ("trunk", "rev", "as_of")},
         applied_at=state_mod.now_iso(),
         files=a.files,
