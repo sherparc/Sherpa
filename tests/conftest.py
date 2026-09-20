@@ -28,7 +28,9 @@ def git(repo: Path, *args: str, date: str | None = None, author: str | None = No
         env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = date
     if author:
         env["GIT_AUTHOR_NAME"] = author
-    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, env=env, check=True)
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, env=env)
+    if r.returncode:  # git's own words in the failure, not only the argv — a CI runner's flake is diagnosable
+        raise RuntimeError(f"git {' '.join(args)} in {repo} failed ({r.returncode}): {r.stderr.strip()}")
     return r.stdout.strip()
 
 
