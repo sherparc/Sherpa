@@ -3,7 +3,8 @@ in ``ev``. T01–T22 are the catalogue of the ``e2e-test`` skill; E01–E05 are 
 (the deployed checker standalone, the write boundary, the configured home, line endings, a dangling symlink),
 E06–E09 the claims of M3j's second slice (a decision follows a renamed unit, a dropped one is named, the WARN
 count of ``apply`` is ``check``'s, the uninstall names the state once), E10–E12 the claims of M3l (a revision
-that survives a tool upgrade, the C7 ceiling for the team's files, git-ignored files are not the harness).
+that survives a tool upgrade, the C7 ceiling for the team's files, git-ignored files are not the harness),
+E13–E14 the CI contract of M3m (``status --exit-code``, ``apply --json``).
 
 Every assertion compares what a user sees — exit code, stdout, stderr, the files on disk, ``git status`` —
 never an internal. Numbers are relative (more than none, the same twice), so the same test holds on the
@@ -559,6 +560,52 @@ def test_e12_git_ignored_files_are_not_checked(sherpa: Sherpa, corpus: Path, ins
             exclude.unlink(missing_ok=True)
         else:
             exclude.write_bytes(before)
+
+
+@thesis(
+    "E13",
+    "apply --json is the dry run for scripts: the same actions as the console list, the counts of its closing line, nothing written",
+    "ADR-0057",
+)
+def test_e13_apply_json_is_the_dry_run(sherpa: Sherpa, corpus: Path, installed: Run, store: Store, ev):
+    require(installed, "T08")
+    before = git_status(corpus)
+    r = sherpa("apply", "--json", corpus)
+    assert r.code == 0, r
+    j = json.loads(r.out)
+    assert j["dry_run"] is True and git_status(corpus) == before
+    listed = actions(store.need("dry_run", "T08"))
+    assert [a["path"] for a in j["actions"]] == list(listed), "the JSON lists other files than the console did"
+    assert all(a["op"] == "=" for a in j["actions"]) and j["counts"]["unchanged"] == len(listed), j["counts"]
+    assert j["home"] and j["targets"] and j["plan"]["selected"] > 0
+    ev(f"apply --json: {len(j['actions'])} actions, all '=', counts {j['counts']}, home {j['home']}, nothing written")
+
+
+@thesis(
+    "E14",
+    "status --exit-code exits 0 while apply would write nothing, 2 when it would (a file to recreate), 0 again after apply",
+    "ADR-0057",
+)
+def test_e14_status_exit_code(sherpa: Sherpa, corpus: Path, installed: Run, ev):
+    require(installed, "T08")
+    r = sherpa("status", "--exit-code", corpus)
+    assert r.code == 0, r
+    ev(f"status --exit-code on the installed harness: exit {r.code} · {r.line('drift: ').strip()}")
+    ignore = corpus / ".sherpa" / "telemetry" / ".gitignore"  # sherpa's, nothing links to it
+    original = ignore.read_bytes()
+    try:
+        ignore.unlink()
+        plain, gated = sherpa("status", corpus), sherpa("status", "--exit-code", corpus)
+        assert plain.code == 0 and gated.code == 2, (plain, gated)
+        ev(f"a managed file removed: status exit {plain.code}, status --exit-code exit {gated.code}")
+        w = sherpa("apply", "--yes", corpus)
+        assert w.code == 0 and "1 files written" in w.out, w
+        r = sherpa("status", "--exit-code", corpus)
+        assert r.code == 0, r
+        ev(f"after apply: exit {r.code}")
+    finally:
+        if not ignore.exists():
+            ignore.write_bytes(original)
 
 
 # ---------------------------------------------------------------- uninstall

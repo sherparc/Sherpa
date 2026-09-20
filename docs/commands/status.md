@@ -6,7 +6,7 @@ files and the plan; the checker's findings; the outcome labels per harness versi
 ## Synopsis
 
 ```
-sherpa status [REPO] [--json]
+sherpa status [REPO] [--json] [--exit-code]
 ```
 
 ## What it does
@@ -63,6 +63,7 @@ drift: unknown until the state is rebuilt
   "applied_at": "2026-09-16T22:07:12Z",
   "plan": {"stale": true, "trunk": "origin/main", "plan_rev": "2c22d796e3…", "current_rev": "9bac74de60…"},
   "state": {"error": null},
+  "current": false,
   "drift": [{"op": "~", "path": ".agents/docs/modules/pay.md", "detail": "block facts updated"}],
   "findings": [{"level": "WARN", "rule": "C7", "path": ".claude/agents/pay.md", "message": "162 lines > budget 150 (agent)"}],
   "outcomes": {"c38498363846": {"success": 1, "unknown": 1}},
@@ -94,12 +95,20 @@ in the execution was green or a pull request was created; `failed` = the last te
 signal, typically a question/answer turn. `corrections` counts follow-up prompts that corrected the previous
 answer. Trend, regression between two harness versions and the share of `unknown` over time are milestone M5.
 
+## Options
+
+| Option | Effect |
+|---|---|
+| `--json` | the report as one object (above); `"current"` is the `--exit-code` verdict |
+| `--exit-code` | exit 2 when the harness is not current — the CI gate (ADR-0057, the `terraform plan -detailed-exitcode` contract) |
+
 ## Exit codes
 
 | Exit | When |
 |---|---|
-| 0 | no checker FAIL — drift, warnings and orphans are informational |
-| 1 | at least one checker FAIL (C1–C6, in a file sherpa generated), or plan/model missing (`… not found — run `sherpa plan` first`) |
+| 0 | no checker FAIL — drift, warnings and orphans are informational; with `--exit-code`: and the harness is current |
+| 1 | at least one checker FAIL (C1–C6, in a file sherpa generated), or plan/model missing (`… not found — run `sherpa plan` first`) — with or without `--exit-code`, a FAIL wins |
+| 2 | only with `--exit-code`: the harness is not current — `apply` would add, change, recreate or remove a file or drop an orphan record (`+ ~ - ?` drift lines), the plan is stale, or the state is torn. A hand-edited block (`!`) is the team's and does not count: `apply` skips it and says `nothing to do.` |
 
 A torn or foreign `.sherpa/state.json` does not stop the report: the `state:` line names it with the way out
 (also on stderr, and as `"state": {"error": …}` in JSON), drift is `unknown` and the checker still runs (ADR-0034).
@@ -108,8 +117,9 @@ A torn or foreign `.sherpa/state.json` does not stop the report: the `state:` li
 
 - **Before a commit**: `sherpa status` — drift `none`, `0 FAIL`.
 - **After a merge**: `sherpa plan && sherpa status` — the `~` lines show which facts blocks a rescan changed.
-- **In CI**: `sherpa status` as a gate for the checker (exit 1 on FAIL); drift does not fail the build, because
-  hand edits are legitimate.
+- **In CI**: `sherpa status` as a gate for the checker (exit 1 on FAIL); `sherpa status --exit-code` as the
+  gate "the harness is what `apply` would write" (exit 2 otherwise) — hand edits are legitimate and never fail
+  either gate. `sherpa apply --json` gives the same verdict file by file.
 - **After a sherpa upgrade**: the note about the checker copy tells you to run `sherpa apply` once.
 
 ## See also

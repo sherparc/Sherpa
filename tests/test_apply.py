@@ -777,6 +777,105 @@ def test_status_reports_drift_orphans_outcomes_and_version(active_repo: Path, ca
     assert "FAIL C5 CLAUDE.md" in capsys.readouterr().out
 
 
+# ---------------------------------------------------------------- the CI contract (ADR-0057)
+
+
+def test_status_exit_code_says_whether_the_harness_is_current(active_repo: Path, capsys):
+    """ADR-0057: ``status --exit-code`` exits 0 when ``apply`` would write nothing, 2 when it would (a file to
+    recreate or remove, an orphan record), on a stale plan or a torn state, and 1 on a checker FAIL as before —
+    a FAIL wins; a hand-edited block is the team's (``!``, exit 0). Without the flag drift and a stale plan stay
+    informational, as ``terraform plan -detailed-exitcode`` and ``git diff --exit-code`` make their difference
+    an exit code only when asked."""
+    applied(active_repo)
+    capsys.readouterr()
+    assert main(["status", str(active_repo), "--exit-code"]) == 0
+    assert json.loads(_status_json(active_repo, capsys))["current"] is True
+    # a hand-edited block is skipped by apply — legitimate, not "not current"
+    doc = active_repo / ".agents" / "docs" / "modules" / "pay.md"
+    doc.write_text(doc.read_text(encoding="utf-8").replace("| path |", "| path (edited) |"), encoding="utf-8")
+    assert main(["status", str(active_repo), "--exit-code"]) == 0
+    # a file apply would recreate → 2 with the flag, 0 without; apply → current again
+    (active_repo / ".sherpa" / "telemetry" / ".gitignore").unlink()  # nothing links to it: no FAIL, only drift
+    assert main(["status", str(active_repo)]) == 0
+    assert main(["status", str(active_repo), "--exit-code"]) == 2
+    assert json.loads(_status_json(active_repo, capsys))["current"] is False
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    assert main(["status", str(active_repo), "--exit-code"]) == 0
+    # a rejected entry whose file apply would remove → 2; a torn state → 2; adopt → 0
+    assert main(["plan", str(active_repo), "--no-fetch", "--reject", "agent:pay"]) == 0
+    assert main(["status", str(active_repo), "--exit-code"]) == 2
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    assert main(["status", str(active_repo), "--exit-code"]) == 0
+    (active_repo / ".sherpa" / "state.json").write_text("{", encoding="utf-8")
+    assert main(["status", str(active_repo), "--exit-code"]) == 2
+    assert main(["adopt", str(active_repo)]) == 0
+    assert main(["status", str(active_repo), "--exit-code"]) == 0
+    # a stale plan → 2 with the flag
+    seed = active_repo.parent / "seed"
+    commit(seed, "docs only", {"README.md": "# shop\n"}, date="2026-03-01T12:00:00Z", author="A")
+    subprocess.run(["git", "push", "-q", str(active_repo.parent / "origin.git"), "main"], cwd=seed, check=True)
+    subprocess.run(["git", "fetch", "-q", "origin"], cwd=active_repo, check=True)
+    assert main(["status", str(active_repo)]) == 0
+    assert main(["status", str(active_repo), "--exit-code"]) == 2
+    # a FAIL wins over "not current": 1 with and without the flag
+    (active_repo / "CLAUDE.md").write_text("<!-- sherpa:begin harness -->\n", encoding="utf-8")
+    assert main(["status", str(active_repo), "--exit-code"]) == 1
+    assert main(["status", str(active_repo)]) == 1
+
+
+def _status_json(repo: Path, capsys) -> str:
+    capsys.readouterr()
+    assert main(["status", str(repo), "--json"]) in (0, 1)
+    return capsys.readouterr().out
+
+
+def test_apply_json_is_the_dry_run_for_scripts(active_repo: Path, capsys):
+    """ADR-0057: ``apply --json`` is the dry run as one object — the same actions as the console list, the
+    counts of its closing line, the layout and the notes; it never writes, never asks, and the console list
+    agrees with it line for line (``terraform plan -json``)."""
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    capsys.readouterr()
+    before = tree_hash(active_repo)
+    assert main(["apply", str(active_repo), "--json"]) == 0
+    j = json.loads(capsys.readouterr().out)
+    assert tree_hash(active_repo) == before and not (active_repo / ".sherpa" / "state.json").exists()
+    assert j["dry_run"] is True and j["home"] == ".agents" and j["targets"] == ["claude", "agents-md"]
+    assert j["plan"]["trunk"] == "origin/main" and len(j["plan"]["rev"]) == 40
+    assert (j["plan"]["entries"], j["plan"]["selected"]) == (10, 6)
+    assert j["counts"] == {"add": 18, "change": 0, "unchanged": 0, "skipped": 0, "remove": 0}
+    assert len(j["actions"]) == 18 and all(a["op"] == "+" and a["detail"] == "new" for a in j["actions"])
+    by_path = {a["path"]: a for a in j["actions"]}
+    assert by_path[".claude/agents/pay.md"] == {
+        "op": "+",
+        "path": ".claude/agents/pay.md",
+        "entry": "agent:pay:svc/pay",
+        "mode": "blocks",
+        "detail": "new",
+    }
+    assert (
+        by_path[".claude/settings.json"]["entry"] is None and by_path[".claude/settings.json"]["mode"] == "json-hooks"
+    )
+    assert main(["apply", str(active_repo), "--dry-run"]) == 0
+    console = capsys.readouterr().out
+    assert [ln.split()[1] for ln in console.splitlines() if ln.startswith("  + ")] == [a["path"] for a in j["actions"]]
+    # after a write: every action is "=", a rejected entry's file is "-", and the notes carry the assumed home
+    assert main(["apply", str(active_repo), "--yes"]) == 0
+    assert main(["plan", str(active_repo), "--no-fetch", "--reject", "agent:pay"]) == 0
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--json"]) == 0
+    j = json.loads(capsys.readouterr().out)
+    ops = {a["path"]: a["op"] for a in j["actions"]}
+    assert ops[".claude/agents/pay.md"] == "-" and j["counts"]["remove"] == 1 and j["counts"]["unchanged"] == 17
+    assert main(["apply", str(active_repo), "--remove", "--yes"]) == 0  # clean again, then both homes and no state
+    (active_repo / ".agents").mkdir()
+    (active_repo / ".claude").mkdir()
+    assert main(["plan", str(active_repo), "--no-fetch"]) == 0
+    capsys.readouterr()
+    assert main(["apply", str(active_repo), "--json"]) == 0
+    j = json.loads(capsys.readouterr().out)
+    assert j["home"] == ".agents" and j["notes"][0].startswith("both .agents/ and .claude/ exist")
+
+
 # ---------------------------------------------------------------- CLI
 
 

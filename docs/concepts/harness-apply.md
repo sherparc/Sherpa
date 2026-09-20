@@ -16,7 +16,8 @@ sherpa apply <repo>              # dry run: every file with + ~ = !, then "apply
 sherpa apply <repo> --yes        # write without asking (CI)
 sherpa apply <repo> --dry-run    # list only, never asks
 sherpa apply <repo> --no-check   # skip the checker after writing (no rollback)
-sherpa status <repo>             # drift, checker findings, outcome labels per harness_rev; exit 1 on a FAIL
+sherpa status <repo>             # drift, checker findings, outcome labels per harness_rev; exit 1 on a FAIL, --exit-code: 2 when not current
+sherpa apply <repo> --json       # the dry run as one JSON object (ADR-0057)
 sherpa check <repo> [--json]     # the structural rules only; the same file runs as .claude/scripts/sherpa-check.py
 ```
 

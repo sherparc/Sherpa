@@ -11,7 +11,7 @@
 | path | `src/sherpa/apply` |
 | kind | directory inside module `sherparc` (package) |
 | files / LOC | 7 / 2558 (6 source files) |
-| commits 90d / 30d | 27 / 27 · 1 authors |
+| commits 90d / 30d | 28 / 28 · 1 authors |
 | hotspots | `src/sherpa/apply/__init__.py`, `src/sherpa/apply/render.py`, `src/sherpa/apply/adopt.py` |
 | tests naming it | `tests/test_apply.py` |
 <!-- sherpa:end facts -->

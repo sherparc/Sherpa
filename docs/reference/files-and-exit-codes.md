@@ -43,6 +43,7 @@ Suggested `.gitignore` in a target repository:
 | 0 | success — including a dry run, an aborted question and "nothing to do" | all |
 | 1 | error: git (no repository, no origin, no trunk), configuration, plan or state file invalid or missing, stale plan, rollback after a new checker FAIL, checker FAIL, a `doctor` fail, `self-update` without a reachable release or with a failed installer | all |
 | 2 | usage error — an unknown flag or a missing argument; argparse prints the usage and the message on stderr | all |
+| 2 | `status --exit-code`: the harness is not current — `apply` would write, the plan is stale or the state is torn (ADR-0057); the report is on stdout, so the two meanings never look alike | `status` |
 
 Errors go to stderr as `sherpa <command>: <message>`, a rollback included (`sherpa apply: write failed … — rolled back, nothing written`, the details stay on stdout); the message names the fix where there is one
 (`— run `sherpa plan` first`, `Fix: 'git remote set-head origin -a' or 'trunk' in sherpa.toml`).
@@ -69,7 +70,7 @@ Python interpreter (`python3`, or `python` on Windows) — no sherpa installatio
 |---|---|---|
 | `scan` | the model with `--out -`, else nothing | summary line, errors |
 | `plan` | console view; the YAML with `--out -` | with `--out -` the console view; scan/rescan notices; errors |
-| `apply` | file list, question, result | errors |
+| `apply` | file list, question, result; with `--json` one object | errors |
 | `status`, `check` | the report | errors |
 
 Console output uses `✓`/`✗` and `→`; on consoles that cannot encode them (Windows code pages, some CI logs) the
