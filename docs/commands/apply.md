@@ -8,7 +8,7 @@ existing ones, merges hook entries, and rewrites only bytes it wrote itself that
 ## Synopsis
 
 ```
-sherpa apply [REPO] [--yes | -y] [--dry-run] [--no-check]
+sherpa apply [REPO] [--yes | -y] [--dry-run | --json] [--no-check] [--remove]
 ```
 
 ## What it does
@@ -52,6 +52,7 @@ Ownership modes, file contents and the reasoning: [concepts/harness-apply.md](..
 | `REPO` | `.` | repository root |
 | `--yes`, `-y` | ask | write without the question (CI, scripts) |
 | `--dry-run` | ask | list only; never asks, never writes |
+| `--json` | ask | the dry run as one JSON object for scripts and the plugin (ADR-0057): the same actions as the list, the counts of its closing line, the layout, the notes; implies `--dry-run` |
 | `--no-check` | check | skip the checker after writing — no rollback. For repositories whose hand-written harness has FAILs you want to fix later; the FAILs are still reported by `sherpa status`. |
 | `--remove` | — | the uninstall (ADR-0048): render nothing, take back every file, block and hook group sherpa wrote and nobody changed — dry run first, then the question or `--yes`. Hand-edited files and blocks stay (`kept, yours: …`), adopted files are never touched. When nothing of sherpa's is left, `.sherpa/state.json`, `harness-plan.yaml`, `codebase-model.json` and the telemetry go too: `git status --ignored` is as it was before the first `apply`. |
 
@@ -190,6 +191,29 @@ from `.claude/settings.json` to store nothing. Details:
 
 The hook command is `sh -c '… python3 "$0" || python "$0"' "$CLAUDE_PROJECT_DIR/.claude/hooks/sherpa-outcome.py"`
 — `python3` where it exists, `python` otherwise (Windows launchers).
+
+### `--json`
+
+```json
+{
+  "sherpa": "0.8.4",
+  "dry_run": true,
+  "home": ".agents",
+  "targets": ["claude", "agents-md"],
+  "notes": [],
+  "plan": {"trunk": "origin/main", "rev": "5db69c4ddd…", "entries": 10, "selected": 6},
+  "actions": [
+    {"op": "+", "path": ".agents/docs/modules/core.md", "entry": "owner-doc:core:svc/core", "mode": "blocks", "detail": "new"},
+    {"op": "+", "path": ".claude/settings.json", "entry": null, "mode": "json-hooks", "detail": "new"}
+  ],
+  "counts": {"add": 18, "change": 0, "unchanged": 0, "skipped": 0, "remove": 0}
+}
+```
+
+`op` is the list's symbol (`+ ~ = ! -`), `entry` the plan entry the file belongs to (`null` for base files —
+the checker copy, hook, `settings.json`, the ignore file), `mode` the ownership mode of the state record. The
+console list and the JSON come from the same actions, so they agree line for line; `notes` carries what the
+console prints as `note:` (an assumed home, a nested repository). Nothing is written, nobody is asked.
 
 ## Exit codes and errors
 

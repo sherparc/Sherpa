@@ -114,7 +114,7 @@ nothing there ([golden](tests/goldens/active-plan-covered-console.txt)). The sam
 - `sherpa scan` 🟢 **Live** — deterministic codebase model (git churn, hotspots, modules, dependencies, generators)
 - `sherpa plan` 🟢 **Live** — proposals and reasoned no's with evidence as YAML; decisions survive a re-plan or come from the command line (`--accept agent:pay`)
 - `sherpa apply` 🟢 **Live** — dry run first, managed blocks, state file, outcome hook, checker with rollback; targets `claude` and `agents-md` from one neutral core
-- `sherpa status` · `sherpa check` 🟢 **Live** — drift per file and block, structural rules, outcome labels per harness version
+- `sherpa status` · `sherpa check` 🟢 **Live** — drift per file and block, structural rules, outcome labels per harness version; `status --exit-code` and `apply --json` for CI and scripts
 - `sherpa adopt` 🟢 **Live** — take an existing harness into the state without changing a byte; files that already fill a plan entry cover it, and a nested `AGENTS.md` at a unit's own path is its owner doc (no skeleton next to it); a lost state is rebuilt from the files
 - `sherpa doctor` · `sherpa self-update` 🟢 **Live** — every prerequisite with a fix; the next release via the installer that owns this copy; a daily hint that never blocks
 
@@ -130,7 +130,7 @@ sherpa doctor                                                    # Python, git, 
 sherpa plan /path/to/repo                                        # scans when needed → .sherpa/harness-plan.yaml
 sherpa apply /path/to/repo                                       # dry run, then asks → .claude/**, .sherpa/state.json
 sherpa adopt /path/to/repo                                       # an existing harness enters the state, not a byte changes
-sherpa status /path/to/repo                                      # drift, checks, outcome labels
+sherpa status /path/to/repo                                      # drift, checks, outcome labels; --exit-code: 2 unless the harness is what apply would write
 sherpa check /path/to/repo                                       # the structural rules alone (also as a deployed copy, no sherpa needed)
 sherpa apply /path/to/repo --remove                              # the uninstall: takes back what sherpa wrote and nobody changed
 sherpa scan /path/to/repo --out -                                # model only, JSON to stdout
@@ -246,6 +246,7 @@ flowchart LR
 | M3i | the manager sees what exists and takes back what is sherpa's: refuses on a nested repository (`doctor` says it first), a hand-written `covered:` is kept like a decision, the checker fails only in sherpa's own files; `apply` removes a rejected entry's files when they are still sherpa's and `apply --remove` uninstalls — a clean repository is clean again | ✅ |
 | M3j | owner docs where the team already writes them: a nested `AGENTS.md` at a unit's own path covers its owner-doc entry — `plan` sets it from the file, `adopt` reports it, `apply` writes the facts block into the team's file and no skeleton next to it (first slice, ADR-0049). Second slice: a decision follows a renamed unit and a dropped one is named, the uninstall reports from one place and names the state once, `apply` and `check` agree on the WARN count | ✅ |
 | M3l | a revision that means something: `harness_rev` is the hash over what an agent reads and `tooling` the hash over the checker, hook and sherpa version — an upgrade no longer starts a new revision for the outcome labels; the checker's size budget is for files Sherpa seeded, the runtime's ceiling for yours; git-ignored files are not the harness (ADR-0056) | ✅ |
+| M3m | the CI contract: `sherpa status --exit-code` exits 2 when `apply` would write something (hand edits never count), `sherpa apply --json` is the dry run as one object — Terraform's `-detailed-exitcode` and `plan -json` (ADR-0057) | ✅ |
 | M2c | public release: the licence flipped to PolyForm Small Business or Noncommercial (ADR-0051) ✅ · the contribution path — DCO checked on every pull request, code of conduct, security policy, templates (ADR-0052) ✅ · the wheel on PyPI as `sherparc` through trusted publishing, `self-update` and `doctor` read the index first (ADR-0053, ADR-0054) ✅ · the demo card at the top of this README, Sherpa on itself ✅ · still to do: a changelog, then the announcement | ⏳ |
 | M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
 | M3k | host adapters `codex`, `opencode`, `copilot`, `cursor`, `gemini` — thin on top of `agents-md` like `hermes`: `doctor` names the host, its native rule file only where `AGENTS.md` cannot carry it, the outcome hook where the host has hooks | ⏳ |
@@ -257,7 +258,7 @@ flowchart LR
 | M3b | language adapters `dotnet` + `python` (T2: anchors, patterns) | ⏳ |
 | M7 | librarians, multi-repo | ⏳ |
 
-Order from here: M3m (the CI contract: `status --exit-code`, `apply --dry-run --json`) → M2c's changelog and announcement → M3h → M3k → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §9.1, §10, §13, §14).
+Order from here: M2c's changelog and announcement → M3h → M3k → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §9.1, §10, §13, §14).
 
 Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an ADR: [docs/adr/](docs/adr/README.md)
 
@@ -275,8 +276,8 @@ Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an AD
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 451 tests, ~98 % coverage, gate in CI: 90 %
-.venv/bin/pytest tests/e2e -q          # 38 end-to-end theses: the sherpa command on a built-in monorepo, one test per claim of this README, CLAUDE.md and the ADRs
+.venv/bin/pytest -q --cov=sherpa       # 453 tests, ~98 % coverage, gate in CI: 90 %
+.venv/bin/pytest tests/e2e -q          # 40 end-to-end theses: the sherpa command on a built-in monorepo, one test per claim of this README, CLAUDE.md and the ADRs
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 

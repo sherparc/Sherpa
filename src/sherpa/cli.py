@@ -8,7 +8,8 @@ Three stages, three artefacts (see docs/plan.md):
   check  -> structural rules only (the same file is deployed as .claude/scripts/sherpa-check.py)
   doctor -> every prerequisite with a fix (first contact); self-update -> the next release from GitHub
 
-Exit codes: 0 ok · 1 error (git, config, plan file, checker FAIL, doctor problem, update failed).
+Exit codes: 0 ok · 1 error (git, config, plan file, checker FAIL, doctor problem, update failed) · 2 usage error
+(argparse), and with ``status --exit-code`` the harness is not current (drift, a stale plan, a torn state — ADR-0057).
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from pathlib import Path
 from sherpa import __version__, update
 from sherpa.gitinfo import GitError
 
-EXIT_OK, EXIT_ERROR = 0, 1
+EXIT_OK, EXIT_ERROR, EXIT_NOT_CURRENT = 0, 1, 2
 MODEL_OUT = Path(".sherpa") / "codebase-model.json"
 PLAN_OUT = Path(".sherpa") / "harness-plan.yaml"
 
@@ -57,10 +58,16 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--dry-run", action="store_true", help="only list the files, never ask")
     ap.add_argument("--no-check", action="store_true", help="skip the checker after writing (no rollback)")
     ap.add_argument("--remove", action="store_true", help="take back what sherpa wrote and nobody changed (ADR-0048)")
+    ap.add_argument("--json", action="store_true", help="the dry run as JSON (implies --dry-run; ADR-0057)")
 
     st = sub.add_parser("status", help="drift between state and files, checker findings, outcome labels")
     st.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
     st.add_argument("--json", action="store_true", help="the report as JSON (drift, findings, outcomes, plan)")
+    st.add_argument(
+        "--exit-code",
+        action="store_true",
+        help="exit 2 when the harness is not current: drift, a stale plan, a torn state",
+    )
 
     ck = sub.add_parser("check", help="structural rules for .claude/** (exit 1 on FAIL)")
     ck.add_argument("repo", nargs="?", default=".", help="repo root (default: .)")
@@ -289,11 +296,15 @@ def cmd_apply(args: argparse.Namespace) -> int:
     plan, model = _load_plan_and_model(repo)
     _refuse_stale(repo, plan)
     state = _load_state(repo)
-    home, targets, notes = _resolve_layout(repo, state, ask=not args.yes and not args.dry_run, preview=args.dry_run)
+    dry_run = args.dry_run or args.json  # the JSON form is the dry run for scripts (ADR-0057)
+    home, targets, notes = _resolve_layout(repo, state, ask=not args.yes and not dry_run, preview=dry_run)
     if args.remove:  # the uninstall (ADR-0048): render nothing, take back every generated record
         actions = apply.plan_files([], repo, state, remove_all=True)
     else:
         actions = apply.plan_files(apply.targets_for(plan, model, home=home, targets=targets), repo, state)
+    if args.json:
+        sys.stdout.write(apply.render_actions_json(actions, plan, home=home, targets=targets, notes=notes))
+        return EXIT_OK
     sys.stdout.write(f"targets: {', '.join(targets)} · home: {home}\n")
     for note in notes:
         print(note, file=sys.stdout)
@@ -358,7 +369,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     report = status_mod.report(repo, state, actions, stale=_stale(repo, plan), state_error=state_error)
     report.notes[:0] = [n.removeprefix("note: ") for n in notes]  # the assumed home first (ADR-0036, F56)
     sys.stdout.write(status_mod.render_json(report) if args.json else status_mod.render(report))
-    return EXIT_ERROR if report.fails else EXIT_OK
+    if report.fails:
+        return EXIT_ERROR
+    return EXIT_NOT_CURRENT if args.exit_code and not report.current else EXIT_OK
 
 
 def cmd_adopt(args: argparse.Namespace) -> int:

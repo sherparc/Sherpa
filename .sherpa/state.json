@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
-  "sherpa": "0.8.3",
-  "harness_rev": "718ad9bfaade",
-  "tooling": "2680cce6815b",
+  "sherpa": "0.8.4",
+  "harness_rev": "458e4c7014b9",
+  "tooling": "38d3262d24c0",
   "home": ".claude",
   "targets": [
     "claude"
   ],
   "plan": {
     "trunk": "origin/main",
-    "rev": "fb5833f681f67f8e6283ba0ec71f8c4b4b8fda3d",
-    "as_of": "2026-09-20T17:06:28Z"
+    "rev": "636a3fc648c6147091347971c358ec29871a5967",
+    "as_of": "2026-09-20T17:35:48Z"
   },
-  "applied_at": "2026-09-20T17:17:29Z",
+  "applied_at": "2026-09-20T18:11:01Z",
   "files": {
     ".claude/agents/architect.md": {
       "mode": "managed",
@@ -33,29 +33,29 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:sherparc:",
-      "hash": "24120995ebf8142a",
+      "hash": "533f3fdf63fa1b82",
       "blocks": {
-        "facts": "908c2393d840f14d"
+        "facts": "c9f549be189a9f8b"
       }
     },
     ".claude/docs/modules/src-sherpa-apply.md": {
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
-      "hash": "96f8d8c2f0d628cd",
+      "hash": "a84f5ebdfbe11553",
       "blocks": {
-        "facts": "057f134c11eabf9e"
+        "facts": "5874455375221a4d"
       }
     },
     ".claude/hooks/sherpa-outcome.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "d5f27cbcb72a6a77"
+      "hash": "f68dac54069801d8"
     },
     ".claude/scripts/sherpa-check.py": {
       "mode": "managed",
       "origin": "generated",
-      "hash": "72d3df0b8fb5ffa0"
+      "hash": "38c75a8014342d22"
     },
     ".claude/settings.json": {
       "mode": "json-hooks",
@@ -76,9 +76,9 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "librarian:sherparc:",
-      "hash": "4eb007e98052a09c",
+      "hash": "52a20cd43ef0e11b",
       "blocks": {
-        "scope": "bbcabc48f040b89b"
+        "scope": "a78c7ec8638b5d66"
       }
     },
     ".claude/skills/sync-kb/SKILL.md": {
@@ -102,9 +102,9 @@
       "mode": "blocks",
       "origin": "generated",
       "entry": "owner-doc:src/sherpa/apply:src/sherpa/apply",
-      "hash": "59708f87e70b278e",
+      "hash": "c3e2a166333693ec",
       "blocks": {
-        "harness": "884b293b9d32f0f2"
+        "harness": "39f9339cc2cc313c"
       }
     }
   }

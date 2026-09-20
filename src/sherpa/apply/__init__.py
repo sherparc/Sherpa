@@ -607,6 +607,40 @@ def render_actions(actions: list[Action], plan: Plan) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_actions_json(
+    actions: list[Action], plan: Plan, *, home: str, targets: tuple[str, ...], notes: list[str] = ()
+) -> str:
+    """The dry run for scripts and the plugin (ADR-0057): the same actions as the console list, one object per
+    file — ``op`` as in the list (``+ ~ = ! -``), the plan entry the file belongs to (``null`` for base files),
+    the ownership mode and the detail line — plus the counts of the closing line. Nothing is written."""
+    c = {op: sum(a.op == op for a in actions) for op in (NEW, UPDATED, UNCHANGED, SKIPPED, REMOVED)}
+    out = {
+        "sherpa": __version__,
+        "dry_run": True,
+        "home": home,
+        "targets": list(targets),
+        "notes": [n.removeprefix("note: ") for n in notes],
+        "plan": {
+            "trunk": plan.model.get("trunk", ""),
+            "rev": plan.model.get("rev", ""),
+            "entries": len(plan.entries),
+            "selected": len(selected(plan)),
+        },
+        "actions": [
+            {"op": a.op, "path": a.path, "entry": a.target.entry, "mode": a.target.mode, "detail": a.detail}
+            for a in actions
+        ],
+        "counts": {
+            "add": c[NEW],
+            "change": c[UPDATED],
+            "unchanged": c[UNCHANGED],
+            "skipped": c[SKIPPED],
+            "remove": c[REMOVED],
+        },
+    }
+    return json.dumps(out, indent=2, ensure_ascii=False) + "\n"
+
+
 def render_result(r: Result) -> str:
     from sherpa.check import FAIL
 
@@ -654,6 +688,7 @@ __all__ = [
     "StalePlan",
     "plan_files",
     "render_actions",
+    "render_actions_json",
     "render_result",
     "targets_for",
     "uninstall_index",

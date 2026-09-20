@@ -42,6 +42,15 @@ class Report:
     def fails(self) -> int:
         return sum(f.level == FAIL for f in self.findings)
 
+    @property
+    def current(self) -> bool:
+        """``apply`` would write nothing now — no file to add, change, recreate or remove, no orphan record —
+        the plan was made from the trunk's rev and the state is readable: the ``--exit-code`` contract
+        (ADR-0057: 0 current, 1 FAIL, 2 not current). A hand-edited block (``!``) is the team's and never
+        makes the harness "not current": ``apply`` skips it and says ``nothing to do.``."""
+        pending = any(op in "+~-?" for op, _, _ in self.drift)
+        return not pending and self.stale is None and self.state_error is None
+
 
 def report(
     repo: Path,
@@ -181,6 +190,7 @@ def render_json(r: Report) -> str:
         "plan": {"stale": r.stale is not None}
         | ({"trunk": r.stale[0], "plan_rev": r.stale[1], "current_rev": r.stale[2]} if r.stale else {}),
         "state": {"error": r.state_error} if r.state_error else {"error": None},
+        "current": r.current,
         "drift": [{"op": op, "path": path, "detail": detail} for op, path, detail in r.drift],
         "findings": [asdict(f) for f in r.findings],
         "outcomes": {rev: dict(c) for rev, c in sorted(r.outcomes.items())},
