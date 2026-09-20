@@ -19,6 +19,14 @@ ENV = {
     "HOME": "/nonexistent",  # do not read the user gitconfig
     "GIT_CONFIG_GLOBAL": "/dev/null",
     "GIT_CONFIG_NOSYSTEM": "1",
+    # No background maintenance in a fixture: on a git 2.55 runner a bare clone of a freshly built seed lost a loose
+    # object mid-copy (`failed to copy file … No such file or directory`); the clones also run `--no-local`, so
+    # objects travel as a pack instead of file by file.
+    "GIT_CONFIG_COUNT": "2",
+    "GIT_CONFIG_KEY_0": "gc.auto",
+    "GIT_CONFIG_VALUE_0": "0",
+    "GIT_CONFIG_KEY_1": "maintenance.auto",
+    "GIT_CONFIG_VALUE_1": "false",
 }
 
 
@@ -107,7 +115,7 @@ def make_origin(tmp_path: Path):
             shas[b] = commit(work, f"on {b}")
         git(work, "checkout", "-q", branches[0])  # HEAD of the seed = first branch -> origin/HEAD
         origin = tmp_path / "origin.git"
-        git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
+        git(tmp_path, "clone", "-q", "--bare", "--no-local", str(work), str(origin))
         return origin, shas
 
     return _make

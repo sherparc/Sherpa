@@ -4,14 +4,14 @@
 > copying (owner principle). Keep anchor headings small and stable — links hang on them.
 
 <!-- sherpa:begin facts -->
-## facts (as of 2026-09-19)
+## facts (as of 2026-09-20)
 
 | field | value |
 |---|---|
 | path | `src/sherpa/apply` |
 | kind | directory inside module `sherparc` (package) |
-| files / LOC | 7 / 2507 (6 source files) |
-| commits 90d / 30d | 26 / 26 · 1 authors |
+| files / LOC | 7 / 2558 (6 source files) |
+| commits 90d / 30d | 27 / 27 · 1 authors |
 | hotspots | `src/sherpa/apply/__init__.py`, `src/sherpa/apply/render.py`, `src/sherpa/apply/adopt.py` |
 | tests naming it | `tests/test_apply.py` |
 <!-- sherpa:end facts -->

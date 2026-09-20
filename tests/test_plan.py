@@ -670,7 +670,7 @@ def build_active_repo(tmp_path: Path) -> Path:
     commit(work, "core", {"svc/core/core/x.py": "y = 1\n"}, date="2026-02-28T00:00:00Z", author="A")
     commit(work, "web", {"svc/web/web/x.py": "y = 1\n"}, date="2026-03-01T00:00:00Z", author="B")
     origin = tmp_path / "origin.git"
-    git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
+    git(tmp_path, "clone", "-q", "--bare", "--no-local", str(work), str(origin))
     clone = tmp_path / "shop"  # repo name in the plan; the README shows this console view
     git(tmp_path, "clone", "-q", str(origin), str(clone))
     return clone
@@ -761,7 +761,7 @@ def build_single_manifest_repo(tmp_path: Path) -> Path:
         files = {f"alpha/mod{i % 30:02d}.py": f"x = {i}  # changed\n"}
         commit(work, f"alpha {i}", files, date=f"2026-02-{(i % 27) + 1:02d}T10:00:00Z", author="AB"[i % 2])
     origin = tmp_path / "origin.git"
-    git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
+    git(tmp_path, "clone", "-q", "--bare", "--no-local", str(work), str(origin))
     clone = tmp_path / "alpha"
     git(tmp_path, "clone", "-q", str(origin), str(clone))
     return clone
