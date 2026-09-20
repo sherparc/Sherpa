@@ -150,7 +150,7 @@ def test_scan_counts_churn_on_non_ascii_tab_and_newline_paths(tmp_path: Path):
     commit(seed, "one", names, date="2026-03-01T00:00:00Z", author="A")
     commit(seed, "two", {k: v + "# more\n" for k, v in names.items()}, date="2026-03-02T00:00:00Z", author="B")
     origin = tmp_path / "origin.git"
-    git(tmp_path, "clone", "-q", "--bare", str(seed), str(origin))
+    git(tmp_path, "clone", "-q", "--bare", "--no-local", str(seed), str(origin))
     clone = tmp_path / "clone"
     git(tmp_path, "clone", "-q", str(origin), str(clone))
 

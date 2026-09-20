@@ -183,7 +183,7 @@ def build_root_repo(tmp_path: Path) -> Path:
     for i in range(4):
         commit(work, f"lib {i}", {f"svc/lib/lib/m{i}.py": f"x = {i}  # lib\n"}, date=f"2026-02-{i + 1:02d}T11:00:00Z")
     origin = tmp_path / "origin.git"
-    git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
+    git(tmp_path, "clone", "-q", "--bare", "--no-local", str(work), str(origin))
     clone = tmp_path / "mono"
     git(tmp_path, "clone", "-q", str(origin), str(clone))
     return clone

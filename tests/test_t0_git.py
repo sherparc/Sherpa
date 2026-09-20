@@ -32,7 +32,7 @@ def fixture_repo(tmp_path: Path) -> Path:
     commit(work, "c2", {"src/a/hot.py": "a\nb\nc\nd\n", "bin.dat": b"\x00\x01\x02"}, date=D2, author="B")
     commit(work, "c3", {"src/a/hot.py": "a\nb\nc\nd\ne"}, date=D3, author="A")  # no trailing \n → 5 LOC
     origin = tmp_path / "origin.git"
-    git(tmp_path, "clone", "-q", "--bare", str(work), str(origin))
+    git(tmp_path, "clone", "-q", "--bare", "--no-local", str(work), str(origin))
     clone = tmp_path / "clone"
     git(tmp_path, "clone", "-q", str(origin), str(clone))
     return clone
