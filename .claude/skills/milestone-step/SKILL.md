@@ -40,7 +40,9 @@ description: "The ritual for every step of work on Sherpa: branch, build with te
     full English sentences, no `Co-Authored-By` trailer.
 12. **PR**: `gh pr create` with a title and a body that names the ADRs; squash merge; then `git checkout main
     && git pull && git branch -D task/<topic>`.
-13. **Release** when the slice bumped the version (`__version__` in `src/sherpa/__init__.py`, the one place):
+13. **Release** when the slice bumped the version (`__version__` in `src/sherpa/__init__.py`, the one place).
+    In the bump pull request run `python3 scripts/changelog.py` — the commits since the last tag get the new
+    version's section, from their own merge messages (ADR-0058; `release.yml` refuses a tag without it). Then
     `git tag v<version> && git push origin v<version>` on the merged `main` — `release.yml` tests, builds the
     wheel and creates the GitHub release (ADR-0018). Then `sherpa self-update --check` from an installed copy,
     and **the e2e run** (`/e2e-test`: `pytest tests/e2e` on the corpus repository, ADR-0055) on the tagged `main` —

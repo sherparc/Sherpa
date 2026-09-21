@@ -29,6 +29,9 @@ jobs:
           tag="${GITHUB_REF_NAME#v}"
           py=$(python -c "import re,pathlib;print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('src/sherpa/__init__.py').read_text()).group(1))")
           test "$tag" = "$py" || { echo "tag v$tag vs __init__ $py — src/sherpa/__init__.py is the one place the version lives"; exit 1; }
+      - name: the changelog has the release's section
+        run: |
+          grep -q "^## $GITHUB_REF_NAME — " CHANGELOG.md || { echo "CHANGELOG.md has no section '## $GITHUB_REF_NAME — …' — run python3 scripts/changelog.py in the version-bump pull request (ADR-0058)"; exit 1; }
       - name: the version is not on PyPI yet
         run: |
           code=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/sherparc/${GITHUB_REF_NAME#v}/json")
