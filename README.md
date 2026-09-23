@@ -247,7 +247,7 @@ flowchart LR
 | M3j | owner docs where the team already writes them: a nested `AGENTS.md` at a unit's own path covers its owner-doc entry — `plan` sets it from the file, `adopt` reports it, `apply` writes the facts block into the team's file and no skeleton next to it (first slice, ADR-0049). Second slice: a decision follows a renamed unit and a dropped one is named, the uninstall reports from one place and names the state once, `apply` and `check` agree on the WARN count | ✅ |
 | M3l | a revision that means something: `harness_rev` is the hash over what an agent reads and `tooling` the hash over the checker, hook and sherpa version — an upgrade no longer starts a new revision for the outcome labels; the checker's size budget is for files Sherpa seeded, the runtime's ceiling for yours; git-ignored files are not the harness (ADR-0056) | ✅ |
 | M3m | the CI contract: `sherpa status --exit-code` exits 2 when `apply` would write something (hand edits never count), `sherpa apply --json` is the dry run as one object — Terraform's `-detailed-exitcode` and `plan -json` (ADR-0057) | ✅ |
-| M2c | public release: the licence flipped to PolyForm Small Business or Noncommercial (ADR-0051) ✅ · the contribution path — DCO checked on every pull request, code of conduct, security policy, templates (ADR-0052) ✅ · the wheel on PyPI as `sherparc` through trusted publishing, `self-update` and `doctor` read the index first (ADR-0053, ADR-0054) ✅ · the demo card at the top of this README, Sherpa on itself ✅ · still to do: a changelog, then the announcement | ⏳ |
+| M2c | public release: the licence flipped to PolyForm Small Business or Noncommercial (ADR-0051) ✅ · the contribution path — DCO checked on every pull request, code of conduct, security policy, templates (ADR-0052) ✅ · the wheel on PyPI as `sherparc` through trusted publishing, `self-update` and `doctor` read the index first (ADR-0053, ADR-0054) ✅ · the demo card at the top of this README, Sherpa on itself ✅ · `CHANGELOG.md` from the trunk's own merge messages, per release (ADR-0058) ✅ · still to do: the announcement | ⏳ |
 | M3h | `hermes` target: Hermes Agent reads the harness (`AGENTS.md` chain, `.agents/skills`), outcome hook for both runtimes, `doctor` checks for trust and hook wiring | ⏳ |
 | M3k | host adapters `codex`, `opencode`, `copilot`, `cursor`, `gemini` — thin on top of `agents-md` like `hermes`: `doctor` names the host, its native rule file only where `AGENTS.md` cannot carry it, the outcome hook where the host has hooks | ⏳ |
 | M5 | outcome evaluation: `status` shows labels per `harness_rev` with `n` and the share of `unknown`; a comparison between revisions from 30 labelled executions each | ⏳ |
@@ -258,9 +258,9 @@ flowchart LR
 | M3b | language adapters `dotnet` + `python` (T2: anchors, patterns) | ⏳ |
 | M7 | librarians, multi-repo | ⏳ |
 
-Order from here: M2c's changelog and announcement → M3h → M3k → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §9.1, §10, §13, §14).
+Order from here: M2c's announcement → M3h → M3k → M5 → M7a → M6-lite → M4 → M6 → M3b → M7 (plan §7.3, §9, §9.1, §10, §13, §14).
 
-Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an ADR: [docs/adr/](docs/adr/README.md)
+Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an ADR: [docs/adr/](docs/adr/README.md) · what each release carried: [CHANGELOG.md](CHANGELOG.md)
 
 ## Related
 
@@ -276,7 +276,7 @@ Complete with reasoning: [docs/plan.md](docs/plan.md) · every decision as an AD
 ## Development
 
 ```bash
-.venv/bin/pytest -q --cov=sherpa       # 455 tests, ~98 % coverage, gate in CI: 90 %
+.venv/bin/pytest -q --cov=sherpa       # 460 tests, ~98 % coverage, gate in CI: 90 %
 .venv/bin/pytest tests/e2e -q          # 40 end-to-end theses: the sherpa command on a built-in monorepo, one test per claim of this README, CLAUDE.md and the ADRs
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```

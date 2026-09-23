@@ -4,7 +4,7 @@
 | field | value |
 |---|---|
 | unit | `src/sherpa/apply` (module) |
-| part of | `sherparc` — 7 files, 28 commits/90d |
+| part of | `sherparc` — 7 files, 29 commits/90d |
 | hotspots | `src/sherpa/apply/__init__.py`, `src/sherpa/apply/render.py`, `src/sherpa/apply/adopt.py` |
 | tests naming it | `tests/test_apply.py` |
 
